@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MES Core 4.0 | Çoklu Şirket Üretim Yönetim Sistemi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: {
+            DEFAULT: '#0d47a1',
+            dark: '#092e6b',
+            light: '#1565c0',
+          },
+          steel: {
+            50: '#f5f7f9',
+            100: '#e9edf1',
+            200: '#d3dae1',
+            300: '#b3bec8',
+            400: '#8a97a3',
+            500: '#68757f',
+            600: '#4f5a63',
+            700: '#3d454c',
+            800: '#282e33',
+            900: '#171a1d',
+          }
+        },
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        },
+        boxShadow: {
+          panel: '0 10px 30px -10px rgba(13, 71, 161, 0.25)',
+        }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d3dae1; border-radius: 8px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b3bec8; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.25); }
+  }
+  .pulse-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slideOut {
+    from { transform: translateX(0); }
+    to { transform: translateX(100%); }
+  }
+  .drawer-in { animation: slideIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  .drawer-out { animation: slideOut 0.28s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; } to { opacity: 1; }
+  }
+  .fade-in { animation: fadeIn 0.25s ease forwards; }
+
+  .sidebar-collapsed .sidebar-label { display: none; }
+  .sidebar-collapsed .sidebar-logo-text { display: none; }
+  .sidebar-collapsed { width: 4.5rem !important; }
+
+  .nfc-btn {
+    background: linear-gradient(135deg, #0d47a1 0%, #1565c0 60%, #0d47a1 100%);
+    background-size: 200% 200%;
+    transition: background-position 0.6s ease, transform 0.15s ease;
+  }
+  .nfc-btn:hover { background-position: 100% 100%; }
+  .nfc-btn:active { transform: scale(0.98); }
+
+  @keyframes nfc-scan {
+    0% { box-shadow: 0 0 0 0 rgba(255,255,255,0.5); }
+    100% { box-shadow: 0 0 0 18px rgba(255,255,255,0); }
+  }
+  .nfc-scanning { animation: nfc-scan 1s ease-out infinite; }
+
+  .row-hover:hover { background-color: #f0f5fb; }
+
+  .status-dot { box-shadow: 0 0 0 3px rgba(0,0,0,0.03); }
+
+  .kpi-card { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .kpi-card:hover { transform: translateY(-3px); }
+
+  .backdrop-blur-panel { backdrop-filter: blur(2px); }
+
+  .toast-in { animation: toastIn 0.35s cubic-bezier(0.16,1,0.3,1) forwards; }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-10px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
+</style>
+</head>
+<body class="bg-steel-50 text-steel-800 antialiased overflow-x-hidden">
+
+<div id="app" class="min-h-screen flex flex-col">
+
+  <!-- ============ TOP NAVBAR ============ -->
+  <header class="h-16 bg-navy shrink-0 flex items-center justify-between px-4 lg:px-6 shadow-lg shadow-navy/20 z-40 relative">
+    <!-- Logo + Sidebar toggle -->
+    <div class="flex items-center gap-3 min-w-0">
+      <button id="sidebarToggleBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-2 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+      </button>
+      <div class="flex items-center gap-2.5 shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+        </div>
+        <div class="leading-tight hidden sm:block">
+          <p class="text-white font-extrabold text-base tracking-tight">MES Core <span class="text-sky-300">4.0</span></p>
+          <p class="text-[10px] text-white/50 font-medium tracking-wide uppercase">Integrated Production Suite</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Company Selector (center) -->
+    <div class="absolute left-1/2 -translate-x-1/2 hidden md:block">
+      <div class="relative">
+        <button id="companyBtn" class="flex items-center gap-2 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-4 py-2 text-white transition-colors">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-dot"></span>
+          <span class="text-xs text-white/60 font-medium">Aktif Firma:</span>
+          <span id="companyName" class="text-sm font-bold">Technomac</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/60 transition-transform" id="companyChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </button>
+        <div id="companyMenu" class="hidden absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-56 bg-white rounded-xl shadow-2xl border border-steel-200 overflow-hidden z-50">
+          <div class="px-3 py-2 text-[11px] font-semibold text-steel-400 uppercase tracking-wide border-b border-steel-100">Şirket Seçimi</div>
+          <button data-company="Technomac" class="company-option w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors">
+            <span class="w-8 h-8 rounded-lg bg-navy/10 text-navy font-bold flex items-center justify-center text-xs">TM</span>
+            <span class="flex-1">
+              <span class="block text-sm font-semibold text-steel-800">Technomac</span>
+              <span class="block text-[11px] text-steel-400">Makine İmalat A.Ş.</span>
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-500 check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+          <button data-company="Bluemac" class="company-option w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors">
+            <span class="w-8 h-8 rounded-lg bg-navy/10 text-navy font-bold flex items-center justify-center text-xs">BM</span>
+            <span class="flex-1">
+              <span class="block text-sm font-semibold text-steel-800">Bluemac</span>
+              <span class="block text-[11px] text-steel-400">Endüstriyel Çözümler Ltd.</span>
+            </span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-500 check-icon hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right side -->
+    <div class="flex items-center gap-1.5 sm:gap-3">
+      <!-- Search -->
+      <div class="hidden lg:flex items-center bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 w-56 focus-within:bg-white/15 focus-within:border-white/30 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/50 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" placeholder="İş emri, parça ara..." class="bg-transparent border-none outline-none text-sm text-white placeholder-white/40 px-2 w-full" />
+      </div>
+      <button class="lg:hidden text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-2 transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </button>
+
+      <!-- Notification bell -->
+      <div class="relative">
+        <button id="bellBtn" class="relative text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-2 transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+          <span class="absolute top-1 right-1.5 w-4 h-4 bg-red-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center border-2 border-navy">3</span>
+        </button>
+        <div id="bellMenu" class="hidden absolute right-0 top-[calc(100%+8px)] w-80 bg-white rounded-xl shadow-2xl border border-steel-200 overflow-hidden z-50">
+          <div class="px-4 py-3 border-b border-steel-100 flex items-center justify-between">
+            <span class="font-semibold text-steel-800 text-sm">Bildirimler</span>
+            <span class="text-[11px] bg-red-100 text-red-600 font-semibold px-2 py-0.5 rounded-full">3 yeni</span>
+          </div>
+          <div class="divide-y divide-steel-100 max-h-72 overflow-y-auto">
+            <div class="px-4 py-3 hover:bg-steel-50 transition-colors flex gap-3">
+              <span class="w-2 h-2 rounded-full bg-red-500 mt-1.5 shrink-0"></span>
+              <div>
+                <p class="text-sm font-medium text-steel-800">İE-2024-0891 tezgahta gecikme</p>
+                <p class="text-xs text-steel-400 mt-0.5">CNC-04 · 6 dk önce</p>
+              </div>
+            </div>
+            <div class="px-4 py-3 hover:bg-steel-50 transition-colors flex gap-3">
+              <span class="w-2 h-2 rounded-full bg-amber-500 mt-1.5 shrink-0"></span>
+              <div>
+                <p class="text-sm font-medium text-steel-800">Kalite onayı bekleyen 2 parça</p>
+                <p class="text-xs text-steel-400 mt-0.5">AI-QC Modülü · 22 dk önce</p>
+              </div>
+            </div>
+            <div class="px-4 py-3 hover:bg-steel-50 transition-colors flex gap-3">
+              <span class="w-2 h-2 rounded-full bg-sky-500 mt-1.5 shrink-0"></span>
+              <div>
+                <p class="text-sm font-medium text-steel-800">Yeni sipariş: Bluemac / #SP-2245</p>
+                <p class="text-xs text-steel-400 mt-0.5">Satış Modülü · 1 sa önce</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- User profile -->
+      <div class="flex items-center gap-2.5 pl-2 sm:pl-3 border-l border-white/15">
+        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-sky-400 to-navy-light flex items-center justify-center text-white font-bold text-sm shrink-0 ring-2 ring-white/20">V</div>
+        <div class="leading-tight hidden xl:block">
+          <p class="text-sm font-semibold text-white">Volkan</p>
+          <p class="text-[11px] text-white/50">Sistem Yöneticisi</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Mobile company bar -->
+  <div class="md:hidden bg-navy-dark px-4 py-2 flex items-center justify-center gap-2 border-t border-white/10">
+    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+    <span class="text-xs text-white/60">Aktif Firma:</span>
+    <span id="companyNameMobile" class="text-xs font-bold text-white">Technomac</span>
+  </div>
+
+  <div class="flex flex-1 min-h-0 relative">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside id="sidebar" class="bg-white border-r border-steel-200 w-64 shrink-0 transition-all duration-300 flex flex-col relative z-30">
+      <nav class="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+        <a href="#" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Dashboard">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+          <span class="sidebar-label text-sm font-medium">Dashboard <span class="text-steel-400 font-normal">(Özet)</span></span>
+        </a>
+        <a href="#" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Sipariş ve Teklifler">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1"></rect><line x1="9" y1="12" x2="15" y2="12"></line><line x1="9" y1="16" x2="15" y2="16"></line></svg>
+          <span class="sidebar-label text-sm font-medium">Sipariş ve Teklifler</span>
+        </a>
+        <a href="#" class="sidebar-item active flex items-center gap-3 px-3 py-2.5 rounded-xl bg-navy text-white shadow-md shadow-navy/30 transition-colors group" title="İş Emirleri">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span class="sidebar-label text-sm font-semibold flex-1">İş Emirleri <span class="opacity-70 font-normal">(Üretim Sahası)</span></span>
+        </a>
+        <a href="#" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group relative" title="Yapay Zeka Kalite Kontrol">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a4 4 0 0 1 4 4c0 1.3-.6 2.4-1.5 3.2.9.3 1.5 1.1 1.5 2.1v1.4M12 2a4 4 0 0 0-4 4c0 1.3.6 2.4 1.5 3.2C8.6 9.5 8 10.3 8 11.3v1.4"></path><path d="M9 14.5v2A3.5 3.5 0 0 0 12.5 20h0a3.5 3.5 0 0 0 3.5-3.5v-2"></path><circle cx="12" cy="16" r="1"></circle></svg>
+          <span class="sidebar-label text-sm font-medium flex-1">Yapay Zeka Kalite Kontrol</span>
+          <span class="sidebar-label text-[10px] bg-emerald-100 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">AI</span>
+        </a>
+        <a href="#" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Ayarlar">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <span class="sidebar-label text-sm font-medium">Ayarlar</span>
+        </a>
+      </nav>
+      <div class="p-3 border-t border-steel-100">
+        <div class="sidebar-label bg-steel-50 rounded-xl p-3 flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+          <div class="leading-tight">
+            <p class="text-xs font-semibold text-steel-700">Sunucu Bağlantısı</p>
+            <p class="text-[11px] text-steel-400">Aktif · 12ms</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN CONTENT ============ -->
+    <main class="flex-1 min-w-0 overflow-y-auto p-4 sm:p-6 lg:p-8">
+
+      <!-- Page heading -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-steel-800 tracking-tight">İş Emirleri <span class="text-steel-400 font-medium">/ Üretim Sahası</span></h1>
+          <p class="text-sm text-steel-400 mt-1">Gerçek zamanlı üretim hattı takibi · <span id="companyNameContent" class="font-semibold text-navy">Technomac</span></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="flex items-center gap-2 bg-white border border-steel-200 hover:border-steel-300 text-steel-600 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors shadow-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path></svg>
+            Yenile
+          </button>
+          <button class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Yeni İş Emri
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="kpi-card bg-white rounded-2xl border border-steel-200 p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-steel-400 uppercase tracking-wide">Aktif İş Emri</p>
+              <p class="text-3xl font-extrabold text-steel-800 mt-2 mono"><span id="kpiActive">0</span></p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-navy/10 text-navy flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            </div>
+          </div>
+          <p class="text-xs text-emerald-600 font-medium mt-3 flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+            Son 1 saatte +3 iş emri
+          </p>
+        </div>
+
+        <div class="kpi-card bg-white rounded-2xl border border-steel-200 p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-steel-400 uppercase tracking-wide">Geciken Siparişler</p>
+              <p class="text-3xl font-extrabold text-red-600 mt-2 mono">7</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+          </div>
+          <p class="text-xs text-red-500 font-medium mt-3 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+            Acil müdahale gerekiyor
+          </p>
+        </div>
+
+        <div class="kpi-card bg-white rounded-2xl border border-steel-200 p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-steel-400 uppercase tracking-wide">Ortalama OEE</p>
+              <p class="text-3xl font-extrabold text-emerald-600 mt-2 mono">%87</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
+            </div>
+          </div>
+          <div class="w-full h-1.5 bg-steel-100 rounded-full mt-3 overflow-hidden">
+            <div class="h-full bg-emerald-500 rounded-full" style="width: 87%"></div>
+          </div>
+        </div>
+
+        <div class="kpi-card bg-white rounded-2xl border border-steel-200 p-5 shadow-sm">
+          <div class="flex items-start justify-between">
+            <div>
+              <p class="text-xs font-semibold text-steel-400 uppercase tracking-wide">Bekleyen Kalite Onayı</p>
+              <p class="text-3xl font-extrabold text-steel-800 mt-2 mono">12</p>
+            </div>
+            <div class="w-11 h-11 rounded-xl bg-amber-50 text-amber-500 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="10"></circle></svg>
+            </div>
+          </div>
+          <p class="text-xs text-amber-600 font-medium mt-3 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            AI-QC modülünde inceleniyor
+          </p>
+        </div>
+      </div>
+
+      <!-- Active Production Line Table -->
+      <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-steel-100">
+          <div class="flex items-center gap-2">
+            <h2 class="font-bold text-steel-800">Aktif Üretim Hattı</h2>
+            <span class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">Canlı</span>
+          </div>
+          <p class="text-xs text-steel-400 hidden sm:block">Bir satıra tıklayarak hızlı önizleme panelini açın</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-steel-50 text-left text-[11px] uppercase tracking-wide text-steel-400 font-semibold">
+                <th class="px-5 py-3 whitespace-nowrap">İş Emri No</th>
+                <th class="px-4 py-3 whitespace-nowrap">Parça Adı</th>
+                <th class="px-4 py-3 whitespace-nowrap hidden md:table-cell">Malzeme</th>
+                <th class="px-4 py-3 whitespace-nowrap">Operasyon Adımı</th>
+                <th class="px-4 py-3 whitespace-nowrap hidden sm:table-cell">Tezgah</th>
+                <th class="px-4 py-3 whitespace-nowrap">Durum</th>
+                <th class="px-4 py-3 whitespace-nowrap hidden lg:table-cell">Operatör</th>
+              </tr>
+            </thead>
+            <tbody id="workOrderTable" class="divide-y divide-steel-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="h-6"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ============ OFFCANVAS / DRAWER OVERLAY ============ -->
+<div id="drawerOverlay" class="hidden fixed inset-0 bg-steel-900/40 backdrop-blur-panel z-50"></div>
+
+<!-- ============ OFFCANVAS / DRAWER PANEL ============ -->
+<aside id="drawer" class="hidden fixed top-0 right-0 h-full w-full sm:w-[420px] bg-white shadow-2xl z-50 flex flex-col">
+  <!-- Drawer header -->
+  <div class="bg-navy px-5 py-4 flex items-start justify-between shrink-0">
+    <div>
+      <p class="text-[11px] text-white/50 font-semibold uppercase tracking-wide" id="drawerWO">İE-2024-0885</p>
+      <h3 class="text-white font-bold text-lg mt-0.5" id="drawerPartName">Flanş Gövde Adaptörü</h3>
+    </div>
+    <button id="drawerCloseBtn" class="text-white/70 hover:text-white hover:bg-white/10 rounded-lg p-1.5 transition-colors shrink-0">
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+    </button>
+  </div>
+
+  <div class="flex-1 overflow-y-auto p-5 space-y-6">
+
+    <!-- Part meta info -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-steel-50 rounded-xl p-3">
+        <p class="text-[11px] text-steel-400 font-semibold uppercase">Malzeme</p>
+        <p class="text-sm font-semibold text-steel-800 mt-0.5" id="drawerMaterial">AISI 304</p>
+      </div>
+      <div class="bg-steel-50 rounded-xl p-3">
+        <p class="text-[11px] text-steel-400 font-semibold uppercase">Tezgah</p>
+        <p class="text-sm font-semibold text-steel-800 mt-0.5" id="drawerMachine">CNC-01</p>
+      </div>
+    </div>
+
+    <!-- Technical Drawing / 3D Model Button -->
+    <button class="w-full flex items-center gap-4 bg-steel-800 hover:bg-steel-900 text-white rounded-2xl px-5 py-4 transition-colors group">
+      <div class="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></svg>
+      </div>
+      <span class="text-left flex-1">
+        <span class="block font-semibold text-sm">Teknik Resim PDF / 3D Model</span>
+        <span class="block text-xs text-white/50 mt-0.5">Görüntülemek için tıklayın</span>
+      </span>
+      <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </button>
+
+    <!-- CAM Route Steps -->
+    <div>
+      <p class="text-xs font-bold text-steel-500 uppercase tracking-wide mb-3">CAM Rotası Adımları</p>
+      <div id="camSteps" class="space-y-2.5"></div>
+    </div>
+
+    <!-- QR Code section -->
+    <div class="flex items-center gap-3 bg-navy/5 border border-navy/10 rounded-xl p-3.5">
+      <div class="w-14 h-14 bg-white rounded-lg border border-steel-200 flex items-center justify-center shrink-0 p-1.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-full h-full text-steel-800" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h6v6H3V3zm2 2v2h2V5H5zM3 15h6v6H3v-6zm2 2v2h2v-2H5zM15 3h6v6h-6V3zm2 2v2h2V5h-2zM15 15h2v2h-2v-2zM19 15h2v2h-2v-2zM15 19h2v2h-2v-2zM19 19h2v2h-2v-2zM11 3h2v2h-2V3zM11 7h2v2h-2V7zM11 11h2v2h-2v-2zM3 11h2v2H3v-2zM7 11h2v2H7v-2zM11 15h2v2h-2v-2zM11 19h2v2h-2v-2z"/></svg>
+      </div>
+      <div class="flex-1">
+        <p class="text-xs font-semibold text-steel-700">Parça QR Etiketi</p>
+        <p class="text-[11px] text-steel-400 mt-0.5">Sahada tarama için okutun</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- NFC Start Button -->
+  <div class="p-5 border-t border-steel-100 shrink-0">
+    <button id="nfcStartBtn" class="nfc-btn w-full text-white rounded-2xl py-5 flex flex-col items-center justify-center gap-1 shadow-xl shadow-navy/40 relative overflow-hidden">
+      <svg id="nfcIcon" xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5c4-4 10.5-4 14 0"></path><path d="M4 9c5.5-5.5 13.5-5.5 19 0"></path><path d="M12 12a3 3 0 0 1 3 3"></path><circle cx="9" cy="18" r="1"></circle></svg>
+      <span id="nfcLabel" class="font-extrabold text-base tracking-wide">İŞİ BAŞLAT (NFC OKUT)</span>
+      <span class="text-[11px] text-white/60 font-medium">Operatör kartını okutucuya yaklaştırın</span>
+    </button>
+  </div>
+</aside>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-[60] bg-steel-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-sm font-medium"></div>
+
+<script>
+  // ---------- Data ----------
+  const workOrders = [
+    { wo: 'İE-2024-0885', part: 'Flanş Gövde Adaptörü', material: 'AISI 304', op: 'Frezeleme 2/4', machine: 'CNC-01', status: 'processing', operator: 'Mehmet Y.',
+      cam: ['Kaba Talaşlama', 'Frezeleme (Yüzey)', 'Delik Delme Ø12', 'Son Kontrol / Ölçüm'], activeCam: 1 },
+    { wo: 'İE-2024-0886', part: 'Şaft Bağlantı Kovanı', material: 'Çelik St52', op: 'Tornalama 1/3', machine: 'CNC-02', status: 'processing', operator: 'Ayşe D.',
+      cam: ['Kesme / Boy Ayarı', 'Tornalama (Dış Çap)', 'Yüzey Taşlama'], activeCam: 0 },
+    { wo: 'İE-2024-0887', part: 'Redüktör Kapağı', material: 'Alüminyum 6061', op: 'Bekliyor', machine: 'CNC-03', status: 'waiting', operator: 'Ahmet K.',
+      cam: ['Malzeme Hazırlık', 'CNC Frezeleme', 'Delik İşleme', 'Anodizasyon'], activeCam: 0 },
+    { wo: 'İE-2024-0888', part: 'Hidrolik Piston Gövdesi', material: 'AISI 4140', op: 'Frezeleme 4/4', machine: 'CNC-01', status: 'processing', operator: 'Mehmet Y.',
+      cam: ['Kaba İşleme', 'İnce İşleme', 'Isıl İşlem', 'Parlatma'], activeCam: 3 },
+    { wo: 'İE-2024-0889', part: 'Dişli Kutusu Braketi', material: 'Döküm GG25', op: 'Bekliyor', machine: 'CNC-05', status: 'waiting', operator: 'Serkan T.',
+      cam: ['Kum Temizleme', 'CNC Delik İşleme', 'Kalite Kontrol'], activeCam: 0 },
+    { wo: 'İE-2024-0890', part: 'Konveyör Rulman Yatağı', material: 'AISI 316L', op: 'Tornalama 2/2', machine: 'CNC-04', status: 'processing', operator: 'Fatma S.',
+      cam: ['Ön Tornalama', 'Son Tornalama', 'Yüzey Sertleştirme'], activeCam: 1 },
+  ];
+
+  const statusMap = {
+    processing: { label: 'İşleniyor', dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' },
+    waiting: { label: 'Bekliyor', dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700' },
+  };
+
+  // ---------- Render table ----------
+  const tbody = document.getElementById('workOrderTable');
+  workOrders.forEach((row, idx) => {
+    const s = statusMap[row.status];
+    const tr = document.createElement('tr');
+    tr.className = 'row-hover cursor-pointer transition-colors';
+    tr.dataset.idx = idx;
+    tr.innerHTML = `
+      <td class="px-5 py-3.5">
+        <div class="flex items-center gap-2">
+          <span class="font-semibold text-navy mono text-sm">${row.wo}</span>
+          <button title="QR Kodu Görüntüle" class="qr-btn text-steel-400 hover:text-navy transition-colors p-1 -m-1 rounded">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><line x1="14" y1="14" x2="14" y2="21"></line><line x1="21" y1="14" x2="21" y2="21"></line><line x1="17" y1="14" x2="17" y2="18"></line><line x1="14" y1="17" x2="18" y2="17"></line></svg>
+          </button>
+        </div>
+      </td>
+      <td class="px-4 py-3.5 font-medium text-steel-700">${row.part}</td>
+      <td class="px-4 py-3.5 text-steel-500 hidden md:table-cell">${row.material}</td>
+      <td class="px-4 py-3.5 text-steel-600">${row.op}</td>
+      <td class="px-4 py-3.5 hidden sm:table-cell">
+        <span class="inline-flex items-center gap-1.5 bg-steel-100 text-steel-600 text-xs font-semibold px-2.5 py-1 rounded-lg mono">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line></svg>
+          ${row.machine}
+        </span>
+      </td>
+      <td class="px-4 py-3.5">
+        <span class="inline-flex items-center gap-1.5 ${s.bg} ${s.text} text-xs font-bold px-2.5 py-1 rounded-full">
+          <span class="w-1.5 h-1.5 rounded-full ${s.dot} status-dot ${row.status === 'processing' ? 'pulse-dot' : ''}"></span>
+          ${s.label}
+        </span>
+      </td>
+      <td class="px-4 py-3.5 text-steel-500 hidden lg:table-cell">${row.operator}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // ---------- Sidebar toggle ----------
+  const sidebar = document.getElementById('sidebar');
+  document.getElementById('sidebarToggleBtn').addEventListener('click', () => {
+    sidebar.classList.toggle('sidebar-collapsed');
+  });
+
+  // ---------- Company dropdown ----------
+  const companyBtn = document.getElementById('companyBtn');
+  const companyMenu = document.getElementById('companyMenu');
+  const companyChevron = document.getElementById('companyChevron');
+  companyBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    companyMenu.classList.toggle('hidden');
+    companyChevron.classList.toggle('rotate-180');
+    bellMenu.classList.add('hidden');
+  });
+  document.querySelectorAll('.company-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.company;
+      document.getElementById('companyName').textContent = name;
+      document.getElementById('companyNameMobile').textContent = name;
+      document.getElementById('companyNameContent').textContent = name;
+      document.querySelectorAll('.company-option .check-icon').forEach(icon => icon.classList.add('hidden'));
+      btn.querySelector('.check-icon').classList.remove('hidden');
+      companyMenu.classList.add('hidden');
+      companyChevron.classList.remove('rotate-180');
+      showToast(`Aktif firma değiştirildi: ${name}`, 'success');
+    });
+  });
+
+  // ---------- Bell dropdown ----------
+  const bellBtn = document.getElementById('bellBtn');
+  const bellMenu = document.getElementById('bellMenu');
+  bellBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    bellMenu.classList.toggle('hidden');
+    companyMenu.classList.add('hidden');
+  });
+
+  document.addEventListener('click', () => {
+    companyMenu.classList.add('hidden');
+    bellMenu.classList.add('hidden');
+    companyChevron.classList.remove('rotate-180');
+  });
+
+  // ---------- KPI count-up animation ----------
+  function animateCount(el, target, duration = 1200) {
+    const start = performance.now();
+    function tick(now) {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(eased * target);
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  animateCount(document.getElementById('kpiActive'), 24);
+
+  // ---------- Drawer (Offcanvas) ----------
+  const drawer = document.getElementById('drawer');
+  const drawerOverlay = document.getElementById('drawerOverlay');
+
+  function openDrawer(row) {
+    document.getElementById('drawerWO').textContent = row.wo;
+    document.getElementById('drawerPartName').textContent = row.part;
+    document.getElementById('drawerMaterial').textContent = row.material;
+    document.getElementById('drawerMachine').textContent = row.machine;
+
+    const camContainer = document.getElementById('camSteps');
+    camContainer.innerHTML = '';
+    row.cam.forEach((step, i) => {
+      const done = i < row.activeCam;
+      const active = i === row.activeCam;
+      const div = document.createElement('div');
+      div.className = `flex items-center gap-3 rounded-xl p-3 border ${active ? 'border-navy bg-navy/5' : done ? 'border-emerald-100 bg-emerald-50/50' : 'border-steel-100 bg-white'}`;
+      div.innerHTML = `
+        <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-bold text-sm
+          ${done ? 'bg-emerald-500 text-white' : active ? 'bg-navy text-white' : 'bg-steel-100 text-steel-400'}">
+          ${done ? `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>` : (i + 1)}
+        </div>
+        <div class="flex-1">
+          <p class="text-sm font-semibold ${active ? 'text-navy' : done ? 'text-emerald-700' : 'text-steel-600'}">${step}</p>
+          <p class="text-[11px] text-steel-400">${done ? 'Tamamlandı' : active ? 'Şu anda işleniyor' : 'Bekliyor'}</p>
+        </div>
+        ${active ? '<span class="w-2 h-2 rounded-full bg-navy pulse-dot shrink-0"></span>' : ''}
+      `;
+      camContainer.appendChild(div);
+    });
+
+    drawerOverlay.classList.remove('hidden');
+    drawer.classList.remove('hidden', 'drawer-out');
+    drawer.classList.add('drawer-in');
+    resetNfcButton();
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('drawer-in');
+    drawer.classList.add('drawer-out');
+    drawerOverlay.classList.add('hidden');
+    setTimeout(() => drawer.classList.add('hidden'), 260);
+  }
+
+  document.querySelectorAll('#workOrderTable tr').forEach(tr => {
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('.qr-btn')) {
+        e.stopPropagation();
+        showToast('QR kod etiketi görüntüleniyor...', 'info');
+        return;
+      }
+      openDrawer(workOrders[tr.dataset.idx]);
+    });
+  });
+
+  document.getElementById('drawerCloseBtn').addEventListener('click', closeDrawer);
+  drawerOverlay.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !drawer.classList.contains('hidden')) closeDrawer();
+  });
+
+  // ---------- NFC simulate button ----------
+  const nfcBtn = document.getElementById('nfcStartBtn');
+  const nfcIcon = document.getElementById('nfcIcon');
+  const nfcLabel = document.getElementById('nfcLabel');
+
+  function resetNfcButton() {
+    nfcBtn.classList.remove('nfc-scanning');
+    nfcBtn.disabled = false;
+    nfcLabel.textContent = 'İŞİ BAŞLAT (NFC OKUT)';
+    nfcIcon.innerHTML = '<path d="M6.5 6.5c4-4 10.5-4 14 0"></path><path d="M4 9c5.5-5.5 13.5-5.5 19 0"></path><path d="M12 12a3 3 0 0 1 3 3"></path><circle cx="9" cy="18" r="1"></circle>';
+  }
+
+  nfcBtn.addEventListener('click', () => {
+    if (nfcBtn.disabled) return;
+    nfcBtn.disabled = true;
+    nfcBtn.classList.add('nfc-scanning');
+    nfcLabel.textContent = 'OKUTULUYOR...';
+    nfcIcon.innerHTML = '<path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"></path><path d="M21 3v5h-5"></path>';
+
+    setTimeout(() => {
+      nfcBtn.classList.remove('nfc-scanning');
+      nfcLabel.textContent = 'İŞ BAŞLATILDI ✓';
+      nfcIcon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+      showToast('Operasyon başarıyla başlatıldı, üretim kaydı açıldı.', 'success');
+      setTimeout(resetNfcButton, 2500);
+    }, 1400);
+  });
+
+  // ---------- Toast ----------
+  let toastTimeout;
+  function showToast(message, type = 'info') {
+    const toast = document.getElementById('toast');
+    clearTimeout(toastTimeout);
+    const colors = {
+      success: 'bg-emerald-600',
+      info: 'bg-steel-900',
+      error: 'bg-red-600',
+    };
+    toast.className = `fixed top-20 left-1/2 -translate-x-1/2 z-[60] ${colors[type]} text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-2.5 text-sm font-medium toast-in`;
+    toast.innerHTML = `<span>${message}</span>`;
+    toast.classList.remove('hidden');
+    toastTimeout = setTimeout(() => toast.classList.add('hidden'), 3000);
+  }
+</script>
+
+</body>
+</html>
