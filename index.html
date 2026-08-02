@@ -1966,6 +1966,7 @@
               <select id="newUserCollar" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm bg-white">
                 <option value="white">Beyaz Yaka</option>
                 <option value="blue">Mavi Yaka</option>
+                <option value="manager">Yönetici</option>
               </select>
             </div>
             <div class="sm:col-span-2 lg:col-span-3 rounded-xl border border-steel-200 p-3.5 bg-steel-50/50">
@@ -2375,6 +2376,10 @@
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Adres</label>
           <textarea id="newCustomerAddress" rows="2" placeholder="Örn. Organize Sanayi Bölgesi 5. Cad. No:12, Kartal / İstanbul" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy resize-none"></textarea>
         </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Firma Sabit Telefonu</label>
+          <input id="newCustomerPhone" type="tel" placeholder="Örn. 0216 583 13 44" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Vergi No</label>
@@ -2458,7 +2463,7 @@
 
       <!-- Sekme: İletişim Kişileri -->
       <div id="customerTabContacts" class="hidden space-y-3">
-        <p class="text-[11px] text-steel-400 leading-relaxed">Farklı departmanlar (Satış/Sipariş, Muhasebe/Finans vb.) için ayrı iletişim kişileri tanımlayabilirsiniz. Yeni iş emri oluşturulurken bu kişilerden biri "bilgilendirilecek kişi" olarak seçilebilir.</p>
+        <p class="text-[11px] text-steel-400 leading-relaxed">Departman bazlı kişiler tanımlayın. Kişi için tek cep / WhatsApp numarası yeterlidir; firma sabit telefonu Genel Bilgiler sekmesindedir.</p>
         <div id="customerContactsList" class="space-y-3"></div>
         <button type="button" id="addContactRowBtn" class="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-navy hover:text-navy-light border border-dashed border-steel-300 hover:border-navy/40 rounded-xl py-2.5 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -2518,14 +2523,10 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Telefon</label>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Firma Sabit Telefonu</label>
           <input id="newSupplierPhone" type="text" placeholder="0212 111 22 33" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
-        </div>
-        <div>
-          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">WhatsApp</label>
-          <input id="newSupplierWhatsapp" type="text" placeholder="90532..." class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
         </div>
         <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">E-posta</label>
@@ -3728,21 +3729,51 @@
           <option value="">— Seçiniz —</option>
           <option value="blue">Mavi Yaka</option>
           <option value="white">Beyaz Yaka</option>
+          <option value="manager">Yönetici</option>
         </select>
-        <p class="text-[10px] text-steel-400 mt-1">Mavi yaka: imalat menüleri · fiyat ve kritik CRM gizlenir</p>
+        <p class="text-[10px] text-steel-400 mt-1">Mavi yaka: imalat menüleri · fiyat gizlenir · Yönetici: tam erişim</p>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div><label class="text-[11px] font-semibold text-steel-500 uppercase">T.C. Kimlik No</label><input id="hrTc" type="text" maxlength="11" inputmode="numeric" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm mono" /></div>
-        <div><label class="text-[11px] font-semibold text-steel-500 uppercase">Cep Telefonu</label><input id="hrPhone" type="tel" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" /></div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Cep / WhatsApp</label>
+          <input id="hrPhone" type="tel" placeholder="0532 …" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+          <p class="text-[10px] text-steel-400 mt-1">Sistemden WhatsApp mesajı için kullanılır</p>
+        </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div><label class="text-[11px] font-semibold text-steel-500 uppercase">E-posta</label><input id="hrEmail" type="email" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" /></div>
-        <div><label class="text-[11px] font-semibold text-steel-500 uppercase">Departman</label><input id="hrDept" type="text" placeholder="CNC / Kalite..." class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" /></div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Görev Birimi (Departman)</label>
+          <select id="hrDept" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm bg-white">
+            <option value="">— Seçiniz —</option>
+            <option value="CAD/CAM Operatörü">CAD/CAM Operatörü</option>
+            <option value="CNC Operatörü">CNC Operatörü</option>
+            <option value="Satış ve Satınalma">Satış ve Satınalma</option>
+            <option value="Kalite Kontrol">Kalite Kontrol</option>
+            <option value="Muhasebe">Muhasebe</option>
+            <option value="Universal">Universal</option>
+            <option value="Vasıfsız / Çırak">Vasıfsız / Çırak</option>
+            <option value="Lojistik">Lojistik</option>
+            <option value="Planlama">Planlama</option>
+            <option value="Stajyer">Stajyer</option>
+          </select>
+        </div>
       </div>
       <div><label class="text-[11px] font-semibold text-steel-500 uppercase">Adres</label><textarea id="hrAddress" rows="2" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm resize-none"></textarea></div>
       <div class="grid grid-cols-2 gap-3">
         <div><label class="text-[11px] font-semibold text-steel-500 uppercase">İşe Başlama</label><input id="hrStartDate" type="date" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" /></div>
         <div><label class="text-[11px] font-semibold text-steel-500 uppercase">Aylık Maaş (₺)</label><input id="hrSalary" type="number" min="0" step="100" value="25000" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" /></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Yıllık İzin Hakediş (gün)</label>
+          <input id="hrLeaveEntitle" type="number" min="0" step="0.5" value="14" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Yıllık Planlanan İzin (gün)</label>
+          <input id="hrLeavePlanned" type="number" min="0" step="0.5" value="0" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
       </div>
       <div>
         <label class="text-[11px] font-semibold text-steel-500 uppercase">Saatlik (otomatik)</label>
@@ -3827,6 +3858,7 @@
           <select id="editUserCollar" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm bg-white">
             <option value="white">Beyaz Yaka</option>
             <option value="blue">Mavi Yaka</option>
+            <option value="manager">Yönetici</option>
           </select>
         </div>
         <div class="sm:col-span-2 lg:col-span-3 rounded-xl border border-steel-200 p-3.5 bg-steel-50/50">
@@ -4000,33 +4032,78 @@
   // Müşteri (CRM) kayıtları — firma bazlı ayrıştırılır.
   // Her müşterinin birden fazla iletişim kişisi olabilir (departman bazlı: Satış/Sipariş, Muhasebe/Finans, vb.)
   // Bu sayede aynı firmada farklı departmanların açtığı siparişler için farklı kişiler bilgilendirilebilir.
-  const customerDepartments = ['Genel', 'Satış / Sipariş', 'Muhasebe / Finans', 'Teknik / Kalite', 'Lojistik'];
+  // CRM ilgili kişi departmanları (müşteri + tedarikçi ortak)
+  const crmDepartments = [
+    'Yönetim',
+    'Satın Alma ve Tedarik',
+    'Satış ve Pazarlama',
+    'Finans ve Muhasebe',
+    'İnsan Kaynakları',
+    'Üretim ve Operasyon',
+    'Teknik ve Tasarım',
+    'Lojistik',
+    'Kalite Kontrol',
+  ];
+  const customerDepartments = crmDepartments;
+  const supplierDepartments = crmDepartments;
+  function normalizeCrmDepartment(d) {
+    const raw = String(d || '').trim();
+    if (!raw) return 'Yönetim';
+    if (crmDepartments.includes(raw)) return raw;
+    const map = {
+      'Genel': 'Yönetim',
+      'Satış / Sipariş': 'Satış ve Pazarlama',
+      'Muhasebe / Finans': 'Finans ve Muhasebe',
+      'Teknik / Kalite': 'Teknik ve Tasarım',
+      'Satın Alma': 'Satın Alma ve Tedarik',
+    };
+    return map[raw] || 'Yönetim';
+  }
+
+  // Personel çalışma / görev birimi
+  const personnelJobUnits = [
+    'CAD/CAM Operatörü',
+    'CNC Operatörü',
+    'Satış ve Satınalma',
+    'Kalite Kontrol',
+    'Muhasebe',
+    'Universal',
+    'Vasıfsız / Çırak',
+    'Lojistik',
+    'Planlama',
+    'Stajyer',
+  ];
 
   let customers = [
-    { company: 'Technomac', name: 'Anadolu Hidrolik San. Ltd.', address: 'Organize Sanayi Bölgesi 5. Cad. No:12, Kartal / İstanbul', taxNo: '1234567890', taxOffice: 'Kartal V.D.', currency: '₺', paymentTerms: '30 gün', contacts: [
-      { name: 'Ahmet Yılmaz', department: 'Satış / Sipariş', phone: '0532 111 22 33', email: 'ahmet@anadoluhidrolik.com.tr', whatsapp: '0532 111 22 33' },
-      { name: 'Nazan Bora', department: 'Muhasebe / Finans', phone: '0532 111 22 34', email: 'muhasebe@anadoluhidrolik.com.tr', whatsapp: '' },
+    { company: 'Technomac', name: 'Anadolu Hidrolik San. Ltd.', address: 'Organize Sanayi Bölgesi 5. Cad. No:12, Kartal / İstanbul', phone: '0216 380 00 11', taxNo: '1234567890', taxOffice: 'Kartal V.D.', currency: '₺', paymentTerms: '30 gün', contacts: [
+      { name: 'Ahmet Yılmaz', department: 'Satış ve Pazarlama', phone: '0532 111 22 33', email: 'ahmet@anadoluhidrolik.com.tr', whatsapp: '0532 111 22 33' },
+      { name: 'Nazan Bora', department: 'Finans ve Muhasebe', phone: '0532 111 22 34', email: 'muhasebe@anadoluhidrolik.com.tr', whatsapp: '0532 111 22 34' },
     ] },
-    { company: 'Technomac', name: 'Baltık Makine Sanayi A.Ş.', address: 'İkitelli OSB, Marmara Sanayi Sitesi B Blok No:8, Başakşehir / İstanbul', taxNo: '2345678901', taxOffice: 'Gebze V.D.', currency: '€', paymentTerms: '60 gün', contacts: [
-      { name: 'Elif Demir', department: 'Satış / Sipariş', phone: '0533 222 33 44', email: 'elif@baltikmakine.com.tr', whatsapp: '0533 222 33 44' },
+    { company: 'Technomac', name: 'Baltık Makine Sanayi A.Ş.', address: 'İkitelli OSB, Marmara Sanayi Sitesi B Blok No:8, Başakşehir / İstanbul', phone: '0212 670 00 22', taxNo: '2345678901', taxOffice: 'Gebze V.D.', currency: '€', paymentTerms: '60 gün', contacts: [
+      { name: 'Elif Demir', department: 'Satış ve Pazarlama', phone: '0533 222 33 44', email: 'elif@baltikmakine.com.tr', whatsapp: '0533 222 33 44' },
     ] },
-    { company: 'Technomac', name: 'Marmara Redüktör Ltd. Şti.', address: 'Tuzla Deri OSB, 3. Sokak No:21, Tuzla / İstanbul', taxNo: '3456789012', taxOffice: 'Tuzla V.D.', currency: '$', paymentTerms: '45 gün', contacts: [
-      { name: 'Serkan Kaya', department: 'Satış / Sipariş', phone: '0534 333 44 55', email: 'serkan@marmarareduktor.com.tr', whatsapp: '0534 333 44 55' },
-      { name: 'Gül Aksu', department: 'Muhasebe / Finans', phone: '0534 333 44 56', email: 'muhasebe@marmarareduktor.com.tr', whatsapp: '' },
+    { company: 'Technomac', name: 'Marmara Redüktör Ltd. Şti.', address: 'Tuzla Deri OSB, 3. Sokak No:21, Tuzla / İstanbul', phone: '0216 395 00 33', taxNo: '3456789012', taxOffice: 'Tuzla V.D.', currency: '$', paymentTerms: '45 gün', contacts: [
+      { name: 'Serkan Kaya', department: 'Satış ve Pazarlama', phone: '0534 333 44 55', email: 'serkan@marmarareduktor.com.tr', whatsapp: '0534 333 44 55' },
+      { name: 'Gül Aksu', department: 'Finans ve Muhasebe', phone: '0534 333 44 56', email: 'muhasebe@marmarareduktor.com.tr', whatsapp: '0534 333 44 56' },
     ] },
-    { company: 'Bluemac', name: 'Ege Hidrolik Sistemleri Ltd.', address: 'Kemalpaşa OSB, 2. Cad. No:5, Kemalpaşa / İzmir', taxNo: '4567890123', taxOffice: 'Bornova V.D.', currency: '₺', paymentTerms: '30 gün', contacts: [
-      { name: 'Burak Şahin', department: 'Satış / Sipariş', phone: '0535 444 55 66', email: 'burak@egehidrolik.com.tr', whatsapp: '0535 444 55 66' },
+    { company: 'Bluemac', name: 'Ege Hidrolik Sistemleri Ltd.', address: 'Kemalpaşa OSB, 2. Cad. No:5, Kemalpaşa / İzmir', phone: '0232 877 00 44', taxNo: '4567890123', taxOffice: 'Bornova V.D.', currency: '₺', paymentTerms: '30 gün', contacts: [
+      { name: 'Burak Şahin', department: 'Satış ve Pazarlama', phone: '0535 444 55 66', email: 'burak@egehidrolik.com.tr', whatsapp: '0535 444 55 66' },
     ] },
-    { company: 'Bluemac', name: 'Akdeniz Pres ve Kalıp San. A.Ş.', address: 'Çiğli AOSB, 10. Sokak No:3, Çiğli / İzmir', taxNo: '5678901234', taxOffice: 'Çiğli V.D.', currency: '€', paymentTerms: 'Peşin', contacts: [
-      { name: 'Derya Öztürk', department: 'Satış / Sipariş', phone: '0536 555 66 77', email: 'derya@akdenizpres.com.tr', whatsapp: '0536 555 66 77' },
-      { name: 'Metin Kurt', department: 'Muhasebe / Finans', phone: '0536 555 66 78', email: 'muhasebe@akdenizpres.com.tr', whatsapp: '' },
+    { company: 'Bluemac', name: 'Akdeniz Pres ve Kalıp San. A.Ş.', address: 'Çiğli AOSB, 10. Sokak No:3, Çiğli / İzmir', phone: '0232 376 00 55', taxNo: '5678901234', taxOffice: 'Çiğli V.D.', currency: '€', paymentTerms: 'Peşin', contacts: [
+      { name: 'Derya Öztürk', department: 'Satış ve Pazarlama', phone: '0536 555 66 77', email: 'derya@akdenizpres.com.tr', whatsapp: '0536 555 66 77' },
+      { name: 'Metin Kurt', department: 'Finans ve Muhasebe', phone: '0536 555 66 78', email: 'muhasebe@akdenizpres.com.tr', whatsapp: '0536 555 66 78' },
     ] },
-    { company: 'Devorias', name: 'Nova Tasarım Stüdyosu', address: 'Merkez Mah. Tasarım Sk. No:7, Şişli / İstanbul', taxNo: '6789012345', taxOffice: 'Şişli V.D.', currency: '$', paymentTerms: '90 gün', contacts: [
-      { name: 'Zeynep Aydın', department: 'Satış / Sipariş', phone: '0537 666 77 88', email: 'zeynep@novatasarim.com', whatsapp: '0537 666 77 88' },
+    { company: 'Devorias', name: 'Nova Tasarım Stüdyosu', address: 'Merkez Mah. Tasarım Sk. No:7, Şişli / İstanbul', phone: '0212 232 00 66', taxNo: '6789012345', taxOffice: 'Şişli V.D.', currency: '$', paymentTerms: '90 gün', contacts: [
+      { name: 'Zeynep Aydın', department: 'Satış ve Pazarlama', phone: '0537 666 77 88', email: 'zeynep@novatasarim.com', whatsapp: '0537 666 77 88' },
     ] },
   ];
   customers.forEach(c => {
     if (!c.notifyPrefs) c.notifyPrefs = { whatsapp: true, email: c.company !== 'Devorias' };
+    (c.contacts || []).forEach(ct => {
+      ct.department = normalizeCrmDepartment(ct.department);
+      if (!ct.whatsapp && ct.phone) ct.whatsapp = ct.phone;
+      if (!ct.phone && ct.whatsapp) ct.phone = ct.whatsapp;
+    });
   });
 
   // İş emri numaralandırma: {FİRMA KODU}-{YIL}-{İŞ EMRİ SIRA NO}-{PARÇA SIRA NO}
@@ -4425,11 +4502,11 @@ ${vadeLine}`;
           fasonServices: [...(info.fasonServices || [])],
           contacts: info.contact ? [{
             name: info.contact,
-            department: 'Satın Alma',
-            phone: info.phone || '',
-            whatsapp: info.whatsapp || '',
-            email: info.email || '',
-          }] : [],
+          department: 'Satın Alma ve Tedarik',
+          phone: info.phone || '',
+          whatsapp: info.whatsapp || '',
+          email: info.email || '',
+        }] : [],
         });
       });
     });
@@ -5682,10 +5759,10 @@ ${vadeLine}`;
   }
   function resolveUserCollar(user) {
     if (!user) return 'white';
-    if (user.collar === 'blue' || user.collar === 'white') return user.collar;
+    if (user.collar) return normalizeCollar(user.collar);
     if (user.personnelId && typeof personnel !== 'undefined') {
       const p = personnel.find(x => x.id === user.personnelId);
-      if (p && (p.collar === 'blue' || p.collar === 'white')) return p.collar;
+      if (p && p.collar) return normalizeCollar(p.collar);
     }
     return 'white';
   }
@@ -5694,7 +5771,7 @@ ${vadeLine}`;
   }
   function userHasCriticalAccess(user) {
     if (!user) return false;
-    if (user.isGod || user.role === 'Yönetici') return true;
+    if (user.isGod || user.role === 'Yönetici' || resolveUserCollar(user) === 'manager') return true;
     if (isBlueCollar(user)) return false;
     return !!user.accessCritical;
   }
@@ -5770,6 +5847,7 @@ ${vadeLine}`;
     const collar = resolveUserCollar(currentUser);
     currentUser.collar = collar;
     const roleLabel = (currentUser.isGod ? 'Grup Yöneticisi' : null)
+      || (collar === 'manager' ? `${roleLabels[currentUser.role] || currentUser.role} · Yönetici` : null)
       || (collar === 'blue' ? `${roleLabels[currentUser.role] || currentUser.role} · Mavi Yaka` : null)
       || roleLabels[currentUser.role] || currentUser.role;
     document.getElementById('profileRole').textContent = roleLabel;
@@ -7761,7 +7839,7 @@ ${vadeLine}`;
     'Lojistik': 'bg-emerald-50 text-emerald-700',
     'Diğer': 'bg-steel-100 text-steel-600',
   };
-  const supplierDepartments = ['Genel', 'Satın Alma', 'Satış / Sipariş', 'Muhasebe / Finans', 'Teknik / Kalite', 'Lojistik'];
+  // supplierDepartments → crmDepartments (üstte tanımlı)
 
   function companySuppliers() {
     return suppliers.filter(s => s.company === activeCompany);
@@ -7948,18 +8026,14 @@ ${vadeLine}`;
           <div>
             <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Departman</label>
             <select data-sup-contact-idx="${i}" data-sup-contact-field="department" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm">
-              ${supplierDepartments.map(d => `<option value="${d}" ${ct.department === d ? 'selected' : ''}>${d}</option>`).join('')}
+              ${supplierDepartments.map(d => `<option value="${d}" ${normalizeCrmDepartment(ct.department) === d ? 'selected' : ''}>${d}</option>`).join('')}
             </select>
           </div>
           <div>
-            <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Telefon</label>
-            <input type="text" data-sup-contact-idx="${i}" data-sup-contact-field="phone" value="${(ct.phone || '').replace(/"/g, '&quot;')}" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm" />
+            <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Cep / WhatsApp</label>
+            <input type="text" data-sup-contact-idx="${i}" data-sup-contact-field="whatsapp" value="${((ct.whatsapp || ct.phone || '')).replace(/"/g, '&quot;')}" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm" />
           </div>
           <div>
-            <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">WhatsApp</label>
-            <input type="text" data-sup-contact-idx="${i}" data-sup-contact-field="whatsapp" value="${(ct.whatsapp || '').replace(/"/g, '&quot;')}" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm" />
-          </div>
-          <div class="sm:col-span-2">
             <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">E-posta</label>
             <input type="email" data-sup-contact-idx="${i}" data-sup-contact-field="email" value="${(ct.email || '').replace(/"/g, '&quot;')}" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm" />
           </div>
@@ -8046,7 +8120,6 @@ ${vadeLine}`;
     if ([...catSel.options].some(o => o.value === cat)) catSel.value = cat;
     else catSel.value = isFasonSupplierCategory(cat) ? 'Fason İmalatçı' : 'Hammadde';
     document.getElementById('newSupplierPhone').value = supplier ? (supplier.phone || '') : '';
-    document.getElementById('newSupplierWhatsapp').value = supplier ? (supplier.whatsapp || '') : '';
     document.getElementById('newSupplierEmail').value = supplier ? (supplier.email || '') : '';
     document.getElementById('newSupplierAddress').value = supplier ? (supplier.address || '') : '';
     document.getElementById('newSupplierBank').value = supplier ? (supplier.bank || '') : '';
@@ -8054,17 +8127,23 @@ ${vadeLine}`;
     supplierModalMaterialGroups = supplier ? [...(supplier.materialGroups || [])] : [];
     supplierModalFasonServices = supplier ? [...(supplier.fasonServices || [])] : [];
     if (supplier && supplier.contacts && supplier.contacts.length) {
-      supplierModalContacts = supplier.contacts.map(ct => ({ ...ct }));
+      supplierModalContacts = supplier.contacts.map(ct => ({
+        ...ct,
+        department: normalizeCrmDepartment(ct.department),
+        whatsapp: ct.whatsapp || ct.phone || '',
+        phone: ct.whatsapp || ct.phone || '',
+      }));
     } else if (supplier && supplier.contact) {
+      const wa = supplier.whatsapp || '';
       supplierModalContacts = [{
         name: supplier.contact,
-        department: 'Satın Alma',
-        phone: supplier.phone || '',
-        whatsapp: supplier.whatsapp || '',
+        department: 'Satın Alma ve Tedarik',
+        phone: wa,
+        whatsapp: wa,
         email: supplier.email || '',
       }];
     } else {
-      supplierModalContacts = [{ name: '', department: 'Satın Alma', phone: '', whatsapp: '', email: '' }];
+      supplierModalContacts = [{ name: '', department: 'Satın Alma ve Tedarik', phone: '', whatsapp: '', email: '' }];
     }
     renderSupplierContactsList();
     renderSupplierCapabilityList();
@@ -8082,7 +8161,7 @@ ${vadeLine}`;
   document.getElementById('newSupplierName')?.addEventListener('input', updateNewSupplierSubmitState);
   document.getElementById('newSupplierCategory')?.addEventListener('change', renderSupplierCapabilityList);
   document.getElementById('addSupplierContactBtn')?.addEventListener('click', () => {
-    supplierModalContacts.push({ name: '', department: 'Satın Alma', phone: '', whatsapp: '', email: '' });
+    supplierModalContacts.push({ name: '', department: 'Satın Alma ve Tedarik', phone: '', whatsapp: '', email: '' });
     renderSupplierContactsList();
   });
   document.getElementById('supplierContactsList')?.addEventListener('input', (e) => {
@@ -8108,13 +8187,16 @@ ${vadeLine}`;
     const name = document.getElementById('newSupplierName').value.trim();
     if (!name) return;
     const cleanContacts = supplierModalContacts
-      .map(ct => ({
-        name: (ct.name || '').trim(),
-        department: ct.department || 'Genel',
-        phone: (ct.phone || '').trim(),
-        whatsapp: (ct.whatsapp || '').trim(),
-        email: (ct.email || '').trim(),
-      }))
+      .map(ct => {
+        const wa = (ct.whatsapp || ct.phone || '').trim();
+        return {
+          name: (ct.name || '').trim(),
+          department: normalizeCrmDepartment(ct.department),
+          phone: wa,
+          whatsapp: wa,
+          email: (ct.email || '').trim(),
+        };
+      })
       .filter(ct => ct.name || ct.phone || ct.whatsapp || ct.email);
     const primary = cleanContacts[0] || null;
     const category = document.getElementById('newSupplierCategory').value;
@@ -8122,8 +8204,8 @@ ${vadeLine}`;
       company: activeCompany,
       name,
       category,
-      phone: document.getElementById('newSupplierPhone').value.trim() || (primary ? primary.phone : ''),
-      whatsapp: document.getElementById('newSupplierWhatsapp').value.trim() || (primary ? primary.whatsapp : ''),
+      phone: document.getElementById('newSupplierPhone').value.trim(),
+      whatsapp: primary ? primary.whatsapp : '',
       email: document.getElementById('newSupplierEmail').value.trim() || (primary ? primary.email : ''),
       address: document.getElementById('newSupplierAddress').value.trim(),
       bank: document.getElementById('newSupplierBank').value.trim(),
@@ -8193,18 +8275,14 @@ ${vadeLine}`;
           <div>
             <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Departman</label>
             <select data-contact-idx="${i}" data-contact-field="department" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy">
-              ${customerDepartments.map(d => `<option value="${d}" ${ct.department === d ? 'selected' : ''}>${d}</option>`).join('')}
+              ${customerDepartments.map(d => `<option value="${d}" ${normalizeCrmDepartment(ct.department) === d ? 'selected' : ''}>${d}</option>`).join('')}
             </select>
           </div>
           <div>
-            <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Telefon</label>
-            <input type="text" data-contact-idx="${i}" data-contact-field="phone" value="${(ct.phone || '').replace(/"/g, '&quot;')}" placeholder="0532 111 22 33" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+            <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Cep / WhatsApp</label>
+            <input type="text" data-contact-idx="${i}" data-contact-field="whatsapp" value="${((ct.whatsapp || ct.phone || '')).replace(/"/g, '&quot;')}" placeholder="0532 111 22 33" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
           </div>
           <div>
-            <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">WhatsApp</label>
-            <input type="text" data-contact-idx="${i}" data-contact-field="whatsapp" value="${(ct.whatsapp || '').replace(/"/g, '&quot;')}" placeholder="0532 111 22 33" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
-          </div>
-          <div class="sm:col-span-2">
             <label class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">E-posta</label>
             <input type="email" data-contact-idx="${i}" data-contact-field="email" value="${(ct.email || '').replace(/"/g, '&quot;')}" placeholder="ornek@firma.com.tr" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
           </div>
@@ -8233,7 +8311,7 @@ ${vadeLine}`;
     customerModalContacts[Number(idx)][field] = e.target.value;
   });
   document.getElementById('addContactRowBtn').addEventListener('click', () => {
-    customerModalContacts.push({ name: '', department: 'Genel', phone: '', email: '', whatsapp: '' });
+    customerModalContacts.push({ name: '', department: 'Yönetim', phone: '', email: '', whatsapp: '' });
     renderCustomerContactsList();
   });
   document.querySelectorAll('.customer-tab-btn').forEach(btn => {
@@ -8266,8 +8344,9 @@ ${vadeLine}`;
 
     customerModalContacts = customer && customer.contacts && customer.contacts.length
       ? customer.contacts.map(ct => ({ ...ct }))
-      : [{ name: '', department: 'Genel', phone: '', email: '', whatsapp: '' }];
+      : [{ name: '', department: 'Yönetim', phone: '', email: '', whatsapp: '' }];
 
+    document.getElementById('newCustomerPhone').value = customer ? (customer.phone || '') : '';
     const prefs = customer && customer.notifyPrefs
       ? customer.notifyPrefs
       : { whatsapp: true, email: true };
@@ -8305,17 +8384,28 @@ ${vadeLine}`;
     const name = document.getElementById('newCustomerName').value.trim();
     if (!name) return;
     const cleanContacts = customerModalContacts
-      .map(ct => ({ ...ct, name: (ct.name || '').trim(), phone: (ct.phone || '').trim(), email: (ct.email || '').trim(), whatsapp: (ct.whatsapp || '').trim() }))
+      .map(ct => {
+        const wa = (ct.whatsapp || ct.phone || '').trim();
+        return {
+          name: (ct.name || '').trim(),
+          department: normalizeCrmDepartment(ct.department),
+          phone: wa,
+          email: (ct.email || '').trim(),
+          whatsapp: wa,
+        };
+      })
       .filter(ct => ct.name || ct.phone || ct.email || ct.whatsapp);
     const notifyPrefs = {
       whatsapp: getNotifyToggle(document.getElementById('custNotifyWa')),
       email: getNotifyToggle(document.getElementById('custNotifyEmail')),
     };
+    const firmPhone = (document.getElementById('newCustomerPhone')?.value || '').trim();
 
     if (customerModalEditingTarget) {
       const target = customerModalEditingTarget;
       target.name = name;
       target.address = document.getElementById('newCustomerAddress').value.trim();
+      target.phone = firmPhone;
       target.taxNo = document.getElementById('newCustomerTaxNo').value.trim();
       target.taxOffice = document.getElementById('newCustomerTaxOffice').value.trim();
       target.currency = document.getElementById('newCustomerCurrency').value;
@@ -8334,6 +8424,7 @@ ${vadeLine}`;
         company: activeCompany,
         name,
         address: document.getElementById('newCustomerAddress').value.trim(),
+        phone: firmPhone,
         taxNo: document.getElementById('newCustomerTaxNo').value.trim(),
         taxOffice: document.getElementById('newCustomerTaxOffice').value.trim(),
         currency: document.getElementById('newCustomerCurrency').value,
@@ -11911,7 +12002,19 @@ ${vadeLine}`;
     return list.length ? list.join(', ') : (u.scope || '—');
   }
   function collarLabel(c) {
-    return c === 'blue' ? 'Mavi Yaka' : 'Beyaz Yaka';
+    if (c === 'blue') return 'Mavi Yaka';
+    if (c === 'manager') return 'Yönetici';
+    return 'Beyaz Yaka';
+  }
+  function normalizeCollar(c) {
+    if (c === 'blue' || c === 'mavi') return 'blue';
+    if (c === 'manager' || c === 'yonetici' || c === 'yönetici') return 'manager';
+    return 'white';
+  }
+  function collarBadgeClass(c) {
+    if (c === 'blue') return 'bg-sky-50 text-sky-700';
+    if (c === 'manager') return 'bg-amber-50 text-amber-800';
+    return 'bg-steel-100 text-steel-600';
   }
   function getPersonnelForUser(user) {
     if (!user) return null;
@@ -11927,9 +12030,11 @@ ${vadeLine}`;
     user.phone = p.phone || '';
     user.email = p.email || '';
     user.address = p.address || '';
-    user.collar = p.collar === 'blue' ? 'blue' : 'white';
+    user.collar = normalizeCollar(p.collar);
     user.personnelId = p.id;
     p.userId = user.username || p.userId;
+    if (user.collar === 'manager') user.accessCritical = true;
+    if (user.collar === 'blue') user.accessCritical = false;
     return user;
   }
   function personnelWithoutUser(companyFilter) {
@@ -11953,9 +12058,12 @@ ${vadeLine}`;
     const collarEl = document.getElementById(collarSelectId);
     const critEl = document.getElementById(criticalCheckboxId);
     if (!collarEl || !critEl) return;
-    const blue = collarEl.value === 'blue';
-    if (blue) {
+    const collar = normalizeCollar(collarEl.value);
+    if (collar === 'blue') {
       critEl.checked = false;
+      critEl.disabled = true;
+    } else if (collar === 'manager') {
+      critEl.checked = true;
       critEl.disabled = true;
     } else if (!collarEl.disabled) {
       critEl.disabled = false;
@@ -12007,7 +12115,7 @@ ${vadeLine}`;
       if (p.dept) deptEl.value = p.dept;
     }
     if (collarEl) {
-      collarEl.value = p.collar === 'blue' ? 'blue' : 'white';
+      collarEl.value = normalizeCollar(p.collar);
       collarEl.disabled = true;
     }
     if (document.getElementById('newUserTc')) document.getElementById('newUserTc').value = p.tcNo || '';
@@ -12051,13 +12159,14 @@ ${vadeLine}`;
       scope: deriveUserScope(opts.companies || [p.company], !!opts.allGroup),
       perms: opts.perms || defaultPerms(),
       personnelId: p.id,
-      collar: p.collar === 'blue' ? 'blue' : 'white',
-      accessCritical: p.collar === 'blue' ? false : !!opts.accessCritical,
+      collar: normalizeCollar(p.collar),
+      accessCritical: normalizeCollar(p.collar) === 'blue' ? false : (normalizeCollar(p.collar) === 'manager' || !!opts.accessCritical),
       tcNo: p.tcNo || '', phone: p.phone || '', email: p.email || '', address: p.address || '',
     };
     if (opts.allGroup) row.scope = 'Tüm Grup';
     row.isGod = isGroupAdmin(row) || (!!opts.allGroup && row.role === 'Yönetici');
     if (row.collar === 'blue') row.accessCritical = false;
+    if (row.collar === 'manager') row.accessCritical = true;
     users.push(row);
     p.userId = username;
     cloudSave('saveUser', row, companies);
@@ -12113,7 +12222,7 @@ ${vadeLine}`;
         id, company: primary, name: user.name, dept: user.dept || 'Genel',
         startDate: new Date().toISOString().slice(0, 10), salary: 0, status: 'Aktif',
         tcNo: '', phone: '', email: '', address: '', userId: null,
-        collar: user.collar === 'blue' ? 'blue' : 'white',
+        collar: normalizeCollar(user.collar),
       };
       list.push(p);
       user.personnelId = id;
@@ -12124,7 +12233,7 @@ ${vadeLine}`;
     p.phone = user.phone || '';
     p.email = user.email || '';
     p.address = user.address || '';
-    p.collar = user.collar === 'blue' ? 'blue' : (p.collar || 'white');
+    p.collar = normalizeCollar(user.collar || p.collar);
     p.userId = user.username || p.userId || null;
     if (!p.company || !companies[p.company]) p.company = primary;
     user.personnelId = p.id;
@@ -12197,7 +12306,7 @@ ${vadeLine}`;
           <td class="px-4 py-3.5 text-steel-600 text-[12px]">${formatUserCompaniesLabel(u)}</td>
           <td class="px-4 py-3.5">
             <span class="text-[11px] font-bold px-2 py-1 rounded-full ${u.role === 'Yönetici' ? 'bg-navy/10 text-navy' : 'bg-steel-100 text-steel-500'}">${u.role}</span>
-            <p class="text-[10px] mt-1 font-semibold ${resolveUserCollar(u) === 'blue' ? 'text-sky-600' : 'text-steel-500'}">${collarLabel(resolveUserCollar(u))}</p>
+            <p class="text-[10px] mt-1 font-semibold ${resolveUserCollar(u) === 'blue' ? 'text-sky-600' : resolveUserCollar(u) === 'manager' ? 'text-amber-700' : 'text-steel-500'}">${collarLabel(resolveUserCollar(u))}</p>
           </td>
           <td class="px-4 py-3.5">
             <div class="flex items-center gap-1 flex-wrap">
@@ -12335,7 +12444,7 @@ ${vadeLine}`;
 
     const name = document.getElementById('newUserName').value.trim();
     if (!name) { showToast('Ad soyad zorunludur.', 'error'); return; }
-    let collar = document.getElementById('newUserCollar')?.value === 'blue' ? 'blue' : 'white';
+    let collar = normalizeCollar(document.getElementById('newUserCollar')?.value);
     const dept = document.getElementById('newUserDept').value.trim();
     const tcNo = (document.getElementById('newUserTc')?.value || '').trim();
     const phone = (document.getElementById('newUserPhone')?.value || '').trim();
@@ -12348,7 +12457,7 @@ ${vadeLine}`;
       perms: JSON.parse(JSON.stringify(newUserPerms)),
       tcNo, phone, email, address, personnelId: null,
       collar,
-      accessCritical: collar === 'blue' ? false : accessCritical,
+      accessCritical: collar === 'blue' ? false : (collar === 'manager' || accessCritical),
     };
     if (access.allGroup) { row.scope = 'Tüm Grup'; row.isGod = role === 'Yönetici'; }
     else row.isGod = isGroupAdmin(row);
@@ -12464,9 +12573,9 @@ ${vadeLine}`;
     editUserTarget.phone = (document.getElementById('editUserPhone')?.value || '').trim();
     editUserTarget.email = (document.getElementById('editUserEmail')?.value || '').trim();
     editUserTarget.address = (document.getElementById('editUserAddress')?.value || '').trim();
-    editUserTarget.collar = document.getElementById('editUserCollar')?.value === 'blue' ? 'blue' : 'white';
+    editUserTarget.collar = normalizeCollar(document.getElementById('editUserCollar')?.value);
     if (linkedP) {
-      editUserTarget.collar = linkedP.collar === 'blue' ? 'blue' : 'white';
+      editUserTarget.collar = normalizeCollar(linkedP.collar);
       linkedP.name = editUserTarget.name;
       linkedP.dept = editUserTarget.dept;
       linkedP.tcNo = editUserTarget.tcNo;
@@ -12477,7 +12586,10 @@ ${vadeLine}`;
     }
     editUserTarget.accessCritical = editUserTarget.collar === 'blue'
       ? false
-      : (!!document.getElementById('editUserAccessCritical')?.checked || editUserTarget.role === 'Yönetici' || !!editUserTarget.isGod);
+      : (editUserTarget.collar === 'manager'
+        || !!document.getElementById('editUserAccessCritical')?.checked
+        || editUserTarget.role === 'Yönetici'
+        || !!editUserTarget.isGod);
     editUserTarget.perms = editUserPerms;
     if (currentUser && (currentUser.username || '').toLowerCase() === prevUsername) {
       currentUser.name = editUserTarget.name;
@@ -15213,11 +15325,11 @@ ${vadeLine}`;
   function seedPersonnelIfEmpty() {
     if (personnel.length) return;
     personnel = [
-      { id: 'P-TM-001', company: 'Technomac', name: 'Ahmet Yıldız', dept: 'CNC', startDate: '2023-03-15', salary: 42000, status: 'Aktif', tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr', address: 'Pendik / İstanbul', userId: 'ahmet', collar: 'blue' },
-      { id: 'P-TM-002', company: 'Technomac', name: 'Elif Kara', dept: 'Kalite', startDate: '2022-11-01', salary: 38500, status: 'Aktif', tcNo: '22222222222', phone: '0532 100 00 02', email: 'elif.kara@technomac.com.tr', address: 'Kartal / İstanbul', userId: null, collar: 'white' },
-      { id: 'P-TM-003', company: 'Technomac', name: 'Murat Şahin', dept: 'Montaj', startDate: '2024-01-10', salary: 40000, status: 'Aktif', tcNo: '33333333333', phone: '0532 100 00 03', email: 'murat.sahin@technomac.com.tr', address: 'Tuzla / İstanbul', userId: null, collar: 'blue' },
-      { id: 'P-BM-001', company: 'Bluemac', name: 'Selin Arslan', dept: 'Üretim', startDate: '2023-06-20', salary: 36000, status: 'Aktif', tcNo: '44444444444', phone: '0533 200 00 01', email: 'selin.arslan@bluemac.com.tr', address: 'Pendik / İstanbul', userId: null, collar: 'white' },
-      { id: 'P-DV-001', company: 'Devorias', name: 'Kerem Polat', dept: 'Üretim', startDate: '2024-02-01', salary: 45000, status: 'Aktif', tcNo: '55555555555', phone: '0534 300 00 01', email: 'kerem.polat@devorias.com.tr', address: 'Ataşehir / İstanbul', userId: null, collar: 'blue' },
+      { id: 'P-TM-001', company: 'Technomac', name: 'Ahmet Yıldız', dept: 'CNC Operatörü', startDate: '2023-03-15', salary: 42000, status: 'Aktif', tcNo: '11111111111', phone: '0532 100 00 01', whatsapp: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr', address: 'Pendik / İstanbul', userId: 'ahmet', collar: 'blue', leaveEntitle: 14, leavePlanned: 5 },
+      { id: 'P-TM-002', company: 'Technomac', name: 'Elif Kara', dept: 'Kalite Kontrol', startDate: '2022-11-01', salary: 38500, status: 'Aktif', tcNo: '22222222222', phone: '0532 100 00 02', whatsapp: '0532 100 00 02', email: 'elif.kara@technomac.com.tr', address: 'Kartal / İstanbul', userId: null, collar: 'white', leaveEntitle: 14, leavePlanned: 1 },
+      { id: 'P-TM-003', company: 'Technomac', name: 'Murat Şahin', dept: 'Universal', startDate: '2024-01-10', salary: 40000, status: 'Aktif', tcNo: '33333333333', phone: '0532 100 00 03', whatsapp: '0532 100 00 03', email: 'murat.sahin@technomac.com.tr', address: 'Tuzla / İstanbul', userId: null, collar: 'blue', leaveEntitle: 14, leavePlanned: 0 },
+      { id: 'P-BM-001', company: 'Bluemac', name: 'Selin Arslan', dept: 'Planlama', startDate: '2023-06-20', salary: 36000, status: 'Aktif', tcNo: '44444444444', phone: '0533 200 00 01', whatsapp: '0533 200 00 01', email: 'selin.arslan@bluemac.com.tr', address: 'Pendik / İstanbul', userId: null, collar: 'white', leaveEntitle: 14, leavePlanned: 3 },
+      { id: 'P-DV-001', company: 'Devorias', name: 'Kerem Polat', dept: 'CAD/CAM Operatörü', startDate: '2024-02-01', salary: 45000, status: 'Aktif', tcNo: '55555555555', phone: '0534 300 00 01', whatsapp: '0534 300 00 01', email: 'kerem.polat@devorias.com.tr', address: 'Ataşehir / İstanbul', userId: null, collar: 'manager', leaveEntitle: 20, leavePlanned: 0 },
     ];
     personnelSeq = 4;
     const days = ['2026-07-27','2026-07-28','2026-07-29','2026-07-30','2026-07-31'];
@@ -15350,17 +15462,20 @@ ${vadeLine}`;
     ].map(([l, v, c]) => `<div class="bg-white rounded-2xl border border-steel-200 p-4 shadow-sm"><p class="text-[11px] text-steel-400 font-semibold uppercase">${l}</p><p class="text-xl font-bold ${c} mt-1">${v}</p></div>`).join('');
     document.getElementById('hrDetailProfile').innerHTML = `
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Yaka Tipi</span><p class="font-medium">${collarLabel(p.collar || 'white')}</p></div>
+      <div><span class="text-steel-400 text-xs uppercase font-semibold">Görev Birimi</span><p class="font-medium">${p.dept || '—'}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">T.C. Kimlik No</span><p class="font-medium mono">${p.tcNo || '—'}</p></div>
-      <div><span class="text-steel-400 text-xs uppercase font-semibold">Cep Telefonu</span><p class="font-medium">${p.phone || '—'}</p></div>
+      <div><span class="text-steel-400 text-xs uppercase font-semibold">Cep / WhatsApp</span><p class="font-medium">${p.whatsapp || p.phone || '—'}${p.phone ? ` <a class="text-emerald-600 text-xs font-semibold ml-1" href="https://wa.me/${String(p.whatsapp || p.phone).replace(/\D/g, '')}" target="_blank" rel="noopener">Mesaj</a>` : ''}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">E-posta</span><p class="font-medium">${p.email || '—'}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Adres</span><p class="font-medium">${p.address || '—'}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">İşe Başlama</span><p class="font-medium">${fmtDate(p.startDate)}</p></div>
       <div class="price-sensitive"><span class="text-steel-400 text-xs uppercase font-semibold">Aylık Maaş</span><p class="font-medium mono">${Number(p.salary).toLocaleString('tr-TR')} ₺</p></div>
+      <div><span class="text-steel-400 text-xs uppercase font-semibold">Yıllık İzin Hakediş</span><p class="font-medium">${Number(p.leaveEntitle ?? 14)} gün</p></div>
+      <div><span class="text-steel-400 text-xs uppercase font-semibold">Yıllık Planlanan İzin</span><p class="font-medium">${Number(p.leavePlanned ?? 0)} gün</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Sistem Kullanıcısı</span><p class="font-medium mono">${p.userId || '—'}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Ortak Aylık Saat</span><p class="font-medium">${hrMonthlyHours} sa</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Bu Ay Çalışılan</span><p class="font-medium">${pay.workedHours.toFixed(1)} sa ${pay.eligible ? '· mesai hak edildi' : '· mesai için yetersiz'}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Mesai</span><p class="font-medium">${pay.otHours} sa · <span class="price-sensitive">${pay.otPay.toLocaleString('tr-TR')} ₺</span></p></div>
-      <div><span class="text-steel-400 text-xs uppercase font-semibold">İzin</span><p class="font-medium">${pay.leaveDays} gün</p></div>`;
+      <div><span class="text-steel-400 text-xs uppercase font-semibold">İzin (kayıtlı)</span><p class="font-medium">${pay.leaveDays} gün</p></div>`;
     // charts for person
     const logs = attendanceLogs.filter(a => a.personnelId === p.id);
     const monthEl = document.getElementById('hrDetailMonthChart');
@@ -15657,10 +15772,10 @@ ${vadeLine}`;
       const att = personnelAttendancePct(p);
       const leaveDays = leaveRequests.filter(l => l.personnelId === p.id).reduce((s, l) => s + (Number(l.days) || 0), 0);
       const hasUser = users.some(u => u.personnelId === p.id || (p.userId && u.username === p.userId));
-      const collar = p.collar === 'blue' ? 'blue' : 'white';
+      const collar = normalizeCollar(p.collar);
       return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-hr-open="${p.id}">
         <td class="px-5 py-3.5"><p class="font-semibold text-steel-800">${p.name}</p><p class="text-[11px] text-steel-400">${p.dept || '—'} · <span class="price-sensitive">${pay.hourly.toFixed(0)} ₺/sa</span></p></td>
-        <td class="px-4 py-3.5"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${collar === 'blue' ? 'bg-sky-50 text-sky-700' : 'bg-steel-100 text-steel-600'}">${collarLabel(collar)}</span></td>
+        <td class="px-4 py-3.5"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${collarBadgeClass(collar)}">${collarLabel(collar)}</span></td>
         <td class="px-4 py-3.5 text-steel-500 text-xs">${fmtDate(p.startDate)}</td>
         <td class="px-4 py-3.5 mono text-steel-700 price-sensitive">${Number(p.salary).toLocaleString('tr-TR')} ₺</td>
         <td class="px-4 py-3.5"><span class="text-xs font-bold ${att >= 90 ? 'text-emerald-600' : att >= 75 ? 'text-amber-600' : 'text-red-600'}">%${att}</span></td>
@@ -15728,10 +15843,22 @@ ${vadeLine}`;
     document.getElementById('hrName').value = p ? p.name : '';
     if (document.getElementById('hrCollar')) document.getElementById('hrCollar').value = p ? (p.collar || '') : '';
     if (document.getElementById('hrTc')) document.getElementById('hrTc').value = p ? (p.tcNo || '') : '';
-    if (document.getElementById('hrPhone')) document.getElementById('hrPhone').value = p ? (p.phone || '') : '';
+    if (document.getElementById('hrPhone')) document.getElementById('hrPhone').value = p ? (p.whatsapp || p.phone || '') : '';
     if (document.getElementById('hrEmail')) document.getElementById('hrEmail').value = p ? (p.email || '') : '';
     if (document.getElementById('hrAddress')) document.getElementById('hrAddress').value = p ? (p.address || '') : '';
-    document.getElementById('hrDept').value = p ? (p.dept || '') : '';
+    const deptEl = document.getElementById('hrDept');
+    if (deptEl) {
+      const dept = p ? (p.dept || '') : '';
+      if (dept && ![...deptEl.options].some(o => o.value === dept)) {
+        const opt = document.createElement('option');
+        opt.value = dept;
+        opt.textContent = dept;
+        deptEl.appendChild(opt);
+      }
+      deptEl.value = dept;
+    }
+    if (document.getElementById('hrLeaveEntitle')) document.getElementById('hrLeaveEntitle').value = p ? (p.leaveEntitle ?? 14) : 14;
+    if (document.getElementById('hrLeavePlanned')) document.getElementById('hrLeavePlanned').value = p ? (p.leavePlanned ?? 0) : 0;
     document.getElementById('hrStartDate').value = p ? p.startDate : new Date().toISOString().slice(0, 10);
     document.getElementById('hrSalary').value = p ? p.salary : 25000;
     document.getElementById('hrCheckIn').value = '08:00';
@@ -15758,8 +15885,8 @@ ${vadeLine}`;
     const name = document.getElementById('hrName').value.trim();
     if (!name) { showToast('Ad soyad zorunlu.', 'error'); return; }
     const collar = document.getElementById('hrCollar')?.value;
-    if (collar !== 'blue' && collar !== 'white') {
-      showToast('Yaka tipi seçiniz (Mavi / Beyaz).', 'error');
+    if (collar !== 'blue' && collar !== 'white' && collar !== 'manager') {
+      showToast('Yaka tipi seçiniz (Mavi / Beyaz / Yönetici).', 'error');
       return;
     }
     const salary = Math.max(0, Number(document.getElementById('hrSalary').value) || 0);
@@ -15770,18 +15897,25 @@ ${vadeLine}`;
     const today = new Date().toISOString().slice(0, 10);
     const dow = new Date(today + 'T12:00:00').getDay();
     const otType = isOfficialHoliday(today) ? 'holiday' : (dow === 0 ? 'sunday' : 'normal');
+    const phoneWa = (document.getElementById('hrPhone')?.value || '').trim();
+    const dept = document.getElementById('hrDept').value.trim() || 'Universal';
+    const leaveEntitle = Math.max(0, Number(document.getElementById('hrLeaveEntitle')?.value) || 0);
+    const leavePlanned = Math.max(0, Number(document.getElementById('hrLeavePlanned')?.value) || 0);
     if (editingHrId) {
       const p = personnel.find(x => x.id === editingHrId);
       if (p) {
         p.name = name;
-        p.dept = document.getElementById('hrDept').value.trim() || 'Genel';
+        p.dept = dept;
         p.startDate = document.getElementById('hrStartDate').value;
         p.salary = salary;
         p.collar = collar;
         p.tcNo = (document.getElementById('hrTc')?.value || '').trim();
-        p.phone = (document.getElementById('hrPhone')?.value || '').trim();
+        p.phone = phoneWa;
+        p.whatsapp = phoneWa;
         p.email = (document.getElementById('hrEmail')?.value || '').trim();
         p.address = (document.getElementById('hrAddress')?.value || '').trim();
+        p.leaveEntitle = leaveEntitle;
+        p.leavePlanned = leavePlanned;
         const u = users.find(x => x.personnelId === p.id || x.username === p.userId);
         if (u) syncUserProfileFromPersonnel(u, p);
         cloudSave('savePersonnel', p, companies);
@@ -15792,15 +15926,18 @@ ${vadeLine}`;
       const id = `P-${companyCode[activeCompany]}-${String(personnelSeq++).padStart(3, '0')}`;
       personnel.push({
         id, company: activeCompany, name,
-        dept: document.getElementById('hrDept').value.trim() || 'Genel',
+        dept,
         startDate: document.getElementById('hrStartDate').value,
         salary, status: 'Aktif',
         tcNo: (document.getElementById('hrTc')?.value || '').trim(),
-        phone: (document.getElementById('hrPhone')?.value || '').trim(),
+        phone: phoneWa,
+        whatsapp: phoneWa,
         email: (document.getElementById('hrEmail')?.value || '').trim(),
         address: (document.getElementById('hrAddress')?.value || '').trim(),
         userId: null,
         collar,
+        leaveEntitle,
+        leavePlanned,
       });
       cloudSave('savePersonnel', personnel[personnel.length - 1], companies);
       attendanceLogs.push({

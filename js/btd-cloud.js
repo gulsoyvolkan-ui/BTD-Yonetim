@@ -62,10 +62,12 @@
   }
   function collarToDb(c) {
     if (c === 'blue' || c === 'mavi') return 'blue';
+    if (c === 'manager' || c === 'yonetici' || c === 'yönetici') return 'manager';
     return 'white';
   }
   function collarToUi(c) {
     if (c === 'blue' || c === 'mavi') return 'blue';
+    if (c === 'manager' || c === 'yonetici' || c === 'yönetici') return 'manager';
     return 'white';
   }
   async function countTable(client, table) {
@@ -110,6 +112,7 @@
       firma_id: fid,
       unvan: c.name,
       adres: c.address || null,
+      telefon: c.phone || null,
       vergi_no: c.taxNo || null,
       vergi_dairesi: c.taxOffice || null,
       para_birimi: currencyToDb(c.currency),
@@ -127,6 +130,7 @@
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
       address: r.adres || '',
+      phone: r.telefon || '',
       taxNo: r.vergi_no || '',
       taxOffice: r.vergi_dairesi || '',
       currency: currencyToUi(r.para_birimi),
@@ -135,14 +139,17 @@
       manufacturingType: r.imalat_tipi || 'Malzemeli',
       quoteTerms: r.teklif_kosullari || '',
       notifyPrefs: { whatsapp: !!r.notify_whatsapp, email: !!r.notify_eposta },
-      contacts: (r.musteri_kisiler || []).map((k) => ({
-        dbId: k.id,
-        name: k.ad_soyad,
-        department: k.departman || '',
-        phone: k.telefon || '',
-        email: k.eposta || '',
-        whatsapp: k.whatsapp || '',
-      })),
+      contacts: (r.musteri_kisiler || []).map((k) => {
+        const mobile = k.whatsapp || k.telefon || '';
+        return {
+          dbId: k.id,
+          name: k.ad_soyad,
+          department: k.departman || '',
+          phone: mobile,
+          email: k.eposta || '',
+          whatsapp: mobile,
+        };
+      }),
     };
   }
   async function saveCustomer(c, companies) {
@@ -170,15 +177,18 @@
       const contacts = (c.contacts || []).filter((x) => x.name);
       if (contacts.length) {
         const { error: cErr } = await client.from('musteri_kisiler').insert(
-          contacts.map((k, i) => ({
-            musteri_id: dbId,
-            ad_soyad: k.name,
-            departman: k.department || null,
-            telefon: k.phone || null,
-            eposta: k.email || null,
-            whatsapp: k.whatsapp || null,
-            birincil: i === 0,
-          }))
+          contacts.map((k, i) => {
+            const mobile = k.whatsapp || k.phone || null;
+            return {
+              musteri_id: dbId,
+              ad_soyad: k.name,
+              departman: k.department || null,
+              telefon: mobile,
+              eposta: k.email || null,
+              whatsapp: mobile,
+              birincil: i === 0,
+            };
+          })
         );
         if (cErr) throw cErr;
       }
@@ -242,14 +252,17 @@
         .map((x) => x.malzeme_gruplari?.ad)
         .filter(Boolean),
       fasonServices: (r.tedarikci_fason_hizmetleri || []).map((x) => x.hizmet_adi).filter(Boolean),
-      contacts: (r.tedarikci_kisiler || []).map((k) => ({
-        dbId: k.id,
-        name: k.ad_soyad,
-        department: k.departman || '',
-        phone: k.telefon || '',
-        email: k.eposta || '',
-        whatsapp: k.whatsapp || '',
-      })),
+      contacts: (r.tedarikci_kisiler || []).map((k) => {
+        const mobile = k.whatsapp || k.telefon || '';
+        return {
+          dbId: k.id,
+          name: k.ad_soyad,
+          department: k.departman || '',
+          phone: mobile,
+          email: k.eposta || '',
+          whatsapp: mobile,
+        };
+      }),
     };
   }
   async function saveSupplier(s, companies) {
@@ -280,15 +293,18 @@
       const contacts = (s.contacts || []).filter((x) => x.name);
       if (contacts.length) {
         const { error } = await client.from('tedarikci_kisiler').insert(
-          contacts.map((k, i) => ({
-            tedarikci_id: dbId,
-            ad_soyad: k.name,
-            departman: k.department || null,
-            telefon: k.phone || null,
-            eposta: k.email || null,
-            whatsapp: k.whatsapp || null,
-            birincil: i === 0,
-          }))
+          contacts.map((k, i) => {
+            const mobile = k.whatsapp || k.phone || null;
+            return {
+              tedarikci_id: dbId,
+              ad_soyad: k.name,
+              departman: k.department || null,
+              telefon: mobile,
+              eposta: k.email || null,
+              whatsapp: mobile,
+              birincil: i === 0,
+            };
+          })
         );
         if (error) throw error;
       }
@@ -432,9 +448,12 @@
         maas: p.salary != null ? Number(p.salary) : null,
         durum: p.status || 'Aktif',
         tc_no: p.tcNo || null,
-        telefon: p.phone || null,
+        telefon: p.phone || p.whatsapp || null,
+        whatsapp: p.whatsapp || p.phone || null,
         eposta: p.email || null,
         adres: p.address || null,
+        yillik_izin_hakedis: p.leaveEntitle != null ? Number(p.leaveEntitle) : 14,
+        yillik_planlanan_izin: p.leavePlanned != null ? Number(p.leavePlanned) : 0,
       };
       if (p.dbId) {
         const { error } = await client.from('personel').update(row).eq('id', p.dbId);
@@ -460,22 +479,28 @@
     }
     progress(ctx, 'Personel hydrate…');
     const rows = await selectAll(client, 'personel', '*');
-    replaceArray(ctx.personnel, rows.map((r) => ({
-      dbId: r.id,
-      id: r.personel_kodu || r.id,
-      company: companyNameById(ctx.companies, r.firma_id) || '',
-      name: r.ad_soyad,
-      dept: r.departman || '',
-      collar: collarToUi(r.yaka),
-      startDate: r.ise_baslama || '',
-      salary: Number(r.maas) || 0,
-      status: r.durum || 'Aktif',
-      tcNo: r.tc_no || '',
-      phone: r.telefon || '',
-      email: r.eposta || '',
-      address: r.adres || '',
-      userId: null,
-    })));
+    replaceArray(ctx.personnel, rows.map((r) => {
+      const mobile = r.whatsapp || r.telefon || '';
+      return {
+        dbId: r.id,
+        id: r.personel_kodu || r.id,
+        company: companyNameById(ctx.companies, r.firma_id) || '',
+        name: r.ad_soyad,
+        dept: r.departman || '',
+        collar: collarToUi(r.yaka),
+        startDate: r.ise_baslama || '',
+        salary: Number(r.maas) || 0,
+        status: r.durum || 'Aktif',
+        tcNo: r.tc_no || '',
+        phone: mobile,
+        whatsapp: mobile,
+        email: r.eposta || '',
+        address: r.adres || '',
+        leaveEntitle: r.yillik_izin_hakedis != null ? Number(r.yillik_izin_hakedis) : 14,
+        leavePlanned: r.yillik_planlanan_izin != null ? Number(r.yillik_planlanan_izin) : 0,
+        userId: null,
+      };
+    }));
   }
   async function hydrateAttendanceLeave(ctx) {
     const client = sb();
