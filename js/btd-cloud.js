@@ -454,6 +454,7 @@
         adres: p.address || null,
         yillik_izin_hakedis: p.leaveEntitle != null ? Number(p.leaveEntitle) : 14,
         yillik_planlanan_izin: p.leavePlanned != null ? Number(p.leavePlanned) : 0,
+        foto: p.photo || null,
       };
       if (p.dbId) {
         const { error } = await client.from('personel').update(row).eq('id', p.dbId);
@@ -498,6 +499,7 @@
         address: r.adres || '',
         leaveEntitle: r.yillik_izin_hakedis != null ? Number(r.yillik_izin_hakedis) : 14,
         leavePlanned: r.yillik_planlanan_izin != null ? Number(r.yillik_planlanan_izin) : 0,
+        photo: r.foto || '',
         userId: null,
       };
     }));
