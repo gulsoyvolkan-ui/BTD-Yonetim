@@ -679,11 +679,29 @@
         perms: prev?.perms,
       };
     });
-    // Korunan demo kullanıcıları kaybolmasın
+    // Korunan demo kullanıcıları: kaybolmasın + şifre/yetki bozulmasın
     PROTECTED_USERS.forEach((uname) => {
-      if (!mapped.some((u) => (u.username || '').toLowerCase() === uname) && localByUser[uname]) {
-        mapped.push(localByUser[uname]);
+      const local = localByUser[uname];
+      if (!local) return;
+      const idx = mapped.findIndex((u) => (u.username || '').toLowerCase() === uname);
+      if (idx < 0) {
+        mapped.push({ ...local });
+        return;
       }
+      const row = mapped[idx];
+      if (local.password) row.password = local.password;
+      if (local.isGod) {
+        row.isGod = true;
+        row.scope = 'Tüm Grup';
+        row.role = local.role || row.role || 'Yönetici';
+        row.accessCritical = true;
+        if (!row.companies || row.companies.length < (local.companies || []).length) {
+          row.companies = (local.companies || []).slice();
+        }
+      }
+      if (local.personnelId && !row.personnelId) row.personnelId = local.personnelId;
+      if (local.collar) row.collar = local.collar;
+      if (local.perms) row.perms = local.perms;
     });
     replaceArray(ctx.users, mapped);
   }
