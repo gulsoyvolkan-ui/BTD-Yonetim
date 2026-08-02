@@ -1,0 +1,11 @@
+.github
+.cursor
+supabase
+scripts
+_patch_*.py
+.git
+*.md
+.env
+.env.*
+node_modules
+.vercel
