@@ -1172,10 +1172,12 @@
           sira: i,
           etiket: c.label || `Adım ${i + 1}`,
           makine_adi: c.machine || null,
+          planlanan_makine: c.plannedMachine || c.completedMachine || null,
           baslangic_at: c.startedAt || null,
-          bitis_at: c.finishedAt || null,
+          bitis_at: c.finishedAt || c.endedAt || null,
           baslangic_nfc: c.startNfc || null,
           bitis_nfc: c.endNfc || null,
+          sure_dk: c.durationMin != null ? Number(c.durationMin) : null,
         }));
         if (cams.length) {
           const { error } = await client.from('is_emri_cam_adimlari').insert(cams);
@@ -1228,9 +1230,30 @@
             .map((c) => ({
               label: c.etiket,
               machine: c.makine_adi || null,
+              plannedMachine: c.planlanan_makine || null,
+              startedAt: c.baslangic_at || null,
+              finishedAt: c.bitis_at || null,
+              endedAt: c.bitis_at || null,
+              startNfc: c.baslangic_nfc || null,
+              endNfc: c.bitis_nfc || null,
+              durationMin: c.sure_dk != null ? Number(c.sure_dk) : null,
+              completedMachine: (!c.makine_adi && c.planlanan_makine && c.bitis_at) ? c.planlanan_makine : null,
             })),
         })),
     })));
+    (ctx.workOrders || []).forEach((wo) => {
+      if (typeof window.normalizeWorkOrderCam === 'function') window.normalizeWorkOrderCam(wo);
+      else {
+        (wo.parts || []).forEach((part) => {
+          (part.cam || []).forEach((step) => {
+            if (!step.plannedMachine && step.machine && !step.startedAt) {
+              step.plannedMachine = step.machine;
+              step.machine = null;
+            }
+          });
+        });
+      }
+    });
   }
 
   // ─── Procurement / RFQ / Reproc / Unforeseen ────────────────────────────────

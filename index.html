@@ -681,6 +681,17 @@
           </div>
         </div>
 
+        <div id="woApprovalBanner" class="hidden mb-5 rounded-2xl border border-amber-200 bg-amber-50/80 p-4">
+          <div class="flex items-start justify-between gap-3 mb-2">
+            <div>
+              <p class="text-sm font-bold text-amber-900">Atanmamış tezgâh onayları</p>
+              <p class="text-xs text-amber-800/80 mt-0.5">Farklı veya plansız tezgâhta başlatma talepleri · Yönetici onayı gerekir</p>
+            </div>
+            <span id="woApprovalCount" class="text-[11px] font-bold bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div id="woApprovalList" class="space-y-2"></div>
+        </div>
+
         <!-- KPI Cards -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div class="kpi-card bg-white rounded-2xl border border-steel-200 p-5 shadow-sm">
@@ -5417,15 +5428,235 @@ ${vadeLine}`;
   ];
   workOrders.forEach(wo => {
     wo.qrPayload = buildTraceUrl('WO', wo.company, wo.id);
+    normalizeWorkOrderCam(wo);
   });
 
-  function activeStep(part) { return part.cam[part.activeCam]; }
+  function canApproveShopFloor(user) {
+    if (!user) return false;
+    if (user.isGod || user.role === 'Yönetici') return true;
+    return resolveUserCollar(user) === 'manager';
+  }
+
+  function durationMinutes(startIso, endIso) {
+    if (!startIso || !endIso) return 0;
+    const a = Date.parse(startIso);
+    const b = Date.parse(endIso);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || b < a) return 0;
+    return Math.max(0, Math.round((b - a) / 60000));
+  }
+
+  function formatDurationMin(min) {
+    const m = Number(min) || 0;
+    if (m < 60) return `${m} dk`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return r ? `${h} sa ${r} dk` : `${h} sa`;
+  }
+
+  function normalizeCamStep(step) {
+    if (!step || typeof step !== 'object') return step;
+    if (!step.plannedMachine && step.machine && !step.startedAt) {
+      step.plannedMachine = step.machine;
+    }
+    if (step.endedAt && !step.finishedAt) step.finishedAt = step.endedAt;
+    if (step.finishedAt && !step.endedAt) step.endedAt = step.finishedAt;
+    if (step.durationMin == null && step.startedAt && (step.endedAt || step.finishedAt)) {
+      step.durationMin = durationMinutes(step.startedAt, step.endedAt || step.finishedAt);
+    }
+    return step;
+  }
+
+  function normalizeWorkOrderCam(wo) {
+    if (!wo || !Array.isArray(wo.parts)) return wo;
+    wo.parts.forEach((part) => {
+      if (!Array.isArray(part.cam)) part.cam = [];
+      if (part.activeCam == null) part.activeCam = 0;
+      part.cam.forEach((step, i) => {
+        normalizeCamStep(step);
+        // Seed / eski veri: aktif adımda makine var ama NFC start yok → planlı bekliyor (çalışmıyor)
+        if (i === part.activeCam && step.machine && !step.startedAt) {
+          if (!step.plannedMachine) step.plannedMachine = step.machine;
+          step.machine = null;
+        }
+        // İleri adımlarda machine alanı planı temsil ediyordu → plannedMachine'e taşı
+        if (i > part.activeCam && step.machine && !step.startedAt) {
+          if (!step.plannedMachine) step.plannedMachine = step.machine;
+          step.machine = null;
+        }
+        // Tamamlanan adımlar
+        if (i < part.activeCam) {
+          if (step.machine && !step.completedMachine) step.completedMachine = step.machine;
+          if (!step.plannedMachine && step.completedMachine) step.plannedMachine = step.completedMachine;
+          step.machine = null;
+        }
+      });
+    });
+    return wo;
+  }
+  window.normalizeWorkOrderCam = normalizeWorkOrderCam;
+
+  function persistWorkOrder(wo) {
+    if (!wo) return;
+    try { cloudSave('saveWorkOrder', wo, companies); } catch (_) { /* ignore */ }
+  }
+
+  function partOpsComplete(part) {
+    return !!part && Array.isArray(part.cam) && part.activeCam >= part.cam.length;
+  }
+
+  function maybeCompleteWorkOrder(wo) {
+    if (!wo || isPassiveWO(wo)) return false;
+    if (!wo.parts.length || !wo.parts.every(partOpsComplete)) return false;
+    wo.status = 'Tamamlandı';
+    wo.closedAt = new Date().toISOString().slice(0, 10);
+    return true;
+  }
+
+  function stepDisplayMachine(step, idx, activeCam) {
+    if (!step) return '';
+    if (idx === activeCam && step.machine) return step.machine;
+    if (idx < activeCam) return step.completedMachine || step.plannedMachine || '';
+    return step.plannedMachine || step.machine || '';
+  }
+
+  // —— Atanmamış / farklı tezgâh onay kuyruğu ——
+  let machineChangeApprovals = [];
+  try {
+    machineChangeApprovals = JSON.parse(localStorage.getItem('btd_machine_approvals') || '[]') || [];
+  } catch (_) { machineChangeApprovals = []; }
+
+  function saveMachineApprovals() {
+    try { localStorage.setItem('btd_machine_approvals', JSON.stringify(machineChangeApprovals.slice(-80))); } catch (_) { /* ignore */ }
+  }
+
+  function pendingMachineApprovals(company) {
+    return machineChangeApprovals.filter(a => a.status === 'pending' && (!company || a.company === company));
+  }
+
+  function queueMachineApproval({ wo, part, stepIdx, label, planned }) {
+    const existing = machineChangeApprovals.find(a =>
+      a.status === 'pending' && a.woId === wo.id && a.partNo === part.no && a.stepIdx === stepIdx && a.requestedMachine === label
+    );
+    if (existing) {
+      showToast('Bu tezgâh için onay talebi zaten bekliyor.', 'info');
+      renderWoApprovalBanner();
+      return existing;
+    }
+    const row = {
+      id: `MA-${Date.now().toString(36)}`,
+      company: wo.company,
+      woId: wo.id,
+      partNo: part.no,
+      partName: part.name,
+      partCode: partCode(wo, part),
+      stepIdx,
+      stepLabel: part.cam[stepIdx]?.label || '',
+      plannedMachine: planned || null,
+      requestedMachine: label,
+      requestedBy: currentUser?.name || currentUser?.username || 'Operatör',
+      createdAt: new Date().toISOString(),
+      status: 'pending',
+    };
+    machineChangeApprovals.unshift(row);
+    saveMachineApprovals();
+    renderWoApprovalBanner();
+    showToast('Farklı/plansız tezgâh — imalat sorumlusu onayına düştü.', 'info');
+    return row;
+  }
+
+  function findApprovalTargets(a) {
+    const wo = workOrders.find(w => w.id === a.woId);
+    const part = wo && wo.parts.find(p => Number(p.no) === Number(a.partNo));
+    return { wo, part };
+  }
+
+  function approveMachineChange(id) {
+    if (!canApproveShopFloor(currentUser)) {
+      showToast('Bu onay için Yönetici yetkisi gerekir.', 'error');
+      return;
+    }
+    const a = machineChangeApprovals.find(x => x.id === id);
+    if (!a || a.status !== 'pending') return;
+    const { wo, part } = findApprovalTargets(a);
+    if (!wo || !part) {
+      a.status = 'rejected';
+      a.note = 'İş emri bulunamadı';
+      saveMachineApprovals();
+      renderWoApprovalBanner();
+      return;
+    }
+    a.status = 'approved';
+    a.approvedBy = currentUser?.name || currentUser?.username;
+    a.approvedAt = new Date().toISOString();
+    saveMachineApprovals();
+    renderWoApprovalBanner();
+    assignMachineToStep(wo, part, a.stepIdx, a.requestedMachine, { approved: true });
+  }
+
+  function rejectMachineChange(id) {
+    if (!canApproveShopFloor(currentUser)) {
+      showToast('Bu işlem için Yönetici yetkisi gerekir.', 'error');
+      return;
+    }
+    const a = machineChangeApprovals.find(x => x.id === id);
+    if (!a || a.status !== 'pending') return;
+    a.status = 'rejected';
+    a.approvedBy = currentUser?.name || currentUser?.username;
+    a.approvedAt = new Date().toISOString();
+    saveMachineApprovals();
+    renderWoApprovalBanner();
+    showToast('Tezgâh değişikliği reddedildi.', 'info');
+  }
+
+  function renderWoApprovalBanner() {
+    const banner = document.getElementById('woApprovalBanner');
+    const list = document.getElementById('woApprovalList');
+    const countEl = document.getElementById('woApprovalCount');
+    if (!banner || !list) return;
+    const pending = pendingMachineApprovals(activeCompany);
+    if (!pending.length) {
+      banner.classList.add('hidden');
+      return;
+    }
+    banner.classList.remove('hidden');
+    if (countEl) countEl.textContent = String(pending.length);
+    const admin = canApproveShopFloor(currentUser);
+    list.innerHTML = pending.map(a => `
+      <div class="bg-white rounded-xl border border-amber-200 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-steel-800 truncate">${a.partCode} · ${a.stepLabel}</p>
+          <p class="text-[11px] text-steel-500 mt-0.5">
+            ${a.plannedMachine ? `Planlı: <span class="font-medium">${a.plannedMachine}</span> → ` : 'Plansız → '}
+            <span class="font-semibold text-amber-800">${a.requestedMachine}</span>
+            · ${a.requestedBy}
+          </p>
+        </div>
+        ${admin ? `<div class="flex gap-2 shrink-0">
+          <button type="button" data-ma-approve="${a.id}" class="text-[11px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Onayla & Başlat</button>
+          <button type="button" data-ma-reject="${a.id}" class="text-[11px] font-bold bg-white border border-steel-200 text-steel-600 px-3 py-1.5 rounded-lg">Reddet</button>
+        </div>` : `<span class="text-[11px] font-semibold text-amber-700">Yönetici onayı bekleniyor</span>`}
+      </div>
+    `).join('');
+    list.querySelectorAll('[data-ma-approve]').forEach(btn => {
+      btn.addEventListener('click', () => approveMachineChange(btn.dataset.maApprove));
+    });
+    list.querySelectorAll('[data-ma-reject]').forEach(btn => {
+      btn.addEventListener('click', () => rejectMachineChange(btn.dataset.maReject));
+    });
+  }
+
+  function activeStep(part) {
+    if (!part || !Array.isArray(part.cam) || !part.cam.length) return null;
+    if (part.activeCam >= part.cam.length) return null;
+    return part.cam[part.activeCam];
+  }
   function partStatus(part, wo) {
     const woStatus = woStatusOf(wo);
     if (woStatus === 'Tamamlandı') return 'completed';
     if (woStatus === 'İptal Edildi') return 'cancelled';
+    if (partOpsComplete(part)) return 'completed';
     const s = activeStep(part);
-    return s && s.machine ? 'processing' : 'waiting';
+    return s && s.machine && s.startedAt ? 'processing' : 'waiting';
   }
   function woStatusOf(wo) {
     if (!wo) return 'Aktif';
@@ -5732,6 +5963,7 @@ ${vadeLine}`;
     syncPassiveWoPanel();
     updateWorkOrderKpi();
     renderWoMobileCards(active);
+    if (typeof renderWoApprovalBanner === 'function') renderWoApprovalBanner();
   }
 
   function renderWoMobileCards(list) {
@@ -6600,6 +6832,7 @@ ${vadeLine}`;
   function openDrawer(wo, part) {
     openPartRef = { wo, part };
     const blue = !!(currentUser && isBlueCollar(currentUser));
+    const shopAdmin = canApproveShopFloor(currentUser);
     const canAssign = !blue && !!(currentUser && (currentUser.isGod || currentUser.role === 'Yönetici' || userCanAccessPage(currentUser, 'workorders')));
     document.getElementById('drawerWO').textContent = partCode(wo, part);
     document.getElementById('drawerPartName').textContent = part.name;
@@ -6616,8 +6849,11 @@ ${vadeLine}`;
     } else {
       contactEl.classList.add('hidden');
     }
+    const act = activeStep(part);
     document.getElementById('drawerMaterial').textContent = part.material;
-    document.getElementById('drawerMachine').textContent = activeStep(part).machine || 'Atanmadı';
+    document.getElementById('drawerMachine').textContent = partOpsComplete(part)
+      ? 'Operasyonlar tamam'
+      : ((act && (act.machine || act.plannedMachine)) || 'Atanmadı');
 
     const partUrl = buildTraceUrl('PT', wo.company, partCode(wo, part));
     const qrBox = document.getElementById('drawerQrBox');
@@ -6632,33 +6868,46 @@ ${vadeLine}`;
     camContainer.innerHTML = '';
     part.cam.forEach((step, i) => {
       const done = i < part.activeCam;
-      const active = i === part.activeCam;
+      const active = i === part.activeCam && !partOpsComplete(part);
+      const locked = i > part.activeCam;
+      const running = active && step.machine && step.startedAt;
+      const planned = step.plannedMachine || '';
+      const showMachine = stepDisplayMachine(step, i, part.activeCam);
+      const canEditStep = (active && (canAssign || blue)) || (locked && shopAdmin);
+      const statusText = done
+        ? `Tamamlandı${step.durationMin ? ` · ${formatDurationMin(step.durationMin)}` : ''}`
+        : running
+          ? 'Şu anda işleniyor (NFC start)'
+          : active
+            ? (planned ? 'Sıradaki · planlı tezgâhta NFC start' : 'Sıradaki · tezgâh seç / onay')
+            : 'Sıra kilidi · önceki adım bitmeden açılamaz';
       const div = document.createElement('div');
-      div.className = `rounded-xl p-3 border ${active ? 'border-navy bg-navy/5' : done ? 'border-emerald-100 bg-emerald-50/50' : 'border-steel-100 bg-white'}`;
+      div.className = `rounded-xl p-3 border ${active ? 'border-navy bg-navy/5' : done ? 'border-emerald-100 bg-emerald-50/50' : 'border-steel-100 bg-white opacity-80'}`;
       div.innerHTML = `
         <div class="flex items-center gap-3">
           <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 font-bold text-sm
             ${done ? 'bg-emerald-500 text-white' : active ? 'bg-navy text-white' : 'bg-steel-100 text-steel-400'}">
             ${done ? `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>` : (i + 1)}
           </div>
-          <div class="flex-1">
+          <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold ${active ? 'text-navy' : done ? 'text-emerald-700' : 'text-steel-600'}">${step.label}</p>
-            <p class="text-[11px] text-steel-400">${done ? 'Tamamlandı' : active ? 'Şu anda işleniyor' : 'Bekliyor'}</p>
+            <p class="text-[11px] text-steel-400">${statusText}</p>
           </div>
           ${active ? '<span class="w-2 h-2 rounded-full bg-navy pulse-dot shrink-0"></span>' : ''}
+          ${locked ? '<span class="text-[9px] font-bold uppercase tracking-wide text-steel-400 shrink-0">Kilit</span>' : ''}
         </div>
         <div class="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-steel-100/80 pl-11">
-          <span class="text-xs ${step.machine ? 'text-steel-600 font-medium' : 'text-steel-400 italic'} truncate">
-            ${step.machine || 'Tezgah atanmadı'}
+          <span class="text-xs ${showMachine ? 'text-steel-600 font-medium' : 'text-steel-400 italic'} truncate">
+            ${showMachine || 'Tezgah atanmadı'}
           </span>
-          ${canAssign ? `<div class="flex items-center gap-2 shrink-0">
-            ${step.machine ? `<button data-remove-step="${i}" class="text-[11px] text-red-500 hover:text-red-600 font-semibold">Kaldır</button>` : ''}
-            <button data-assign-step="${i}" class="text-[11px] text-navy hover:text-navy-light font-semibold">${step.machine ? 'Değiştir' : 'Tezgah Ata'}</button>
+          ${canEditStep && !done ? `<div class="flex items-center gap-2 shrink-0">
+            ${(planned || running) && shopAdmin ? `<button data-remove-step="${i}" class="text-[11px] text-red-500 hover:text-red-600 font-semibold">${running ? '—' : 'Planı Kaldır'}</button>` : ''}
+            ${!running ? `<button data-assign-step="${i}" class="text-[11px] text-navy hover:text-navy-light font-semibold">${planned ? 'Tezgâh Değiştir' : 'Tezgah Ata'}</button>` : ''}
+            ${active && planned && !running ? `<button data-alt-machine="${i}" class="text-[11px] text-amber-700 font-semibold">Farklı tezgâh</button>` : ''}
           </div>` : ''}
         </div>
-        ${active && step.machine && step.startNfc ? `<p class="text-[10px] text-steel-400 mt-1.5 pl-11">Başlangıç: ${formatTime(step.startedAt)} · NFC: <span class="mono">${step.startNfc}</span></p>` : ''}
-        ${active && !step.machine && step.endNfc ? `<p class="text-[10px] text-steel-400 mt-1.5 pl-11">Son bitiş: ${formatTime(step.endedAt)} · NFC: <span class="mono">${step.endNfc}</span></p>` : ''}
-        ${done && step.endNfc ? `<p class="text-[10px] text-steel-400 mt-1.5 pl-11">Bitiş: ${formatTime(step.endedAt)} · NFC: <span class="mono">${step.endNfc}</span></p>` : ''}
+        ${running && step.startNfc ? `<p class="text-[10px] text-steel-400 mt-1.5 pl-11">Başlangıç: ${formatTime(step.startedAt)} · NFC: <span class="mono">${step.startNfc}</span></p>` : ''}
+        ${done && (step.endNfc || step.durationMin) ? `<p class="text-[10px] text-steel-400 mt-1.5 pl-11">Bitiş: ${step.endedAt || step.finishedAt ? formatTime(step.endedAt || step.finishedAt) : '—'} · ${step.durationMin != null ? formatDurationMin(step.durationMin) : ''}${step.endNfc ? ` · NFC: <span class="mono">${step.endNfc}</span>` : ''}</p>` : ''}
       `;
       camContainer.appendChild(div);
     });
@@ -6666,8 +6915,15 @@ ${vadeLine}`;
     camContainer.querySelectorAll('[data-assign-step]').forEach(btn => {
       btn.addEventListener('click', () => openMachinePicker(wo, part, Number(btn.dataset.assignStep)));
     });
+    camContainer.querySelectorAll('[data-alt-machine]').forEach(btn => {
+      btn.addEventListener('click', () => openMachinePicker(wo, part, Number(btn.dataset.altMachine)));
+    });
     camContainer.querySelectorAll('[data-remove-step]').forEach(btn => {
-      btn.addEventListener('click', () => removeStepMachine(wo, part, Number(btn.dataset.removeStep)));
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.removeStep);
+        if (idx === part.activeCam && part.cam[idx].startedAt) return;
+        removeStepMachine(wo, part, idx);
+      });
     });
 
     if (!blue) {
@@ -6778,28 +7034,40 @@ ${vadeLine}`;
   const nfcIconStop = '<rect x="6" y="6" width="12" height="12" rx="2"></rect>';
 
   // Aktif adımın tezgah durumuna göre butonu "İşi Başlat" veya "İşi Bitir" moduna getirir.
-  // Her iki aksiyon da NFC ile veri girişi üzerinden onaylanır (assignMachineToStep / removeStepMachine).
+  // Başlat: planlı tezgâhta NFC · Bitir: NFC onay → sonraki sıralı görev otomatik açılır.
   function updateNfcButton(wo, part) {
-    const step = activeStep(part);
-    const hasMachine = !!step.machine;
-    nfcBtn.classList.toggle('nfc-btn-end', hasMachine);
-    nfcBtn.disabled = false;
-    if (hasMachine) {
-      nfcLabel.textContent = 'İŞİ BİTİR (NFC OKUT)';
-      nfcSub.textContent = `${step.machine} · bitirmek için okutun`;
+    if (!nfcBtn) return;
+    if (partOpsComplete(part) || isPassiveWO(wo)) {
+      nfcBtn.disabled = true;
+      nfcBtn.classList.remove('nfc-btn-end');
+      nfcLabel.textContent = 'OPERASYONLAR TAMAM';
+      nfcSub.textContent = 'Bu parça için sıralı görevler bitti';
       nfcIcon.innerHTML = nfcIconStop;
-    } else {
-      nfcLabel.textContent = 'İŞİ BAŞLAT (NFC OKUT)';
-      nfcSub.textContent = 'Tezgah seçip NFC ile onaylayın';
-      nfcIcon.innerHTML = nfcIconStart;
+      nfcBtn.onclick = null;
+      return;
     }
-    nfcBtn.onclick = () => {
-      if (hasMachine) {
-        removeStepMachine(wo, part, part.activeCam);
-      } else {
-        openMachinePicker(wo, part, part.activeCam);
-      }
-    };
+    const step = activeStep(part);
+    if (!step) return;
+    const running = !!(step.machine && step.startedAt);
+    const planned = step.plannedMachine || '';
+    nfcBtn.disabled = false;
+    nfcBtn.classList.toggle('nfc-btn-end', running);
+    if (running) {
+      nfcLabel.textContent = 'İŞİ BİTİR / ONAYLA (NFC)';
+      nfcSub.textContent = `${step.machine} · bitiş NFC · sonraki görev açılır`;
+      nfcIcon.innerHTML = nfcIconStop;
+      nfcBtn.onclick = () => removeStepMachine(wo, part, part.activeCam);
+    } else if (planned) {
+      nfcLabel.textContent = 'İŞİ BAŞLAT (NFC OKUT)';
+      nfcSub.textContent = `${planned} · planlı tezgâh NFC`;
+      nfcIcon.innerHTML = nfcIconStart;
+      nfcBtn.onclick = () => assignMachineToStep(wo, part, part.activeCam, planned);
+    } else {
+      nfcLabel.textContent = 'TEZGAH SEÇ / BAŞLAT';
+      nfcSub.textContent = 'Plansız tezgâh Yönetici onayına düşer';
+      nfcIcon.innerHTML = nfcIconStart;
+      nfcBtn.onclick = () => openMachinePicker(wo, part, part.activeCam);
+    }
   }
 
   // ---------- Toast ----------
@@ -7166,11 +7434,13 @@ ${vadeLine}`;
   function machineState(label) {
     for (const { wo, part } of allPartsGlobal()) {
       const s = activeStep(part);
-      if (s.machine === label) return { state: 'busy', wo, part, stepIdx: part.activeCam };
+      if (s && s.machine === label) return { state: 'busy', wo, part, stepIdx: part.activeCam };
     }
     for (const { wo, part } of allPartsGlobal()) {
       for (let i = 0; i < part.cam.length; i++) {
-        if (i !== part.activeCam && part.cam[i].machine === label) {
+        if (i < part.activeCam) continue;
+        const planned = part.cam[i].plannedMachine || (!part.cam[i].startedAt ? part.cam[i].machine : null);
+        if (planned === label) {
           return { state: 'planned', wo, part, stepIdx: i };
         }
       }
@@ -7178,14 +7448,24 @@ ${vadeLine}`;
     return { state: 'idle' };
   }
 
-  // Boş (tezgahsız) tüm CAM adımlarının listesi -> bir makineyi bu adımlardan birine atayabiliriz.
+  // Boş planlı / aktif adımlar — sıralı kilit: yalnızca aktif adım + (yönetici) ileri plan
   function getAssignableSlots() {
     const order = { active: 0, pending: 1, done: 2 };
     const slots = [];
+    const admin = canApproveShopFloor(currentUser);
     allParts().forEach(({ wo, part }) => {
+      if (partOpsComplete(part)) return;
       part.cam.forEach((step, idx) => {
-        if (!step.machine) {
-          slots.push({ wo, part, idx, kind: idx === part.activeCam ? 'active' : idx < part.activeCam ? 'done' : 'pending' });
+        if (idx < part.activeCam) return;
+        if (idx > part.activeCam && !admin) return;
+        const hasPlan = !!(step.plannedMachine || step.machine);
+        if (idx === part.activeCam) {
+          // Aktif adım: makine çalışmıyorsa atanabilir / yeniden planlanabilir
+          if (!step.machine || !step.startedAt) {
+            slots.push({ wo, part, idx, kind: 'active' });
+          }
+        } else if (!hasPlan) {
+          slots.push({ wo, part, idx, kind: 'pending' });
         }
       });
     });
@@ -7252,7 +7532,12 @@ ${vadeLine}`;
         const activeStepInfo = (isBusy || isPlanned) ? info.part.cam[info.stepIdx] : null;
         const nfcLine = isBusy && activeStepInfo && activeStepInfo.startNfc
           ? `<p class="text-[11px] text-steel-400 mt-1">Başlangıç: ${formatTime(activeStepInfo.startedAt)} · NFC: <span class="mono">${activeStepInfo.startNfc}</span></p>`
-          : '';
+          : (isPlanned && activeStepInfo && activeStepInfo.plannedMachine
+            ? `<p class="text-[11px] text-steel-400 mt-1">Planlı tezgâh · sıra gelince NFC start</p>`
+            : '');
+        const planTitle = isBusy
+          ? 'Çalışıyor (NFC start alındı)'
+          : (info.stepIdx === info.part.activeCam ? 'Sıradaki görev · NFC start bekliyor' : 'Planlanan İş (ileri adım)');
 
         return `
           <div class="bg-white rounded-2xl border ${cardBorder} p-4 shadow-sm flex flex-col gap-3">
@@ -7271,7 +7556,7 @@ ${vadeLine}`;
             </div>
             ${(isBusy || isPlanned) ? `
               <div class="bg-steel-50 rounded-xl px-3 py-2">
-                <p class="text-[11px] text-steel-400 font-semibold uppercase">${isBusy ? 'Atanmış İş (Aktif Adım)' : 'Planlanan İş (İleri Adım)'}</p>
+                <p class="text-[11px] text-steel-400 font-semibold uppercase">${planTitle}</p>
                 <p class="text-xs font-semibold text-navy mono mt-0.5">${partCode(info.wo, info.part)} · Adım ${info.stepIdx + 1}/${info.part.cam.length}</p>
                 <p class="text-xs text-steel-600 truncate">${info.part.name} — ${info.part.cam[info.stepIdx].label}</p>
                 ${info.wo.company !== activeCompany ? `<p class="text-[11px] text-steel-400 mt-1">Firma: <span class="font-semibold text-steel-500">${info.wo.company}</span> (ortak makine)</p>` : ''}
@@ -7325,38 +7610,89 @@ ${vadeLine}`;
     removeStepMachine(info.wo, info.part, info.stepIdx);
   }
 
-  // Bir adımdan makine kaldırma. Adım AKTİF adımsa (yani iş gerçekten yürüyordu) bu bir
-  // "İş Bitişi" demektir ve NFC ile teyit istenir. Sadece planlı (ileri) bir atamayı
-  // kaldırmak içinse NFC istenmez.
+  // Bir adımdan makine kaldırma / iş bitirme.
+  // Aktif adımda çalışan makine → NFC ile tamamla → sonraki sıralı görev otomatik açılır.
   function removeStepMachine(wo, part, stepIdx) {
     const step = part.cam[stepIdx];
+    if (!step) return;
+    if (stepIdx < part.activeCam) {
+      showToast('Tamamlanan adım geri alınamaz (sıra kilidi).', 'error');
+      return;
+    }
     const wasActive = stepIdx === part.activeCam;
-    if (wasActive && step.machine) {
+    if (wasActive && step.machine && step.startedAt) {
       openNfcModal({
         kind: 'İş Bitişi',
         title: step.machine,
-        desc: `${partCode(wo, part)} · ${step.label} işlemini bitiriyorsunuz. Lütfen NFC kartını okutun veya kodu girin.`,
+        desc: `${partCode(wo, part)} · ${step.label} işlemini bitirip onaylıyorsunuz. NFC kartını okutun — sonraki görev otomatik açılır.`,
         onConfirm: (nfcVal) => {
           step.endedAt = new Date().toISOString();
+          step.finishedAt = step.endedAt;
           step.endNfc = nfcVal;
           finalizeRemoveStepMachine(wo, part, stepIdx, true);
         },
       });
+    } else if (wasActive && step.machine && !step.startedAt) {
+      // Yanlışlıkla makine yazılmış, start yok
+      step.machine = null;
+      persistWorkOrder(wo);
+      renderWorkOrderTable();
+      renderMachinePark();
+      refreshOpenDrawer();
     } else {
-      finalizeRemoveStepMachine(wo, part, stepIdx, wasActive);
+      finalizeRemoveStepMachine(wo, part, stepIdx, false);
     }
   }
 
-  function finalizeRemoveStepMachine(wo, part, stepIdx, wasActive) {
+  function finalizeRemoveStepMachine(wo, part, stepIdx, completedActive) {
     const step = part.cam[stepIdx];
+    if (!step) return;
+
+    if (completedActive) {
+      const running = step.machine;
+      step.completedMachine = running || step.plannedMachine || null;
+      if (!step.plannedMachine && running) step.plannedMachine = running;
+      step.durationMin = durationMinutes(step.startedAt, step.endedAt || step.finishedAt);
+      step.machine = null;
+
+      let toastMsg = `${partCode(wo, part)} · ${step.label} tamamlandı`;
+      if (step.durationMin) toastMsg += ` · ${formatDurationMin(step.durationMin)}`;
+
+      if (part.activeCam === stepIdx) {
+        if (part.activeCam < part.cam.length - 1) {
+          part.activeCam += 1;
+          const next = part.cam[part.activeCam];
+          toastMsg += ` · Sonraki görev açıldı: ${next.label}`;
+          if (next.plannedMachine) toastMsg += ` → ${next.plannedMachine}`;
+        } else {
+          part.activeCam = part.cam.length;
+          toastMsg += ' · Parça operasyonları bitti';
+          if (maybeCompleteWorkOrder(wo)) toastMsg += ` · ${wo.id} tamamlandı`;
+        }
+      }
+
+      persistWorkOrder(wo);
+      renderWorkOrderTable();
+      renderMachinePark();
+      renderWoApprovalBanner();
+      if (typeof renderManufacturingPage === 'function') renderManufacturingPage();
+      refreshOpenDrawer();
+      showToast(toastMsg, 'success');
+      return;
+    }
+
+    // Planlı atamayı kaldır (yalnızca tamamlanmamış / çalışmayan adım)
+    if (stepIdx > part.activeCam && !canApproveShopFloor(currentUser)) {
+      showToast('İleri adım planını kaldırmak için Yönetici yetkisi gerekir.', 'error');
+      return;
+    }
+    step.plannedMachine = null;
     step.machine = null;
+    persistWorkOrder(wo);
     renderWorkOrderTable();
     renderMachinePark();
     refreshOpenDrawer();
-    const msg = wasActive
-      ? `${partCode(wo, part)} makineden serbest bırakıldı ve bekleme sırasına alındı.`
-      : `${partCode(wo, part)} · Adım ${stepIdx + 1} için planlanan tezgah kaldırıldı.`;
-    showToast(msg, 'info');
+    showToast(`${partCode(wo, part)} · Adım ${stepIdx + 1} için planlanan tezgah kaldırıldı.`, 'info');
   }
 
   // ---------- Atama modalı (iki akış: makineden parçaya / parçadan makineye) ----------
@@ -7373,7 +7709,7 @@ ${vadeLine}`;
     const slots = getAssignableSlots();
 
     if (!slots.length) {
-      assignModalList.innerHTML = `<p class="text-sm text-steel-400 text-center py-6">Atanabilecek boş operasyon adımı bulunmuyor.</p>`;
+      assignModalList.innerHTML = `<p class="text-sm text-steel-400 text-center py-6">Atanabilecek boş operasyon adımı bulunmuyor.<br><span class="text-[11px]">Sıralı kilit: yalnızca aktif görev veya yönetici planı.</span></p>`;
     } else {
       assignModalList.innerHTML = slots.map((slot, i) => `
         <button data-slot="${i}" class="assign-pick w-full text-left flex items-center gap-3 rounded-xl border border-steel-200 hover:border-navy hover:bg-navy/5 p-3 transition-colors">
@@ -7402,25 +7738,39 @@ ${vadeLine}`;
 
   // Parça/adım yönünden (Drawer): belirli bir CAM adımı için makine seç.
   function openMachinePicker(wo, part, stepIdx) {
+    if (stepIdx < part.activeCam) {
+      showToast('Tamamlanan adıma tezgah atanamaz.', 'error');
+      return;
+    }
+    if (stepIdx > part.activeCam && !canApproveShopFloor(currentUser)) {
+      showToast('İleri adım planı yalnızca imalat sorumlusu (Yönetici) tarafından yapılır.', 'error');
+      return;
+    }
     const step = part.cam[stepIdx];
+    const planned = step.plannedMachine || '';
     assignModalMachine.textContent = `${partCode(wo, part)} · ${step.label}`;
     const workshops = machineWorkshopsFor(activeCompany);
 
     if (!workshops.length) {
       assignModalList.innerHTML = `<p class="text-sm text-steel-400 text-center py-6">Bu firma için tanımlı makine bulunmuyor.</p>`;
     } else {
-      assignModalList.innerHTML = workshops.map(ws => `
+      const hint = stepIdx === part.activeCam
+        ? (planned
+          ? `<p class="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2.5 py-2 mb-2">Planlı tezgâh: <strong>${planned}</strong>. Farklı seçim Yönetici onayına düşer.</p>`
+          : `<p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2 mb-2">Plansız tezgâh seçimi Yönetici onayına düşer (yöneticiler doğrudan başlatabilir).</p>`)
+        : `<p class="text-[11px] text-steel-500 bg-steel-50 border border-steel-100 rounded-lg px-2.5 py-2 mb-2">İleri adım için planlı tezgâh atıyorsunuz (NFC start yalnızca sıra gelince).</p>`;
+      assignModalList.innerHTML = hint + workshops.map(ws => `
         <div class="mb-2">
           <p class="text-[11px] font-bold text-steel-400 uppercase px-1 mb-1">${ws.workshop}</p>
           <div class="space-y-1">
             ${ws.machines.map(m => {
               const label = machineLabel(m);
-              const current = step.machine === label;
+              const current = planned === label || step.machine === label;
               return `
                 <button data-machine-pick="${label}" class="w-full text-left flex items-center gap-2.5 rounded-lg ${current ? 'bg-navy/10' : 'hover:bg-steel-50'} px-2.5 py-2 transition-colors">
                   <span class="w-7 h-7 rounded-lg bg-steel-100 text-steel-500 flex items-center justify-center shrink-0">${machineIconSvg(m.icon)}</span>
                   <span class="text-sm ${current ? 'text-navy font-semibold' : 'text-steel-700'} flex-1 min-w-0 truncate">${label}</span>
-                  ${current ? `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-navy shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>` : ''}
+                  ${current ? `<span class="text-[10px] font-bold text-navy">PLANLI</span>` : ''}
                 </button>
               `;
             }).join('')}
@@ -7443,33 +7793,72 @@ ${vadeLine}`;
     assignModalOverlay.classList.add('hidden');
   }
 
-  // Bir adıma makine atama. Adım AKTİF adımsa (yani iş o an başlıyor demektir) NFC ile
-  // teyit istenir ve başlangıç zamanı/NFC kodu adıma kaydedilir. Planlı (ileri) bir adıma
-  // atama içinse NFC istenmez, direkt atanır.
-  function assignMachineToStep(wo, part, stepIdx, label) {
-    const isActive = stepIdx === part.activeCam;
-    const finalize = (nfcVal) => {
-      part.cam[stepIdx].machine = label;
-      if (isActive) {
-        part.cam[stepIdx].startedAt = new Date().toISOString();
-        part.cam[stepIdx].startNfc = nfcVal;
+  // Aktif adım: NFC start (atanmış tezgâh). Farklı/plansız → onay.
+  // İleri adım: yalnızca plan (plannedMachine).
+  function assignMachineToStep(wo, part, stepIdx, label, opts = {}) {
+    if (!wo || !part || !part.cam[stepIdx]) return;
+    if (isPassiveWO(wo)) {
+      showToast('Kapalı iş emrine işlem yapılamaz.', 'error');
+      return;
+    }
+    if (stepIdx < part.activeCam) {
+      showToast('Önceki adımlar tamamlandı — geriye dönülemez.', 'error');
+      return;
+    }
+    if (stepIdx > part.activeCam) {
+      if (!canApproveShopFloor(currentUser) && !opts.force) {
+        showToast('Sıralı rota: ileri adım planı için Yönetici gerekir.', 'error');
+        return;
       }
+      part.cam[stepIdx].plannedMachine = label;
+      part.cam[stepIdx].machine = null;
+      persistWorkOrder(wo);
       renderWorkOrderTable();
       renderMachinePark();
       refreshOpenDrawer();
-      showToast(`${partCode(wo, part)} · ${part.cam[stepIdx].label} → ${label} atandı.${isActive ? ' İş başlatıldı.' : ''}`, 'success');
+      showToast(`${partCode(wo, part)} · ${part.cam[stepIdx].label} → planlı tezgâh: ${label}`, 'success');
+      return;
+    }
+
+    // —— Aktif adım başlat ——
+    const step = part.cam[stepIdx];
+    if (step.machine && step.startedAt) {
+      showToast('Bu adım zaten çalışıyor. Bitirmek için NFC okutun.', 'info');
+      return;
+    }
+    const planned = step.plannedMachine || null;
+    const mismatch = !!(planned && planned !== label);
+    const unplanned = !planned;
+    if ((mismatch || unplanned) && !opts.approved && !canApproveShopFloor(currentUser)) {
+      queueMachineApproval({ wo, part, stepIdx, label, planned });
+      return;
+    }
+
+    const finalizeStart = (nfcVal) => {
+      if (!step.plannedMachine) step.plannedMachine = label;
+      step.machine = label;
+      step.startedAt = new Date().toISOString();
+      step.startNfc = nfcVal || 'Manuel Giriş (NFC yok)';
+      step.endedAt = null;
+      step.finishedAt = null;
+      step.endNfc = null;
+      if (currentUser?.name) part.operator = currentUser.name;
+      persistWorkOrder(wo);
+      renderWorkOrderTable();
+      renderMachinePark();
+      refreshOpenDrawer();
+      const note = (mismatch || unplanned) && (opts.approved || canApproveShopFloor(currentUser))
+        ? ' (onaylı / yönetici start)'
+        : '';
+      showToast(`${partCode(wo, part)} · ${step.label} başladı → ${label}${note}`, 'success');
     };
 
-    if (isActive) {
-      openNfcModal({
-        kind: 'İş Başlangıcı',
-        title: label,
-        desc: `${partCode(wo, part)} · ${part.cam[stepIdx].label} işini başlatıyorsunuz. Lütfen NFC kartını okutun veya kodu girin.`,
-        onConfirm: finalize,
-      });
-    } else {
-      finalize(null);
-    }
+    openNfcModal({
+      kind: 'İş Başlangıcı',
+      title: label,
+      desc: `${partCode(wo, part)} · ${step.label} — tezgâh NFC kartını okutun veya kodu girin.`,
+      onConfirm: finalizeStart,
+    });
   }
 
   document.getElementById('assignModalCloseBtn').addEventListener('click', closeAssignModal);
@@ -8067,7 +8456,7 @@ ${vadeLine}`;
         material,
         operator,
         activeCam: 0,
-        cam: selectedRoute.map(s => ({ label: s.step, machine: null })),
+        cam: selectedRoute.map(s => ({ label: s.step, machine: null, plannedMachine: null })),
       }],
     };
     workOrders.push(newWO);
@@ -11320,9 +11709,11 @@ ${vadeLine}`;
 
   // ---------- İmalat Sayfası ----------
   function partCompletionPct(part) {
-    if (!part.cam.length) return 0;
+    if (!part || !part.cam || !part.cam.length) return 0;
+    if (part.activeCam >= part.cam.length) return 100;
     const done = part.cam.filter((s, i) => i < part.activeCam).length;
-    const activeBonus = (part.activeCam < part.cam.length && activeStep(part).machine) ? 0.5 : 0;
+    const act = activeStep(part);
+    const activeBonus = (act && act.machine && act.startedAt) ? 0.5 : 0;
     return Math.min(100, Math.round(((done + activeBonus) / part.cam.length) * 100));
   }
   function woCompletionPct(wo) {
