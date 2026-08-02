@@ -927,8 +927,13 @@
               <h1 id="hrDetailName" class="text-2xl font-bold text-steel-800">—</h1>
               <p id="hrDetailMeta" class="text-sm text-steel-400 mt-1">—</p>
             </div>
-            <button type="button" id="hrDetailEditBtn" class="text-sm font-semibold bg-navy text-white px-4 py-2.5 rounded-xl">Düzenle</button>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="hrDetailCardBtn" class="text-sm font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-4 py-2.5 rounded-xl">Kimlik Kartı</button>
+              <button type="button" id="hrDetailPrintCardBtn" class="text-sm font-semibold text-white bg-violet-600 hover:bg-violet-700 px-4 py-2.5 rounded-xl">Kart Yazdır</button>
+              <button type="button" id="hrDetailEditBtn" class="text-sm font-semibold bg-navy text-white px-4 py-2.5 rounded-xl">Düzenle</button>
+            </div>
           </div>
+          <div id="hrDetailIdCardMount" class="mb-5"></div>
           <div id="hrDetailKpis" class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5"></div>
           <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
             <div class="bg-white rounded-2xl border border-steel-200 p-4 shadow-sm">
@@ -2179,7 +2184,8 @@
     </div>
     <div id="orderDrawerNotifyMount" class="contact-sensitive"></div>
   </div>
-  <div class="p-4 border-t border-steel-100 shrink-0 flex gap-2">
+  <div class="p-4 border-t border-steel-100 shrink-0 flex flex-col sm:flex-row gap-2">
+    <button type="button" id="orderDrawerLabelsBtn" class="flex-1 text-sm font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 py-2.5 rounded-xl">QR Etiketler (hepsi)</button>
     <button type="button" id="orderDrawerPreviewBtn" class="flex-1 text-sm font-semibold text-navy bg-navy/10 hover:bg-navy/15 py-2.5 rounded-xl">Belge Önizle</button>
   </div>
 </aside>
@@ -3722,7 +3728,30 @@
       <button id="newHrCloseBtn" class="text-white/70 hover:text-white hover:bg-white/10 rounded-lg p-1.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
     </div>
     <div class="p-5 space-y-3 max-h-[75vh] overflow-y-auto">
-      <div><label class="text-[11px] font-semibold text-steel-500 uppercase">Ad Soyad *</label><input id="hrName" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" /></div>
+      <div class="flex items-start gap-4">
+        <div class="shrink-0">
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Personel Fotoğrafı</label>
+          <div class="mt-1 relative">
+            <img id="hrPhotoPreview" src="" alt="" class="hidden w-24 h-28 object-cover rounded-xl border border-steel-200 bg-steel-50" />
+            <div id="hrPhotoPlaceholder" class="w-24 h-28 rounded-xl border border-dashed border-steel-300 bg-steel-50 flex flex-col items-center justify-center text-steel-400">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span class="text-[9px] mt-1 font-semibold">Foto</span>
+            </div>
+          </div>
+          <div class="mt-2 flex flex-col gap-1">
+            <label class="cursor-pointer text-[11px] font-semibold text-navy hover:underline">
+              Fotoğraf seç
+              <input id="hrPhotoInput" type="file" accept="image/*" class="hidden" />
+            </label>
+            <button type="button" id="hrPhotoClearBtn" class="hidden text-[11px] font-semibold text-red-500 text-left hover:underline">Kaldır</button>
+          </div>
+        </div>
+        <div class="flex-1 min-w-0">
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Ad Soyad *</label>
+          <input id="hrName" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+          <p class="text-[10px] text-steel-400 mt-2 leading-relaxed">Fotoğraf NFC / kimlik kartı baskısında ve dijital personel kartında kullanılır (önerilen dikey portre).</p>
+        </div>
+      </div>
       <div>
         <label class="text-[11px] font-semibold text-steel-500 uppercase">Yaka Tipi *</label>
         <select id="hrCollar" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm bg-white">
@@ -4191,6 +4220,331 @@
       }
     } catch (_) { /* fallback below */ }
     return `https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=6&data=${encodeURIComponent(text)}`;
+  }
+
+  /** Compress portrait photo for personnel card (JPEG data URL). */
+  function compressImageToDataUrl(file, maxW = 480, maxH = 600, quality = 0.78) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type || !file.type.startsWith('image/')) {
+        reject(new Error('Geçersiz görsel'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Okuma hatası'));
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Görsel açılamadı'));
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          const scale = Math.min(1, maxW / w, maxH / h);
+          w = Math.max(1, Math.round(w * scale));
+          h = Math.max(1, Math.round(h * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#f1f5f9';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function escapeHtmlPrint(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDimsCompact(dims) {
+    if (typeof formatRfqDims === 'function') return formatRfqDims(dims);
+    if (!dims || typeof dims !== 'object') return '—';
+    const parts = Object.entries(dims)
+      .filter(([, v]) => v != null && v !== '' && Number(v) !== 0)
+      .map(([k, v]) => `${k}: ${v}`);
+    return parts.length ? parts.join(' · ') : '—';
+  }
+
+  function openPrintDocument(html, title) {
+    const w = window.open('', '_blank', 'width=960,height=720');
+    if (!w) {
+      showToast('Yazdırma penceresi engellendi — pop-up izni verin.', 'error');
+      return null;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.document.title = title || 'Yazdır';
+    setTimeout(() => {
+      try { w.focus(); w.print(); } catch (_) { /* ignore */ }
+    }, 350);
+    return w;
+  }
+
+  /** CR80 NFC / kimlik kartı (85.6 × 54 mm) */
+  function buildPersonnelIdCardHtml(p, { multi } = {}) {
+    if (!p) return '';
+    const info = companies[p.company] || companies[activeCompany] || {};
+    let logoHref = '';
+    try { logoHref = info.logo ? new URL(info.logo, window.location.href).href : ''; } catch (_) { logoHref = info.logo || ''; }
+    const photo = p.photo || '';
+    const qrPayload = buildTraceUrl('HR', p.company, p.id);
+    const qrSrc = qrDataUrl(qrPayload, 2);
+    const card = `
+      <div class="id-card">
+        <div class="id-top">
+          <div class="id-photo-wrap">
+            ${photo
+              ? `<img class="id-photo" src="${photo}" alt="" />`
+              : `<div class="id-photo id-photo-ph">${escapeHtmlPrint((p.name || '?').trim().charAt(0).toUpperCase())}</div>`}
+          </div>
+          <div class="id-meta">
+            ${logoHref ? `<img class="id-logo" src="${logoHref}" alt="${escapeHtmlPrint(p.company || '')}" />` : `<div class="id-logo id-logo-ph">${escapeHtmlPrint(p.company || '')}</div>`}
+            <p class="id-co">${escapeHtmlPrint(p.company || '')}</p>
+            <p class="id-code mono">${escapeHtmlPrint(p.id || '')}</p>
+          </div>
+        </div>
+        <div class="id-body">
+          <p class="id-name">${escapeHtmlPrint(p.name || '—')}</p>
+          <p class="id-dept">${escapeHtmlPrint(p.dept || '—')}</p>
+          <p class="id-collar">${escapeHtmlPrint(typeof collarLabel === 'function' ? collarLabel(p.collar) : (p.collar || ''))}</p>
+        </div>
+        <div class="id-foot">
+          <span class="id-nfc">NFC / kimlik · BTD Core</span>
+          ${qrSrc ? `<img class="id-qr" src="${qrSrc}" alt="QR" />` : ''}
+        </div>
+      </div>`;
+    if (multi) return card;
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"/><title>Kimlik · ${escapeHtmlPrint(p.name || '')}</title>
+<style>
+  @page { size: 85.6mm 54mm; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; background: #e2e8f0; }
+  .sheet { padding: 8mm; display: flex; flex-wrap: wrap; gap: 6mm; justify-content: center; }
+  .id-card {
+    width: 85.6mm; height: 54mm; background: linear-gradient(145deg, #0f2a4a 0%, #1e3a5f 48%, #0f2a4a 100%);
+    color: #fff; border-radius: 3mm; padding: 3.2mm 3.5mm; position: relative; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(15,42,74,.28); display: flex; flex-direction: column;
+  }
+  .id-card::before {
+    content: ""; position: absolute; right: -8mm; top: -10mm; width: 34mm; height: 34mm;
+    border-radius: 50%; background: rgba(255,255,255,.06);
+  }
+  .id-top { display: flex; gap: 3mm; align-items: stretch; position: relative; z-index: 1; }
+  .id-photo-wrap { flex-shrink: 0; }
+  .id-photo { width: 22mm; height: 28mm; object-fit: cover; border-radius: 1.6mm; border: 0.35mm solid rgba(255,255,255,.35); background: #cbd5e1; display: block; }
+  .id-photo-ph { display: flex; align-items: center; justify-content: center; font-size: 11mm; font-weight: 800; color: #0f2a4a; background: #e2e8f0; }
+  .id-meta { flex: 1; text-align: right; display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+  .id-logo { height: 9mm; max-width: 28mm; object-fit: contain; background: #fff; border-radius: 1mm; padding: 0.8mm 1.2mm; }
+  .id-logo-ph { font-size: 7pt; font-weight: 800; background: #fff; color: #0f2a4a; border-radius: 1mm; padding: 1mm 2mm; }
+  .id-co { margin: 1.5mm 0 0; font-size: 7pt; font-weight: 700; letter-spacing: .3pt; opacity: .9; }
+  .id-code { margin: .4mm 0 0; font-size: 6.5pt; opacity: .65; font-family: ui-monospace, Consolas, monospace; }
+  .id-body { flex: 1; position: relative; z-index: 1; padding-top: 1.5mm; min-height: 0; }
+  .id-name { margin: 0; font-size: 11pt; font-weight: 800; line-height: 1.15; letter-spacing: .2pt; }
+  .id-dept { margin: 1mm 0 0; font-size: 8pt; font-weight: 600; color: #93c5fd; }
+  .id-collar { margin: .6mm 0 0; font-size: 6.5pt; opacity: .75; }
+  .id-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 2mm; position: relative; z-index: 1; }
+  .id-nfc { font-size: 5.5pt; letter-spacing: .4pt; text-transform: uppercase; opacity: .55; font-weight: 700; }
+  .id-qr { width: 11mm; height: 11mm; background: #fff; border-radius: .8mm; padding: .5mm; }
+  @media print {
+    body { background: #fff; }
+    .sheet { padding: 0; }
+    .id-card { box-shadow: none; border-radius: 0; page-break-after: always; }
+  }
+  .no-print { text-align: center; padding: 10px; }
+  .no-print button { background: #0f2a4a; color: #fff; border: 0; padding: 10px 18px; border-radius: 10px; font-weight: 700; cursor: pointer; }
+</style></head><body>
+  <div class="no-print"><button onclick="window.print()">Yazdır / PDF · CR80 (85.6×54 mm)</button></div>
+  <div class="sheet">${card}</div>
+</body></html>`;
+  }
+
+  function printPersonnelIdCard(p) {
+    if (!p) return;
+    openPrintDocument(buildPersonnelIdCardHtml(p), `Kart · ${p.name || p.id}`);
+  }
+
+  function renderPersonnelIdCardPreview(p, mountEl) {
+    if (!mountEl || !p) return;
+    const info = companies[p.company] || {};
+    let logoHref = '';
+    try { logoHref = info.logo ? new URL(info.logo, window.location.href).href : ''; } catch (_) { logoHref = info.logo || ''; }
+    const photo = p.photo || '';
+    const initial = (p.name || '?').trim().charAt(0).toUpperCase();
+    mountEl.innerHTML = `
+      <div class="flex flex-col sm:flex-row sm:items-start gap-4">
+        <div class="relative w-[268px] h-[169px] rounded-xl overflow-hidden shadow-lg shadow-navy/20 shrink-0"
+          style="background:linear-gradient(145deg,#0f2a4a 0%,#1e3a5f 48%,#0f2a4a 100%);">
+          <div class="absolute inset-0 opacity-30 pointer-events-none"
+            style="background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.25),transparent 45%);"></div>
+          <div class="relative h-full p-3 flex flex-col text-white">
+            <div class="flex gap-2.5">
+              ${photo
+                ? `<img src="${photo.replace(/"/g, '&quot;')}" alt="" class="w-[68px] h-[88px] object-cover rounded-md border border-white/30 bg-steel-200" />`
+                : `<div class="w-[68px] h-[88px] rounded-md border border-white/30 bg-white/90 text-navy flex items-center justify-center text-2xl font-extrabold">${initial}</div>`}
+              <div class="flex-1 text-right min-w-0">
+                ${logoHref
+                  ? `<img src="${logoHref}" alt="" class="h-8 max-w-[96px] object-contain ml-auto bg-white rounded px-1.5 py-0.5" />`
+                  : `<span class="inline-block text-[10px] font-bold bg-white text-navy rounded px-2 py-1">${p.company || ''}</span>`}
+                <p class="text-[10px] font-bold mt-1.5 opacity-90">${p.company || ''}</p>
+                <p class="text-[9px] font-mono opacity-60">${p.id || ''}</p>
+              </div>
+            </div>
+            <div class="mt-auto pt-1">
+              <p class="text-[15px] font-extrabold leading-tight truncate">${p.name || '—'}</p>
+              <p class="text-[11px] font-semibold text-sky-300 truncate">${p.dept || '—'}</p>
+            </div>
+          </div>
+        </div>
+        <div class="text-sm text-steel-500 leading-relaxed max-w-md">
+          <p class="font-semibold text-steel-700 mb-1">Dijital personel kartı</p>
+          <p>Önizleme CR80 NFC / kimlik formatındadır (85,6 × 54 mm). Baskı için <strong>Kart Yazdır</strong> kullanın; Dymo veya PVC kart yazıcısında aynı düzen kullanılabilir.</p>
+          <p class="mt-2 text-[11px] text-steel-400">QR: personel iz izleme kodu · fotoğraf yoksa baş harf gösterilir.</p>
+        </div>
+      </div>`;
+  }
+
+  function findCostItemForOrderLine(order, item, idx) {
+    if (!order || !item) return null;
+    const quote = quotes.find(q => q.id === (order.quoteId || order.id) || q.id === order.id);
+    const caId = order.costAnalysisId || quote?.costAnalysisId;
+    if (!caId || typeof costAnalyses === 'undefined') return null;
+    const analysis = costAnalyses.find(a => a.id === caId);
+    if (!analysis || !Array.isArray(analysis.items)) return null;
+    const byIdx = analysis.items[idx];
+    if (byIdx && (!item.partNo || !byIdx.partNo || byIdx.partNo === item.partNo)) return byIdx;
+    return analysis.items.find(ci =>
+      (item.partNo && ci.partNo === item.partNo) ||
+      (item.desc && ci.desc === item.desc)
+    ) || null;
+  }
+
+  function resolveOrderLabelData(order, item, idx) {
+    const cost = findCostItemForOrderLine(order, item, idx);
+    const coatParts = [
+      item.coatingType || item.coatType,
+      item.coatingType2 || item.coat2Type,
+      cost?.coatingType || cost?.coatType,
+      cost?.coatingType2 || cost?.coat2Type,
+    ].filter(Boolean);
+    const coatUnique = [...new Set(coatParts.map(String))];
+    const matCode = [item.material || cost?.material, item.alloy || cost?.alloy].filter(Boolean).join(' · ')
+      || item.materialCode || cost?.material || '—';
+    const mfgDims = item.mfgDims || cost?.mfgDims || item.ordDims || cost?.ordDims || null;
+    const serial = item.serial || item.partNo || cost?.partNo || `${order.id}-${String(idx + 1).padStart(2, '0')}`;
+    const name = item.desc || cost?.desc || '—';
+    return {
+      serial,
+      name,
+      partLabel: serial && name && name !== '—' ? `${serial} · ${name}` : (serial || name),
+      orderDate: order.approvalDate || order.date || '',
+      dueDate: order.deliveryDate || '',
+      qty: item.qty ?? cost?.qty ?? 0,
+      mfgDimsText: formatDimsCompact(mfgDims),
+      materialCode: matCode || '—',
+      heat: item.heatType || cost?.heatType || '—',
+      coating: coatUnique.length ? coatUnique.join(' + ') : '—',
+      refId: `${order.id}/${idx + 1}/${serial}`,
+    };
+  }
+
+  /** Dymo 550 · LabelWriter Wide Address 99012 · 36 × 89 mm (landscape 89×36) */
+  function buildDymoOrderLabelHtml(order, itemsWithIdx) {
+    const info = companies[order.company] || {};
+    let logoHref = '';
+    try { logoHref = info.logo ? new URL(info.logo, window.location.href).href : ''; } catch (_) { logoHref = info.logo || ''; }
+    const labels = itemsWithIdx.map(({ item, idx }) => {
+      const d = resolveOrderLabelData(order, item, idx);
+      const qrSrc = qrDataUrl(buildTraceUrl('OL', order.company, d.refId), 2);
+      return `
+        <div class="label">
+          <div class="qr-col">
+            ${qrSrc ? `<img src="${qrSrc}" alt="QR" />` : ''}
+          </div>
+          <div class="info-col">
+            <div class="head">
+              <div class="titles">
+                <p class="co">${escapeHtmlPrint(order.company || '')}</p>
+                <p class="part">${escapeHtmlPrint(d.partLabel)}</p>
+              </div>
+              ${logoHref ? `<img class="logo" src="${logoHref}" alt="" />` : ''}
+            </div>
+            <div class="grid">
+              <div><span>Sipariş</span>${escapeHtmlPrint(typeof fmtDate === 'function' ? fmtDate(d.orderDate) : d.orderDate)} — ${escapeHtmlPrint(typeof fmtDate === 'function' ? fmtDate(d.dueDate) : d.dueDate)}</div>
+              <div><span>Adet</span>${escapeHtmlPrint(d.qty)}</div>
+              <div class="full"><span>İmalat ölçüsü</span>${escapeHtmlPrint(d.mfgDimsText)}</div>
+              <div class="full"><span>Malzeme</span>${escapeHtmlPrint(d.materialCode)}</div>
+              <div><span>Isıl</span>${escapeHtmlPrint(d.heat)}</div>
+              <div><span>Kaplama</span>${escapeHtmlPrint(d.coating)}</div>
+            </div>
+            <p class="oid mono">${escapeHtmlPrint(order.id)} · kalem ${idx + 1}</p>
+          </div>
+        </div>`;
+    }).join('');
+    return `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"/><title>QR Etiket · ${escapeHtmlPrint(order.id)}</title>
+<style>
+  @page { size: 89mm 36mm; margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f1f5f9; color: #0f172a; }
+  .toolbar { padding: 10px; text-align: center; }
+  .toolbar button { background: #0f2a4a; color: #fff; border: 0; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; margin: 0 4px; }
+  .hint { font-size: 11px; color: #64748b; margin-top: 6px; }
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 4mm; padding: 4mm; }
+  .label {
+    width: 89mm; height: 36mm; background: #fff; border: 0.3mm solid #cbd5e1;
+    display: flex; gap: 2mm; padding: 1.6mm 2mm; page-break-after: always; overflow: hidden;
+  }
+  .qr-col { width: 28mm; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .qr-col img { width: 26mm; height: 26mm; image-rendering: pixelated; }
+  .info-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5mm; }
+  .titles { min-width: 0; }
+  .co { margin: 0; font-size: 6pt; font-weight: 800; color: #0f2a4a; text-transform: uppercase; letter-spacing: .3pt; }
+  .part { margin: .4mm 0 0; font-size: 7.5pt; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48mm; }
+  .logo { height: 7mm; max-width: 18mm; object-fit: contain; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .35mm 1.5mm; margin-top: .8mm; flex: 1; }
+  .grid div { font-size: 5.8pt; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .grid div.full { grid-column: 1 / -1; }
+  .grid span { display: block; font-size: 5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .2pt; }
+  .oid { margin: auto 0 0; font-size: 5pt; color: #94a3b8; font-family: ui-monospace, Consolas, monospace; }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .stack { padding: 0; gap: 0; }
+    .label { border: none; }
+  }
+</style></head><body>
+  <div class="toolbar">
+    <button onclick="window.print()">Yazdır · Dymo 99012 (89×36 mm)</button>
+    <p class="hint">Dymo LabelWriter 550 · Geniş Adres Etiketi 99012 · yazıcıda etiket boyutu 89 mm × 36 mm seçin</p>
+  </div>
+  <div class="stack">${labels}</div>
+</body></html>`;
+  }
+
+  function printOrderItemLabels(order, itemIndexes) {
+    if (!order || !Array.isArray(order.items) || !order.items.length) {
+      showToast('Siparişte kalem yok.', 'error');
+      return;
+    }
+    const idxs = (itemIndexes == null
+      ? order.items.map((_, i) => i)
+      : [].concat(itemIndexes).map(Number)
+    ).filter(i => i >= 0 && i < order.items.length);
+    if (!idxs.length) {
+      showToast('Yazdırılacak kalem seçilmedi.', 'error');
+      return;
+    }
+    const payload = idxs.map(idx => ({ item: order.items[idx], idx }));
+    openPrintDocument(buildDymoOrderLabelHtml(order, payload), `Etiket · ${order.id}`);
+    showToast(`${idxs.length} QR etiket hazırlandı (Dymo 99012).`, 'success');
   }
   function docLetterheadCss() {
     return `
@@ -4862,6 +5216,7 @@ ${vadeLine}`;
       status: 'Onaylandı',
       revisionNo: 0,
       notifyLog: [],
+      costAnalysisId: quote.costAnalysisId || null,
     };
     orders.push(order);
     orderRevisionLog[order.id] = [{ date: approvalDate, note: 'Sipariş oluşturuldu.' }];
@@ -6400,6 +6755,9 @@ ${vadeLine}`;
   document.getElementById('orderDrawerCloseBtn').addEventListener('click', () => closeOrderDrawer());
   document.getElementById('orderDrawerPreviewBtn').addEventListener('click', () => {
     if (openOrderRef && typeof openOrderPreview === 'function') openOrderPreview(openOrderRef);
+  });
+  document.getElementById('orderDrawerLabelsBtn')?.addEventListener('click', () => {
+    if (openOrderRef && typeof printOrderItemLabels === 'function') printOrderItemLabels(openOrderRef);
   });
   drawerOverlay.addEventListener('click', () => {
     if (orderDrawer && !orderDrawer.classList.contains('hidden')) closeOrderDrawer();
@@ -9693,7 +10051,11 @@ ${vadeLine}`;
           </td>
           <td class="px-4 py-2.5 text-steel-500">${it.qty} adet</td>
           <td class="px-4 py-2.5 font-semibold text-steel-700 mono">${fmtMoney(quoteItemTotal(it) * (1 - (Number(it.discountPct) || 0) / 100), o.currency)}</td>
-          <td class="px-4 py-2.5 text-right" colspan="2">
+          <td class="px-4 py-2.5 text-right whitespace-nowrap" colspan="2">
+            <button data-order-item-label="${o.id}" data-item-idx="${i}" class="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2.5 py-1.5 rounded-lg transition-colors" title="Bu kalem için Dymo QR etiket">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg>
+              QR Etiket
+            </button>
             <button data-order-to-wo="${o.id}" data-item-idx="${i}" class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-2.5 py-1.5 rounded-lg transition-colors" title="Bu kalem için iş emri">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
               İş Emri
@@ -9721,6 +10083,7 @@ ${vadeLine}`;
           <span class="text-[11px] font-bold px-2 py-1 rounded-full ${orderStatusStyle[o.status] || orderStatusStyle['Onaylandı']}">${o.status}</span>
         </td>
         <td class="px-4 py-3.5 text-right whitespace-nowrap">
+          <button data-order-labels="${o.id}" class="text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2.5 py-1.5 rounded-lg" title="Tüm kalemler için Dymo QR etiket">QR Etiket</button>
           <button data-order-procure="${o.id}" class="text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded-lg" title="Malzeme tedarik RFQ">Tedarik</button>
           <button data-order-wo="${o.id}" class="text-steel-300 hover:text-navy transition-colors p-1.5 rounded-lg hover:bg-navy/5" title="${workOrders.some(w => w.orderId === o.id) ? 'Bağlı iş emrine git' : 'İş emri oluştur'}">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
@@ -9767,6 +10130,18 @@ ${vadeLine}`;
       btn.addEventListener('click', () => {
         const o = orders.find(x => x.id === btn.dataset.orderProcure);
         if (o) openMaterialRfqFromOrder(o);
+      });
+    });
+    tbody.querySelectorAll('[data-order-labels]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const o = orders.find(x => x.id === btn.dataset.orderLabels);
+        if (o) printOrderItemLabels(o);
+      });
+    });
+    tbody.querySelectorAll('[data-order-item-label]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const o = orders.find(x => x.id === btn.dataset.orderItemLabel);
+        if (o) printOrderItemLabels(o, [Number(btn.dataset.itemIdx)]);
       });
     });
     tbody.querySelectorAll('[data-preview-order]').forEach(btn => {
@@ -13418,6 +13793,13 @@ ${vadeLine}`;
       desc: it.desc,
       qty: it.qty,
       unitPrice: Math.round(it.quoteUnit * 100) / 100,
+      material: it.material || '',
+      alloy: it.alloy || '',
+      mfgDims: it.mfgDims || null,
+      ordDims: it.ordDims || null,
+      heatType: it.heatType || '',
+      coatingType: [it.coatingType, it.coatingType2].filter(Boolean).join(' + '),
+      serial: it.partNo || '',
     }));
     if (fin && fin.shipping > 0) {
       const shipQuote = fin.shipping * (1 + (analysis.profitPct || 0) / 100);
@@ -15320,6 +15702,7 @@ ${vadeLine}`;
   // ---------- Personel Performans & Maaş ----------
   let hrMonthlyHours = 225;
   let editingHrId = null;
+  let editingHrPhoto = null;
   let viewingHrId = null;
 
   function seedPersonnelIfEmpty() {
@@ -15454,6 +15837,9 @@ ${vadeLine}`;
     const att = personnelAttendancePct(p);
     document.getElementById('hrDetailName').textContent = p.name;
     document.getElementById('hrDetailMeta').textContent = `${p.dept || '—'} · ${p.id} · ${p.status || 'Aktif'}`;
+    if (typeof renderPersonnelIdCardPreview === 'function') {
+      renderPersonnelIdCardPreview(p, document.getElementById('hrDetailIdCardMount'));
+    }
     document.getElementById('hrDetailKpis').innerHTML = [
       ['Saatlik', pay.hourly.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' ₺', 'text-navy'],
       ['Günlük', pay.daily.toLocaleString('tr-TR', { maximumFractionDigits: 0 }) + ' ₺', 'text-steel-800'],
@@ -15461,6 +15847,15 @@ ${vadeLine}`;
       ['Bu Ay Ödeme', pay.total.toLocaleString('tr-TR') + ' ₺', 'text-emerald-700'],
     ].map(([l, v, c]) => `<div class="bg-white rounded-2xl border border-steel-200 p-4 shadow-sm"><p class="text-[11px] text-steel-400 font-semibold uppercase">${l}</p><p class="text-xl font-bold ${c} mt-1">${v}</p></div>`).join('');
     document.getElementById('hrDetailProfile').innerHTML = `
+      <div class="sm:col-span-2 flex items-start gap-4 mb-1">
+        ${p.photo
+          ? `<img src="${String(p.photo).replace(/"/g, '&quot;')}" alt="" class="w-20 h-24 object-cover rounded-xl border border-steel-200" />`
+          : `<div class="w-20 h-24 rounded-xl border border-dashed border-steel-300 bg-steel-50 flex items-center justify-center text-2xl font-bold text-steel-400">${(p.name || '?').charAt(0).toUpperCase()}</div>`}
+        <div>
+          <span class="text-steel-400 text-xs uppercase font-semibold">Personel Fotoğrafı</span>
+          <p class="font-medium text-steel-600 text-sm mt-1">${p.photo ? 'Kart baskısı için kayıtlı' : 'Henüz fotoğraf yok — düzenlemeden ekleyin'}</p>
+        </div>
+      </div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Yaka Tipi</span><p class="font-medium">${collarLabel(p.collar || 'white')}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">Görev Birimi</span><p class="font-medium">${p.dept || '—'}</p></div>
       <div><span class="text-steel-400 text-xs uppercase font-semibold">T.C. Kimlik No</span><p class="font-medium mono">${p.tcNo || '—'}</p></div>
@@ -15773,8 +16168,11 @@ ${vadeLine}`;
       const leaveDays = leaveRequests.filter(l => l.personnelId === p.id).reduce((s, l) => s + (Number(l.days) || 0), 0);
       const hasUser = users.some(u => u.personnelId === p.id || (p.userId && u.username === p.userId));
       const collar = normalizeCollar(p.collar);
+      const av = p.photo
+        ? `<img src="${String(p.photo).replace(/"/g, '&quot;')}" alt="" class="w-9 h-9 rounded-lg object-cover border border-steel-200 shrink-0" />`
+        : `<div class="w-9 h-9 rounded-lg bg-navy/10 text-navy flex items-center justify-center text-xs font-bold shrink-0">${(p.name || '?').charAt(0).toUpperCase()}</div>`;
       return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-hr-open="${p.id}">
-        <td class="px-5 py-3.5"><p class="font-semibold text-steel-800">${p.name}</p><p class="text-[11px] text-steel-400">${p.dept || '—'} · <span class="price-sensitive">${pay.hourly.toFixed(0)} ₺/sa</span></p></td>
+        <td class="px-5 py-3.5"><div class="flex items-center gap-2.5">${av}<div><p class="font-semibold text-steel-800">${p.name}</p><p class="text-[11px] text-steel-400">${p.dept || '—'} · <span class="price-sensitive">${pay.hourly.toFixed(0)} ₺/sa</span></p></div></div></td>
         <td class="px-4 py-3.5"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${collarBadgeClass(collar)}">${collarLabel(collar)}</span></td>
         <td class="px-4 py-3.5 text-steel-500 text-xs">${fmtDate(p.startDate)}</td>
         <td class="px-4 py-3.5 mono text-steel-700 price-sensitive">${Number(p.salary).toLocaleString('tr-TR')} ₺</td>
@@ -15784,6 +16182,7 @@ ${vadeLine}`;
         <td class="px-4 py-3.5 font-bold text-emerald-700 mono text-xs price-sensitive">${pay.total.toLocaleString('tr-TR')} ₺</td>
         <td class="px-4 py-3.5 text-right whitespace-nowrap" onclick="event.stopPropagation()">
           ${!hasUser ? `<button data-hr-user="${p.id}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2 py-1 rounded-lg">Kullanıcı</button>` : `<span class="text-[10px] text-emerald-600 font-semibold">${p.userId || 'Hesaplı'}</span>`}
+          <button data-hr-card="${p.id}" class="text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg" title="Kimlik kartı yazdır">Kart</button>
           <button data-edit-hr="${p.id}" class="text-navy hover:bg-navy/5 text-[11px] font-semibold px-2 py-1 rounded-lg">Düzenle</button>
           <button data-del-hr="${p.id}" class="text-steel-300 hover:text-red-500 p-1.5 rounded-lg" title="Sil">✕</button>
         </td>
@@ -15796,6 +16195,13 @@ ${vadeLine}`;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         openUserCreateFromPersonnel(btn.dataset.hrUser);
+      });
+    });
+    tbody.querySelectorAll('[data-hr-card]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const p = personnel.find(x => x.id === btn.dataset.hrCard);
+        if (p) printPersonnelIdCard(p);
       });
     });
     tbody.querySelectorAll('[data-edit-hr]').forEach(btn => {
@@ -15836,11 +16242,31 @@ ${vadeLine}`;
     const el = document.getElementById('hrHourlyDisp');
     if (el) el.value = h ? `${h.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ₺/sa` : '—';
   }
+  function setHrPhotoUi(dataUrl) {
+    const img = document.getElementById('hrPhotoPreview');
+    const ph = document.getElementById('hrPhotoPlaceholder');
+    const clearBtn = document.getElementById('hrPhotoClearBtn');
+    editingHrPhoto = dataUrl || null;
+    if (img && ph) {
+      if (dataUrl) {
+        img.src = dataUrl;
+        img.classList.remove('hidden');
+        ph.classList.add('hidden');
+      } else {
+        img.removeAttribute('src');
+        img.classList.add('hidden');
+        ph.classList.remove('hidden');
+      }
+    }
+    if (clearBtn) clearBtn.classList.toggle('hidden', !dataUrl);
+  }
   function openHrModal(editId) {
     editingHrId = editId || null;
     const p = editId ? personnel.find(x => x.id === editId) : null;
     document.querySelector('#newHrModalOverlay h3').textContent = p ? 'Personel Düzenle' : 'Personel Kaydı';
     document.getElementById('hrName').value = p ? p.name : '';
+    setHrPhotoUi(p ? (p.photo || null) : null);
+    if (document.getElementById('hrPhotoInput')) document.getElementById('hrPhotoInput').value = '';
     if (document.getElementById('hrCollar')) document.getElementById('hrCollar').value = p ? (p.collar || '') : '';
     if (document.getElementById('hrTc')) document.getElementById('hrTc').value = p ? (p.tcNo || '') : '';
     if (document.getElementById('hrPhone')) document.getElementById('hrPhone').value = p ? (p.whatsapp || p.phone || '') : '';
@@ -15881,6 +16307,29 @@ ${vadeLine}`;
   });
   document.getElementById('hrDetailBackBtn')?.addEventListener('click', () => { viewingHrId = null; renderHrPage(); });
   document.getElementById('hrDetailEditBtn')?.addEventListener('click', () => { if (viewingHrId) openHrModal(viewingHrId); });
+  document.getElementById('hrDetailPrintCardBtn')?.addEventListener('click', () => {
+    const p = viewingHrId ? personnel.find(x => x.id === viewingHrId) : null;
+    if (p) printPersonnelIdCard(p);
+  });
+  document.getElementById('hrDetailCardBtn')?.addEventListener('click', () => {
+    const mount = document.getElementById('hrDetailIdCardMount');
+    if (mount) mount.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+  document.getElementById('hrPhotoInput')?.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      setHrPhotoUi(dataUrl);
+      showToast('Fotoğraf eklendi.', 'success');
+    } catch (_) {
+      showToast('Fotoğraf okunamadı.', 'error');
+    }
+  });
+  document.getElementById('hrPhotoClearBtn')?.addEventListener('click', () => {
+    setHrPhotoUi(null);
+    if (document.getElementById('hrPhotoInput')) document.getElementById('hrPhotoInput').value = '';
+  });
   document.getElementById('newHrSubmitBtn')?.addEventListener('click', () => {
     const name = document.getElementById('hrName').value.trim();
     if (!name) { showToast('Ad soyad zorunlu.', 'error'); return; }
@@ -15916,6 +16365,7 @@ ${vadeLine}`;
         p.address = (document.getElementById('hrAddress')?.value || '').trim();
         p.leaveEntitle = leaveEntitle;
         p.leavePlanned = leavePlanned;
+        p.photo = editingHrPhoto || null;
         const u = users.find(x => x.personnelId === p.id || x.username === p.userId);
         if (u) syncUserProfileFromPersonnel(u, p);
         cloudSave('savePersonnel', p, companies);
@@ -15938,6 +16388,7 @@ ${vadeLine}`;
         collar,
         leaveEntitle,
         leavePlanned,
+        photo: editingHrPhoto || null,
       });
       cloudSave('savePersonnel', personnel[personnel.length - 1], companies);
       attendanceLogs.push({
