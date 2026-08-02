@@ -34,6 +34,7 @@
 
   function mapCollar(yaka) {
     if (yaka === 'blue' || yaka === 'mavi') return 'blue';
+    if (yaka === 'manager' || yaka === 'yonetici' || yaka === 'yönetici') return 'manager';
     return 'white';
   }
 
@@ -125,7 +126,9 @@
     if (!u || !p) return null;
 
     try {
-      const { data: row, error } = await sb
+      let row = null;
+      let error = null;
+      ({ data: row, error } = await sb
         .from('kullanicilar')
         .select(`
           id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
@@ -134,9 +137,26 @@
         `)
         .ilike('kullanici_adi', u)
         .eq('aktif', true)
-        .maybeSingle();
-
+        .maybeSingle());
       if (error) throw error;
+
+      // Ad soyad ile de dene (ör. "Volkan")
+      if (!row) {
+        const alt = await sb
+          .from('kullanicilar')
+          .select(`
+            id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
+            erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
+            kullanici_firmalar ( firma_id, firmalar ( ad ) )
+          `)
+          .ilike('ad_soyad', u)
+          .eq('aktif', true)
+          .limit(1)
+          .maybeSingle();
+        if (alt.error) throw alt.error;
+        row = alt.data;
+      }
+
       if (!row) return null;
       if ((row.sifre_hash || '') !== p) return null;
 

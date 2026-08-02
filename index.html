@@ -336,7 +336,7 @@
 
       <div class="flex items-center justify-between mt-4">
         <label class="flex items-center gap-2 text-white/50 text-xs cursor-pointer select-none">
-          <input type="checkbox" checked class="w-3.5 h-3.5 rounded border-white/30 bg-transparent accent-sky-400" />
+          <input id="loginRemember" type="checkbox" checked class="w-3.5 h-3.5 rounded border-white/30 bg-transparent accent-sky-400" />
           Beni hatırla
         </label>
         <a href="#" class="text-xs text-sky-300 hover:text-sky-200 font-medium">Şifremi unuttum</a>
@@ -4466,36 +4466,75 @@
     };
   }
 
+  function findFirstWorkOrderIdForOrder(order) {
+    if (!order) return '';
+    const linked = (typeof workOrders !== 'undefined' ? workOrders : [])
+      .filter(w => w.orderId === order.id || (order.quoteId && (w.quoteId === order.quoteId || w.orderId === order.quoteId)))
+      .map(w => w.id)
+      .filter(Boolean)
+      .sort((a, b) => String(a).localeCompare(String(b), 'tr'));
+    if (linked.length) return linked[0];
+    return order.id || '';
+  }
+
   /** Dymo 550 · LabelWriter Wide Address 99012 · 36 × 89 mm (landscape 89×36) */
   function buildDymoOrderLabelHtml(order, itemsWithIdx) {
     const info = companies[order.company] || {};
     let logoHref = '';
     try { logoHref = info.logo ? new URL(info.logo, window.location.href).href : ''; } catch (_) { logoHref = info.logo || ''; }
+    const woNo = findFirstWorkOrderIdForOrder(order);
     const labels = itemsWithIdx.map(({ item, idx }) => {
       const d = resolveOrderLabelData(order, item, idx);
       const qrSrc = qrDataUrl(buildTraceUrl('OL', order.company, d.refId), 2);
+      const partNo = (item.partNo || d.serial || '').trim();
+      const partName = (item.desc || d.name || '').trim();
+      const partTop = partNo && partName ? `${partNo} · ${partName}` : (partNo || partName || d.partLabel);
+      const termin = [
+        typeof fmtDate === 'function' ? fmtDate(d.orderDate) : d.orderDate,
+        typeof fmtDate === 'function' ? fmtDate(d.dueDate) : d.dueDate,
+      ].filter(Boolean).join(' — ');
       return `
         <div class="label">
-          <div class="qr-col">
-            ${qrSrc ? `<img src="${qrSrc}" alt="QR" />` : ''}
+          <div class="left">
+            ${logoHref
+              ? `<img class="logo" src="${logoHref}" alt="${escapeHtmlPrint(order.company || '')}" />`
+              : `<div class="logo logo-ph">${escapeHtmlPrint((order.company || '').slice(0, 3))}</div>`}
+            <div class="qr-wrap">
+              ${qrSrc ? `<img class="qr" src="${qrSrc}" alt="QR" />` : ''}
+            </div>
+            <div class="wo-block">
+              <span class="lbl">İş Emri</span>
+              <p class="wo-no mono">${escapeHtmlPrint(woNo || '—')}</p>
+            </div>
           </div>
-          <div class="info-col">
-            <div class="head">
-              <div class="titles">
-                <p class="co">${escapeHtmlPrint(order.company || '')}</p>
-                <p class="part">${escapeHtmlPrint(d.partLabel)}</p>
+          <div class="right">
+            <p class="part">${escapeHtmlPrint(partTop)}</p>
+            <div class="meta">
+              <div class="cell grow">
+                <span class="lbl">Termin</span>
+                <p class="val">${escapeHtmlPrint(termin || '—')}</p>
               </div>
-              ${logoHref ? `<img class="logo" src="${logoHref}" alt="" />` : ''}
+              <div class="cell qty">
+                <span class="lbl">Adet</span>
+                <p class="val">${escapeHtmlPrint(d.qty)}</p>
+              </div>
+              <div class="cell full">
+                <span class="lbl">İmalat Ölçüsü</span>
+                <p class="val">${escapeHtmlPrint(d.mfgDimsText)}</p>
+              </div>
+              <div class="cell full">
+                <span class="lbl">Malzeme</span>
+                <p class="val">${escapeHtmlPrint(d.materialCode)}</p>
+              </div>
+              <div class="cell">
+                <span class="lbl">Isıl İşlem</span>
+                <p class="val">${escapeHtmlPrint(d.heat)}</p>
+              </div>
+              <div class="cell">
+                <span class="lbl">Kaplama</span>
+                <p class="val">${escapeHtmlPrint(d.coating)}</p>
+              </div>
             </div>
-            <div class="grid">
-              <div><span>Sipariş</span>${escapeHtmlPrint(typeof fmtDate === 'function' ? fmtDate(d.orderDate) : d.orderDate)} — ${escapeHtmlPrint(typeof fmtDate === 'function' ? fmtDate(d.dueDate) : d.dueDate)}</div>
-              <div><span>Adet</span>${escapeHtmlPrint(d.qty)}</div>
-              <div class="full"><span>İmalat ölçüsü</span>${escapeHtmlPrint(d.mfgDimsText)}</div>
-              <div class="full"><span>Malzeme</span>${escapeHtmlPrint(d.materialCode)}</div>
-              <div><span>Isıl</span>${escapeHtmlPrint(d.heat)}</div>
-              <div><span>Kaplama</span>${escapeHtmlPrint(d.coating)}</div>
-            </div>
-            <p class="oid mono">${escapeHtmlPrint(order.id)} · kalem ${idx + 1}</p>
           </div>
         </div>`;
     }).join('');
@@ -4503,28 +4542,61 @@
 <style>
   @page { size: 89mm 36mm; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f1f5f9; color: #0f172a; }
+  body { margin: 0; font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; background: #e2e8f0; color: #0f172a; }
   .toolbar { padding: 10px; text-align: center; }
-  .toolbar button { background: #0f2a4a; color: #fff; border: 0; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; margin: 0 4px; }
+  .toolbar button { background: #0f2a4a; color: #fff; border: 0; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; }
   .hint { font-size: 11px; color: #64748b; margin-top: 6px; }
   .stack { display: flex; flex-direction: column; align-items: center; gap: 4mm; padding: 4mm; }
   .label {
-    width: 89mm; height: 36mm; background: #fff; border: 0.3mm solid #cbd5e1;
-    display: flex; gap: 2mm; padding: 1.6mm 2mm; page-break-after: always; overflow: hidden;
+    width: 89mm; height: 36mm; background: #fff; border: 0.25mm solid #cbd5e1;
+    display: flex; gap: 2.2mm; padding: 1.8mm 2.2mm 1.6mm 1.8mm;
+    page-break-after: always; overflow: hidden;
   }
-  .qr-col { width: 28mm; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .qr-col img { width: 26mm; height: 26mm; image-rendering: pixelated; }
-  .info-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5mm; }
-  .titles { min-width: 0; }
-  .co { margin: 0; font-size: 6pt; font-weight: 800; color: #0f2a4a; text-transform: uppercase; letter-spacing: .3pt; }
-  .part { margin: .4mm 0 0; font-size: 7.5pt; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 48mm; }
-  .logo { height: 7mm; max-width: 18mm; object-fit: contain; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .35mm 1.5mm; margin-top: .8mm; flex: 1; }
-  .grid div { font-size: 5.8pt; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .grid div.full { grid-column: 1 / -1; }
-  .grid span { display: block; font-size: 5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: .2pt; }
-  .oid { margin: auto 0 0; font-size: 5pt; color: #94a3b8; font-family: ui-monospace, Consolas, monospace; }
+  .left {
+    width: 24mm; flex-shrink: 0; display: flex; flex-direction: column; align-items: center;
+    gap: 0.7mm;
+  }
+  .logo {
+    height: 5.2mm; max-width: 22mm; width: auto; object-fit: contain;
+    display: block;
+  }
+  .logo-ph {
+    height: 5.2mm; min-width: 14mm; padding: 0 1.5mm; border-radius: 0.6mm;
+    background: #0f2a4a; color: #fff; font-size: 5.5pt; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; letter-spacing: .3pt;
+  }
+  .qr-wrap {
+    width: 20mm; height: 20mm; display: flex; align-items: center; justify-content: center;
+    border: 0.2mm solid #e2e8f0; border-radius: 0.6mm; background: #fff; padding: 0.4mm;
+  }
+  .qr { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .wo-block { width: 100%; text-align: center; margin-top: 0.2mm; }
+  .lbl {
+    display: block; font-size: 4.6pt; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: .28pt; line-height: 1.1; margin: 0;
+  }
+  .wo-no {
+    margin: 0.25mm 0 0; font-size: 5.6pt; font-weight: 700; color: #0f2a4a;
+    line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .mono { font-family: ui-monospace, Consolas, "Courier New", monospace; }
+  .right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.7mm; }
+  .part {
+    margin: 0; font-size: 8pt; font-weight: 800; color: #0f172a; line-height: 1.12;
+    letter-spacing: .1pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    padding-bottom: 0.5mm; border-bottom: 0.35mm solid #0f2a4a;
+  }
+  .meta {
+    display: grid; grid-template-columns: 1fr auto; gap: 0.55mm 2mm; align-content: start; flex: 1;
+  }
+  .cell { min-width: 0; }
+  .cell.grow { min-width: 0; }
+  .cell.qty { text-align: right; padding-left: 1mm; }
+  .cell.full { grid-column: 1 / -1; }
+  .val {
+    margin: 0.15mm 0 0; font-size: 5.8pt; font-weight: 650; color: #0f172a;
+    line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   @media print {
     body { background: #fff; }
     .toolbar { display: none; }
@@ -4534,7 +4606,7 @@
 </style></head><body>
   <div class="toolbar">
     <button onclick="window.print()">Yazdır · Dymo 99012 (89×36 mm)</button>
-    <p class="hint">Dymo LabelWriter 550 · Geniş Adres Etiketi 99012 · yazıcıda etiket boyutu 89 mm × 36 mm seçin</p>
+    <p class="hint">Sol: logo + QR + iş emri · Sağ: parça / termin / ölçü / malzeme · Etiket 89×36 mm</p>
   </div>
   <div class="stack">${labels}</div>
 </body></html>`;
@@ -6287,12 +6359,186 @@ ${vadeLine}`;
 
   // ---------- Login / Authentication (Firma izolasyonu + grup yöneticisi) ----------
   var currentUser = null;
+  const AUTH_SESSION_KEY = 'btd_auth_session_v1';
+  const AUTH_IDLE_MS = 2 * 60 * 60 * 1000; // 2 saat hareketsizlik
   const loginScreen = document.getElementById('loginScreen');
   const appShell = document.getElementById('app');
   const loginForm = document.getElementById('loginForm');
   const loginError = document.getElementById('loginError');
   const loginSubmitBtn = document.getElementById('loginSubmitBtn');
   const loginBtnLabel = document.getElementById('loginBtnLabel');
+  let authActivityTimer = null;
+
+  function readAuthSessionRaw() {
+    try { return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); } catch (_) { return null; }
+  }
+  function writeAuthSessionRaw(payload) {
+    try {
+      if (!payload) localStorage.removeItem(AUTH_SESSION_KEY);
+      else localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(payload));
+    } catch (_) { /* ignore quota */ }
+  }
+  function clearAuthSession() {
+    writeAuthSessionRaw(null);
+  }
+  function saveAuthSession(user, company) {
+    if (!user) return;
+    const remember = document.getElementById('loginRemember')?.checked !== false;
+    if (!remember) {
+      clearAuthSession();
+      return;
+    }
+    writeAuthSessionRaw({
+      username: (user.username || '').toLowerCase(),
+      name: user.name || '',
+      role: user.role || '',
+      scope: user.scope || '',
+      companies: user.companies || [],
+      company: company || activeCompany || 'Bluemac',
+      isGod: !!user.isGod,
+      collar: user.collar || 'white',
+      accessCritical: !!user.accessCritical,
+      personnelId: user.personnelId || null,
+      dept: user.dept || '',
+      loginPortal: user.loginPortal || '',
+      perms: user.perms || null,
+      lastActiveAt: Date.now(),
+      savedAt: Date.now(),
+    });
+  }
+  function touchAuthSession() {
+    const raw = readAuthSessionRaw();
+    if (!raw || !currentUser) return;
+    raw.lastActiveAt = Date.now();
+    writeAuthSessionRaw(raw);
+  }
+  function authSessionIdleExpired(raw) {
+    if (!raw) return true;
+    const last = Number(raw.lastActiveAt || raw.savedAt || 0);
+    return !last || (Date.now() - last) > AUTH_IDLE_MS;
+  }
+  function startAuthIdleWatch() {
+    if (authActivityTimer) return;
+    const bump = () => {
+      if (!currentUser) return;
+      if (authActivityTimer) return;
+      authActivityTimer = setTimeout(() => {
+        authActivityTimer = null;
+        touchAuthSession();
+      }, 15000);
+    };
+    ['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach((ev) => {
+      document.addEventListener(ev, bump, { passive: true, capture: true });
+    });
+    setInterval(() => {
+      if (!currentUser) return;
+      const raw = readAuthSessionRaw();
+      if (raw && authSessionIdleExpired(raw)) {
+        showToast('2 saat hareketsizlik — yeniden giriş gerekli.', 'info');
+        performLogout({ idle: true });
+      }
+    }, 60000);
+  }
+
+  function enterAppAsUser(auth, company, { restore } = {}) {
+    currentUser = auth;
+    let targetCompany = company;
+    if (auth.isGod || auth.scope === 'Tüm Grup') {
+      targetCompany = (company && company !== 'BTD Yönetim') ? company : (restore ? (company || 'Bluemac') : 'Bluemac');
+      if (targetCompany === 'BTD Yönetim') targetCompany = 'Bluemac';
+    } else {
+      targetCompany = auth.company || auth.scope || company || 'Bluemac';
+    }
+    if (typeof setActiveCompany === 'function') setActiveCompany(targetCompany);
+    applyCurrentUser();
+    loginScreen.classList.add('hidden');
+    appShell.classList.remove('hidden');
+    if (typeof showPage === 'function') showPage('dashboard');
+    saveAuthSession(currentUser, targetCompany);
+    startAuthIdleWatch();
+    return targetCompany;
+  }
+
+  function performLogout({ idle } = {}) {
+    clearAuthSession();
+    appShell.classList.add('hidden');
+    loginScreen.classList.remove('hidden');
+    if (!idle) loginForm.reset();
+    profileMenu.classList.add('hidden');
+    currentUser = null;
+    document.body.classList.remove('collar-blue');
+    if (typeof updateFieldFabs === 'function') updateFieldFabs('');
+    const remember = document.getElementById('loginRemember');
+    if (remember) remember.checked = true;
+  }
+
+  function findLocalUserForLogin(username, password) {
+    const u = (username || '').trim().toLowerCase();
+    const p = (password || '').trim();
+    const list = (typeof users !== 'undefined') ? users : [];
+    return list.find((row) => {
+      const uname = (row.username || '').trim().toLowerCase();
+      const name = (row.name || '').trim().toLowerCase();
+      return (uname === u || name === u) && String(row.password || '') === p;
+    }) || null;
+  }
+
+  function applyDemoLoginOverrides(user) {
+    if (!user) return user;
+    const uname = (user.username || '').trim().toLowerCase();
+    if (uname === 'volkan') {
+      user.isGod = true;
+      user.role = 'Yönetici';
+      user.scope = 'Tüm Grup';
+      user.accessCritical = true;
+      if (!Array.isArray(user.companies) || user.companies.length < 3) {
+        user.companies = ['Technomac', 'Bluemac', 'Devorias'];
+      }
+      if (!user.name) user.name = 'Volkan';
+    }
+    return user;
+  }
+
+  function tryRestoreAuthSession() {
+    const raw = readAuthSessionRaw();
+    if (!raw || !raw.username) return false;
+    if (authSessionIdleExpired(raw)) {
+      clearAuthSession();
+      return false;
+    }
+    const list = (typeof users !== 'undefined') ? users : [];
+    let found = list.find(u => (u.username || '').toLowerCase() === String(raw.username).toLowerCase());
+    if (!found) {
+      found = {
+        username: raw.username,
+        name: raw.name || raw.username,
+        role: raw.role || 'Operatör',
+        scope: raw.scope || '',
+        companies: raw.companies || [],
+        isGod: !!raw.isGod,
+        collar: raw.collar || 'white',
+        accessCritical: !!raw.accessCritical,
+        personnelId: raw.personnelId || null,
+        dept: raw.dept || '',
+        perms: raw.perms || (typeof defaultPerms === 'function' ? defaultPerms() : {}),
+      };
+    }
+    applyDemoLoginOverrides(found);
+    if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
+      found.perms = found.perms || ((found.role === 'Yönetici' || found.isGod) ? adminPerms() : defaultPerms());
+    }
+    const company = raw.company || 'Bluemac';
+    const session = sessionFromFoundUser(found, company === 'BTD Yönetim' ? 'BTD Yönetim' : company)
+      || authSessionFromUser(found, company, company);
+    if (!session) {
+      clearAuthSession();
+      return false;
+    }
+    enterAppAsUser(session, company, { restore: true });
+    touchAuthSession();
+    showToast(`Hoş geldiniz, ${session.name}`, 'success');
+    return true;
+  }
 
   document.getElementById('loginTogglePw').addEventListener('click', () => {
     const input = document.getElementById('loginPassword');
@@ -6713,37 +6959,39 @@ ${vadeLine}`;
   }
 
   function authenticateLogin(username, password, company) {
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    const list = (typeof users !== 'undefined') ? users : [];
-    const found = list.find(row => {
-      const uname = (row.username || '').trim().toLowerCase();
-      return uname === u && row.password === p;
-    });
+    const found = findLocalUserForLogin(username, password);
+    if (!found) return null;
+    applyDemoLoginOverrides(found);
     return sessionFromFoundUser(found, company);
   }
 
   async function authenticateLoginAsync(username, password, company) {
     // 1) Supabase (canlı)
     if (window.BtdSupabase?.fetchUserForLogin) {
-      const remote = await window.BtdSupabase.fetchUserForLogin(username, password);
-      if (remote) {
-        if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
-          remote.perms = (remote.role === 'Yönetici' || remote.isGod) ? adminPerms() : defaultPerms();
+      try {
+        const remote = await window.BtdSupabase.fetchUserForLogin(username, password);
+        if (remote) {
+          applyDemoLoginOverrides(remote);
+          if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
+            remote.perms = (remote.role === 'Yönetici' || remote.isGod) ? adminPerms() : defaultPerms();
+          }
+          const session = sessionFromFoundUser(remote, company);
+          if (session) {
+            session.authSource = 'supabase';
+            return session;
+          }
         }
-        const session = sessionFromFoundUser(remote, company);
-        if (session) {
-          session.authSource = 'supabase';
-          return session;
-        }
-        // Şifre doğru ama firma yetkisi yok — yerelye düşme (yanlış güvenlik hissi vermesin)
-        return null;
+      } catch (err) {
+        console.warn('[BTD] Uzak giriş denemesi başarısız, yerel denenecek:', err);
       }
     }
-    // 2) Yerel demo kullanıcılar
+    // 2) Yerel demo kullanıcılar (Volkan / Ahmet her zaman yedek)
     const local = authenticateLogin(username, password, company);
-    if (local) local.authSource = 'local';
-    return local;
+    if (local) {
+      local.authSource = 'local';
+      return local;
+    }
+    return null;
   }
 
   loginForm.addEventListener('submit', async (e) => {
@@ -6769,26 +7017,15 @@ ${vadeLine}`;
       const auth = await authenticateLoginAsync(username, password, company);
       if (!auth) {
         loginError.textContent = company === 'BTD Yönetim'
-          ? 'BTD Yönetim portalına yalnızca grup yöneticisi girebilir.'
-          : 'Kullanıcı adı / şifre hatalı veya seçilen firmaya yetkiniz yok.';
+          ? 'BTD Yönetim için: kullanıcı volkan · şifre 123456 (grup yöneticisi).'
+          : 'Kullanıcı adı / şifre hatalı veya seçilen firmaya yetkiniz yok. Demo: volkan / 123456';
         loginError.classList.remove('hidden');
         loginForm.classList.remove('login-shake');
         requestAnimationFrame(() => loginForm.classList.add('login-shake'));
         return;
       }
 
-      currentUser = auth;
-      let targetCompany;
-      if (auth.isGod || auth.scope === 'Tüm Grup') {
-        targetCompany = (company && company !== 'BTD Yönetim') ? company : 'Bluemac';
-      } else {
-        targetCompany = auth.company || auth.scope || 'Bluemac';
-      }
-      setActiveCompany(targetCompany);
-      applyCurrentUser();
-      loginScreen.classList.add('hidden');
-      appShell.classList.remove('hidden');
-      showPage('dashboard');
+      const targetCompany = enterAppAsUser(auth, company);
       const srcHint = auth.authSource === 'supabase' ? ' · bulut' : '';
       showToast(auth.isGod ? `Hoş geldiniz, ${auth.name} · tüm firmalar${srcHint}` : `Hoş geldiniz, ${auth.name} · ${targetCompany}${srcHint}`, 'success');
     } catch (err) {
@@ -6803,13 +7040,7 @@ ${vadeLine}`;
 
 
   document.getElementById('logoutBtn').addEventListener('click', () => {
-    appShell.classList.add('hidden');
-    loginScreen.classList.remove('hidden');
-    loginForm.reset();
-    profileMenu.classList.add('hidden');
-    currentUser = null;
-    document.body.classList.remove('collar-blue');
-    if (typeof updateFieldFabs === 'function') updateFieldFabs('');
+    performLogout();
   });
 
   // ---------- KPI count-up animation ----------
@@ -16803,6 +17034,13 @@ ${vadeLine}`;
 
   setActiveCompany('Bluemac');
 
+  // Sayfa yenilemede oturumu geri yükle (çıkış yapılmadıysa)
+  try {
+    if (typeof tryRestoreAuthSession === 'function') tryRestoreAuthSession();
+  } catch (e) {
+    console.warn('[BTD] Oturum geri yükleme atlandı', e);
+  }
+
   (async function btdCloudBoot() {
     try {
       if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
@@ -16850,8 +17088,21 @@ ${vadeLine}`;
       });
       console.info('[BTD] Cloud boot', bootRes);
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
+      // Hydrate sonrası kullanıcı bayraklarını düzelterek oturumu taze tut
+      if (currentUser && typeof applyDemoLoginOverrides === 'function') {
+        const live = (users || []).find(u => (u.username || '').toLowerCase() === (currentUser.username || '').toLowerCase());
+        if (live) applyDemoLoginOverrides(live);
+        applyDemoLoginOverrides(currentUser);
+        if (typeof applyCurrentUser === 'function') applyCurrentUser();
+        if (typeof touchAuthSession === 'function') touchAuthSession();
+      } else if (!currentUser && typeof tryRestoreAuthSession === 'function') {
+        tryRestoreAuthSession();
+      }
     } catch (err) {
       console.warn('[BTD] Cloud boot failed — yerel veri ile devam', err);
+      if (!currentUser && typeof tryRestoreAuthSession === 'function') {
+        try { tryRestoreAuthSession(); } catch (_) { /* ignore */ }
+      }
     }
   })();
 </script>
