@@ -1,0 +1,33 @@
+# Bağımlılıklar / ortam
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+
+# Editör / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+.cursor/
+
+# Geçici yama / lokal script çıktıları
+_patch_*.py
+*.log
+.cache/
+scripts/
+
+# Ağır demo asset’leri (uygulamada kullanılmıyor)
+assets/shape-frames/
+assets/shape-demo.mp4
+
+# Dağıtım çıktısı
+dist/
+public_deploy/
+.vercel/
+.netlify/
+.wrangler/
