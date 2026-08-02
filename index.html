@@ -6228,8 +6228,8 @@ ${vadeLine}`;
   let allLogoBoxBgClasses = [...new Set(Object.values(companies).map(c => c.logoBoxBg))];
 
   function refreshCompanyChromeClasses() {
-    allBadgeBgClasses = Object.values(companies).map(c => c.badgeBg);
-    allLogoBoxBgClasses = [...new Set(Object.values(companies).map(c => c.logoBoxBg))];
+    allBadgeBgClasses = Object.values(companies).map(c => c.badgeBg).filter(Boolean);
+    allLogoBoxBgClasses = [...new Set(Object.values(companies).map(c => c.logoBoxBg).filter(Boolean))];
   }
 
   /** Supabase'e fire-and-forget yazma (UI'yı bloklamaz) */
@@ -6253,55 +6253,73 @@ ${vadeLine}`;
     if (!info) return;
     activeCompany = name;
 
-    document.getElementById('companyName').textContent = name;
-    document.getElementById('companyNameMobile').textContent = name;
-    document.getElementById('companyNameContent').textContent = name;
-    document.getElementById('companyNameMachinepark').textContent = name;
-    document.getElementById('companyNameCustomers').textContent = name;
-    const supNameEl = document.getElementById('companyNameSuppliers'); if (supNameEl) supNameEl.textContent = name;
-    document.getElementById('companyNameQuotes').textContent = name;
-    const costNameEl = document.getElementById('companyNameCosting'); if (costNameEl) costNameEl.textContent = name;
-    const hrNameEl = document.getElementById('companyNameHr'); if (hrNameEl) hrNameEl.textContent = name;
-    const stockNameEl = document.getElementById('companyNameStock'); if (stockNameEl) stockNameEl.textContent = name;
-    document.getElementById('companyNameUsers').textContent = name;
+    const setTxt = (id, text) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+    setTxt('companyName', name);
+    setTxt('companyNameMobile', name);
+    setTxt('companyNameContent', name);
+    setTxt('companyNameMachinepark', name);
+    setTxt('companyNameCustomers', name);
+    setTxt('companyNameSuppliers', name);
+    setTxt('companyNameQuotes', name);
+    setTxt('companyNameCosting', name);
+    setTxt('companyNameHr', name);
+    setTxt('companyNameStock', name);
+    setTxt('companyNameUsers', name);
     ['Dashboard', 'Orders', 'Procurement', 'Manufacturing', 'Quality', 'Shipping', 'Invoicing', 'Aiqc'].forEach(suffix => {
-      const el = document.getElementById(`companyName${suffix}`);
-      if (el) el.textContent = name;
+      setTxt(`companyName${suffix}`, name);
     });
 
     document.querySelectorAll('.company-option .check-icon').forEach(icon => icon.classList.add('hidden'));
     const activeBtn = document.querySelector(`.company-option[data-company="${name}"]`);
-    if (activeBtn) activeBtn.querySelector('.check-icon').classList.remove('hidden');
+    const check = activeBtn && activeBtn.querySelector('.check-icon');
+    if (check) check.classList.remove('hidden');
 
     const badgeBg = document.getElementById('companyBadgeBg');
-    badgeBg.classList.remove(...allBadgeBgClasses);
-    badgeBg.classList.add(info.badgeBg);
+    if (badgeBg) {
+      const removeBg = (allBadgeBgClasses || []).filter(Boolean);
+      if (removeBg.length) badgeBg.classList.remove(...removeBg);
+      if (info.badgeBg) badgeBg.classList.add(info.badgeBg);
+    }
 
     const badgeLogo = document.getElementById('companyBadgeLogo');
-    badgeLogo.classList.remove(...allLogoBoxBgClasses);
-    badgeLogo.classList.add(info.logoBoxBg);
+    if (badgeLogo) {
+      const removeLogo = (allLogoBoxBgClasses || []).filter(Boolean);
+      if (removeLogo.length) badgeLogo.classList.remove(...removeLogo);
+      if (info.logoBoxBg) badgeLogo.classList.add(info.logoBoxBg);
+    }
 
-    document.getElementById('companyBadgeImg').src = info.logo;
-    document.getElementById('companyBadgeImg').alt = name;
-    document.getElementById('companyBadgeName').textContent = name;
-    document.getElementById('companyBadgeLegal').textContent = info.legal;
+    const badgeImg = document.getElementById('companyBadgeImg');
+    if (badgeImg) {
+      if (info.logo) badgeImg.src = info.logo;
+      badgeImg.alt = name;
+    }
+    setTxt('companyBadgeName', name);
+    setTxt('companyBadgeLegal', info.legal || name);
 
-    if (typeof renderWorkOrderTable === 'function') renderWorkOrderTable();
-    if (typeof renderMachinePark === 'function') renderMachinePark();
-    if (typeof renderCustomersPage === 'function') renderCustomersPage();
-    if (typeof renderSuppliersPage === 'function') renderSuppliersPage();
-    if (typeof renderCostingPage === 'function') renderCostingPage();
-    if (typeof renderQuotesPage === 'function') renderQuotesPage();
-    if (typeof renderOrdersPage === 'function') renderOrdersPage();
-    if (typeof renderProcurementPage === 'function') renderProcurementPage();
-    if (typeof renderHrPage === 'function') renderHrPage();
-    if (typeof renderStockPage === 'function') renderStockPage();
-    if (typeof renderManufacturingPage === 'function') renderManufacturingPage();
-    if (typeof renderQualityPage === 'function') renderQualityPage();
-    if (typeof renderShippingPage === 'function') renderShippingPage();
-    if (typeof renderInvoicingPage === 'function') renderInvoicingPage();
-    if (typeof renderSettingsPage === 'function' && document.getElementById('page-settings') && !document.getElementById('page-settings').classList.contains('hidden')) renderSettingsPage();
-    if (typeof renderDashboard === 'function') renderDashboard();
+    const safeRender = (fn) => {
+      try { if (typeof fn === 'function') fn(); } catch (e) { console.warn('[BTD] render', e); }
+    };
+    safeRender(renderWorkOrderTable);
+    safeRender(renderMachinePark);
+    safeRender(renderCustomersPage);
+    safeRender(renderSuppliersPage);
+    safeRender(renderCostingPage);
+    safeRender(renderQuotesPage);
+    safeRender(renderOrdersPage);
+    safeRender(renderProcurementPage);
+    safeRender(renderHrPage);
+    safeRender(renderStockPage);
+    safeRender(renderManufacturingPage);
+    safeRender(renderQualityPage);
+    safeRender(renderShippingPage);
+    safeRender(renderInvoicingPage);
+    if (document.getElementById('page-settings') && !document.getElementById('page-settings').classList.contains('hidden')) {
+      safeRender(renderSettingsPage);
+    }
+    safeRender(renderDashboard);
   }
 
   const companyBtn = document.getElementById('companyBtn');
@@ -6449,13 +6467,23 @@ ${vadeLine}`;
     } else {
       targetCompany = auth.company || auth.scope || company || 'Bluemac';
     }
-    if (typeof setActiveCompany === 'function') setActiveCompany(targetCompany);
-    applyCurrentUser();
-    loginScreen.classList.add('hidden');
-    appShell.classList.remove('hidden');
-    if (typeof showPage === 'function') showPage('dashboard');
-    saveAuthSession(currentUser, targetCompany);
-    startAuthIdleWatch();
+    if (!companies[targetCompany]) targetCompany = Object.keys(companies)[0] || 'Bluemac';
+    try {
+      if (typeof setActiveCompany === 'function') setActiveCompany(targetCompany);
+    } catch (e) {
+      console.warn('[BTD] setActiveCompany', e);
+      activeCompany = targetCompany;
+    }
+    try { applyCurrentUser(); } catch (e) { console.warn('[BTD] applyCurrentUser', e); }
+    if (loginScreen) loginScreen.classList.add('hidden');
+    if (appShell) appShell.classList.remove('hidden');
+    try {
+      if (typeof showPage === 'function') showPage('dashboard');
+    } catch (e) {
+      console.warn('[BTD] showPage', e);
+    }
+    try { saveAuthSession(currentUser, targetCompany); } catch (e) { console.warn('[BTD] saveAuthSession', e); }
+    try { startAuthIdleWatch(); } catch (e) { console.warn('[BTD] idle watch', e); }
     return targetCompany;
   }
 
@@ -6486,17 +6514,42 @@ ${vadeLine}`;
   function applyDemoLoginOverrides(user) {
     if (!user) return user;
     const uname = (user.username || '').trim().toLowerCase();
-    if (uname === 'volkan') {
+    const name = (user.name || '').trim().toLowerCase();
+    if (uname === 'volkan' || uname === 'admin' || name === 'volkan') {
+      user.username = user.username || 'volkan';
+      user.name = user.name || 'Volkan';
       user.isGod = true;
       user.role = 'Yönetici';
       user.scope = 'Tüm Grup';
       user.accessCritical = true;
-      if (!Array.isArray(user.companies) || user.companies.length < 3) {
-        user.companies = ['Technomac', 'Bluemac', 'Devorias'];
-      }
-      if (!user.name) user.name = 'Volkan';
+      user.collar = user.collar || 'white';
+      user.companies = ['Technomac', 'Bluemac', 'Devorias'];
+      if (typeof adminPerms === 'function') user.perms = user.perms || adminPerms();
     }
     return user;
+  }
+
+  function buildEmergencyAdminUser() {
+    return {
+      username: 'volkan',
+      name: 'Volkan',
+      password: '123456',
+      dept: 'Yönetim',
+      scope: 'Tüm Grup',
+      companies: ['Technomac', 'Bluemac', 'Devorias'],
+      role: 'Yönetici',
+      perms: (typeof adminPerms === 'function') ? adminPerms() : {},
+      isGod: true,
+      collar: 'white',
+      accessCritical: true,
+      tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
+    };
+  }
+
+  function isDemoAdminCredentials(username, password) {
+    const u = (username || '').trim().toLowerCase();
+    const p = (password || '').trim();
+    return (u === 'volkan' || u === 'admin' || u === 'btd') && p === '123456';
   }
 
   function tryRestoreAuthSession() {
@@ -6675,38 +6728,48 @@ ${vadeLine}`;
   }
   function applyCurrentUser() {
     if (!currentUser) return;
-    document.getElementById('profileName').textContent = currentUser.name;
-    document.getElementById('profileMenuName').textContent = currentUser.name;
+    const setTxt = (id, text) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = text;
+    };
+    setTxt('profileName', currentUser.name || '');
+    setTxt('profileMenuName', currentUser.name || '');
     const collar = resolveUserCollar(currentUser);
     currentUser.collar = collar;
     const roleLabel = (currentUser.isGod ? 'Grup Yöneticisi' : null)
       || (collar === 'manager' ? `${roleLabels[currentUser.role] || currentUser.role} · Yönetici` : null)
       || (collar === 'blue' ? `${roleLabels[currentUser.role] || currentUser.role} · Mavi Yaka` : null)
       || roleLabels[currentUser.role] || currentUser.role;
-    document.getElementById('profileRole').textContent = roleLabel;
-    document.getElementById('profileMenuRole').textContent = roleLabel;
-    document.getElementById('profileAvatar').textContent = currentUser.name.trim().charAt(0).toUpperCase() || 'K';
+    setTxt('profileRole', roleLabel);
+    setTxt('profileMenuRole', roleLabel);
+    setTxt('profileAvatar', (currentUser.name || 'K').trim().charAt(0).toUpperCase() || 'K');
 
     const isAdmin = currentUser.role === 'Yönetici' || currentUser.isGod;
     const usersTabBtn = document.getElementById('settingsUsersTabBtn');
     const usersBadge = document.getElementById('settingsUsersBadge');
     if (usersTabBtn) usersTabBtn.classList.toggle('hidden', !isAdmin);
     if (usersBadge) usersBadge.classList.toggle('hidden', !isAdmin);
-    if (!isAdmin && typeof switchSettingsTab === 'function') switchSettingsTab('company');
+    if (!isAdmin && typeof switchSettingsTab === 'function') {
+      try { switchSettingsTab('company'); } catch (_) { /* ignore */ }
+    }
 
-    navLinks.forEach(link => {
-      const page = link.dataset.page;
-      link.classList.toggle('hidden', !userCanAccessPage(currentUser, page));
-    });
-    applyCompanyAccessUI();
-    applyPriceVisibility();
+    if (typeof navLinks !== 'undefined' && navLinks) {
+      navLinks.forEach(link => {
+        const page = link.dataset.page;
+        link.classList.toggle('hidden', !userCanAccessPage(currentUser, page));
+      });
+    }
+    try { applyCompanyAccessUI(); } catch (_) { /* ignore */ }
+    try { applyPriceVisibility(); } catch (_) { /* ignore */ }
     const activeLink = document.querySelector('.sidebar-item.active');
     const currentPage = activeLink ? activeLink.dataset.page : null;
     if (!currentPage || !userCanAccessPage(currentUser, currentPage)) {
-      const fallback = NAV_BLUE_ALLOWED.find(p => userCanAccessPage(currentUser, p)) || 'dashboard';
-      showPage(fallback);
+      const fallback = (NAV_BLUE_ALLOWED || []).find(p => userCanAccessPage(currentUser, p)) || 'dashboard';
+      if (typeof showPage === 'function') showPage(fallback);
     }
-    if (typeof tryConsumeQrDeepLink === 'function') tryConsumeQrDeepLink();
+    if (typeof tryConsumeQrDeepLink === 'function') {
+      try { tryConsumeQrDeepLink(); } catch (_) { /* ignore */ }
+    }
   }
 
   // ---------- QR tarama / derin bağlantı ----------
@@ -6959,14 +7022,24 @@ ${vadeLine}`;
   }
 
   function authenticateLogin(username, password, company) {
-    const found = findLocalUserForLogin(username, password);
+    let found = findLocalUserForLogin(username, password);
+    if (!found && isDemoAdminCredentials(username, password)) {
+      found = buildEmergencyAdminUser();
+    }
     if (!found) return null;
     applyDemoLoginOverrides(found);
-    return sessionFromFoundUser(found, company);
+    return sessionFromFoundUser(found, company)
+      || authSessionFromUser(found, company === 'BTD Yönetim' ? 'Bluemac' : (company || 'Bluemac'), company);
   }
 
   async function authenticateLoginAsync(username, password, company) {
-    // 1) Supabase (canlı)
+    // Demo yönetici: önce yerel / acil kapı (bulut hatası giriş engellemesin)
+    const localFirst = authenticateLogin(username, password, company);
+    if (localFirst) {
+      localFirst.authSource = 'local';
+      return localFirst;
+    }
+
     if (window.BtdSupabase?.fetchUserForLogin) {
       try {
         const remote = await window.BtdSupabase.fetchUserForLogin(username, password);
@@ -6975,21 +7048,26 @@ ${vadeLine}`;
           if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
             remote.perms = (remote.role === 'Yönetici' || remote.isGod) ? adminPerms() : defaultPerms();
           }
-          const session = sessionFromFoundUser(remote, company);
+          const session = sessionFromFoundUser(remote, company)
+            || authSessionFromUser(remote, company === 'BTD Yönetim' ? 'Bluemac' : company, company);
           if (session) {
             session.authSource = 'supabase';
             return session;
           }
         }
       } catch (err) {
-        console.warn('[BTD] Uzak giriş denemesi başarısız, yerel denenecek:', err);
+        console.warn('[BTD] Uzak giriş denemesi başarısız:', err);
       }
     }
-    // 2) Yerel demo kullanıcılar (Volkan / Ahmet her zaman yedek)
-    const local = authenticateLogin(username, password, company);
-    if (local) {
-      local.authSource = 'local';
-      return local;
+
+    // Son çare: sabit yönetici kimlik bilgileri
+    if (isDemoAdminCredentials(username, password)) {
+      const found = buildEmergencyAdminUser();
+      const session = authSessionFromUser(found, 'Bluemac', company || 'BTD Yönetim');
+      if (session) {
+        session.authSource = 'emergency';
+        return session;
+      }
     }
     return null;
   }
@@ -7016,9 +7094,7 @@ ${vadeLine}`;
     try {
       const auth = await authenticateLoginAsync(username, password, company);
       if (!auth) {
-        loginError.textContent = company === 'BTD Yönetim'
-          ? 'BTD Yönetim için: kullanıcı volkan · şifre 123456 (grup yöneticisi).'
-          : 'Kullanıcı adı / şifre hatalı veya seçilen firmaya yetkiniz yok. Demo: volkan / 123456';
+        loginError.textContent = 'Hatalı giriş. Deneyin: kullanıcı volkan · şifre 123456 · firma BTD Yönetim';
         loginError.classList.remove('hidden');
         loginForm.classList.remove('login-shake');
         requestAnimationFrame(() => loginForm.classList.add('login-shake'));
@@ -7027,10 +7103,25 @@ ${vadeLine}`;
 
       const targetCompany = enterAppAsUser(auth, company);
       const srcHint = auth.authSource === 'supabase' ? ' · bulut' : '';
-      showToast(auth.isGod ? `Hoş geldiniz, ${auth.name} · tüm firmalar${srcHint}` : `Hoş geldiniz, ${auth.name} · ${targetCompany}${srcHint}`, 'success');
+      if (typeof showToast === 'function') {
+        showToast(auth.isGod ? `Hoş geldiniz, ${auth.name} · grup yöneticisi${srcHint}` : `Hoş geldiniz, ${auth.name} · ${targetCompany}${srcHint}`, 'success');
+      }
     } catch (err) {
       console.error('Login error:', err);
-      showToast('Giriş sırasında bir hata oluştu.', 'error');
+      loginError.textContent = `Giriş hatası: ${err && err.message ? err.message : 'bilinmeyen'}. Tekrar deneyin: volkan / 123456`;
+      loginError.classList.remove('hidden');
+      // Acil kaçış: sabit kimlik yine de içeri alsın
+      if (isDemoAdminCredentials(username, password)) {
+        try {
+          const found = buildEmergencyAdminUser();
+          const session = authSessionFromUser(found, 'Bluemac', 'BTD Yönetim');
+          enterAppAsUser(session, company);
+          if (typeof showToast === 'function') showToast('Acil giriş ile içeri alındınız.', 'success');
+          loginError.classList.add('hidden');
+        } catch (e2) {
+          console.error('Emergency login failed', e2);
+        }
+      }
     } finally {
       loginSubmitBtn.disabled = false;
       loginSubmitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
