@@ -15326,21 +15326,24 @@ ${vadeLine}`;
     const fmtD = (d) => (typeof fmtDate === 'function' ? fmtDate(d) : d) || '—';
 
     const rowsHtml = (g.items || []).map((it, i) => {
-      const mat = [it.material, it.alloy].filter(Boolean).join(' · ');
-      const dims = formatRfqDims(it.ordDims);
-      const kg = it.totalKg ? `${Number(it.totalKg).toFixed(3)} kg` : (it.unitKg ? `${Number(it.unitKg).toFixed(3)} kg/adet` : '—');
+      const matCode = [it.material, it.alloy].filter(Boolean).join(' · ') || '—';
+      const mfgDims = it.mfgDims
+        ? (typeof formatLabelDims === 'function' ? formatLabelDims(it.mfgDims) : formatRfqDims(it.mfgDims))
+        : '—';
+      const ordDims = formatRfqDims(it.ordDims);
       return `<tr>
         <td class="c">${i + 1}</td>
         <td>
           <div class="item-title">${esc(it.part || '—')}</div>
-          <div class="item-note">${esc(mat)}${it.shapeName ? ' · ' + esc(it.shapeName) : ''}</div>
-          <div class="item-note">Ölçü: ${esc(dims)}</div>
+          ${it.shapeName ? `<div class="item-note">${esc(it.shapeName)}</div>` : ''}
         </td>
         <td class="c">${it.qty || 1}</td>
         <td class="c">ADET</td>
-        <td class="r mono">${esc(kg)}</td>
-        <td class="r blank">………</td>
-        <td class="r blank">………</td>
+        <td class="mat">${esc(matCode)}</td>
+        <td class="dims mono">${esc(mfgDims || '—')}</td>
+        <td class="dims mono">${esc(ordDims || '—')}</td>
+        <td class="r blank fill">………</td>
+        <td class="r blank fill">………</td>
       </tr>`;
     }).join('');
 
@@ -15380,6 +15383,9 @@ ${vadeLine}`;
   table.items td.c { text-align: center; }
   table.items td.r { text-align: right; }
   table.items td.blank { color: #94a3b8; letter-spacing: 1pt; }
+  table.items td.mat { font-size: 8pt; font-weight: 600; color: #0f172a; }
+  table.items td.dims { font-size: 7.5pt; color: #334155; white-space: nowrap; }
+  table.items td.fill { min-width: 52px; background: #fffbeb; }
   .item-title { font-weight: 700; color: #0f2a4a; }
   .item-note { font-size: 8pt; color: #64748b; margin-top: 1.5pt; }
   .cond-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8pt; margin-bottom: 10pt; }
@@ -15436,19 +15442,21 @@ ${vadeLine}`;
     </div>
   </div>
 
-  <p class="hint">Aşağıdaki malzemeler için birim fiyat ve toplam teklifinizi tablodaki boş sütunlara yazınız. Fiyatlar KDV hariç, ${esc(currency)} cinsinden değerlendirilecektir.</p>
+  <p class="hint">Malzeme ve ölçüler tabloda sabittir. Sarı sütunlara birim fiyat ve tutar yazınız (dijital yanıt veya çıktı). Fiyatlar KDV hariç, ${esc(currency)} cinsinden değerlendirilecektir.</p>
 
   <p class="section-label">Talep kalemleri — ${esc(g.groupName)}</p>
   <table class="items">
     <thead>
       <tr>
-        <th style="width:22px;">No</th>
-        <th>Ürün / Malzeme / Ölçü</th>
-        <th style="width:40px;text-align:center;">Miktar</th>
-        <th style="width:40px;text-align:center;">Birim</th>
-        <th style="width:58px;text-align:right;">Ağırlık</th>
-        <th style="width:70px;text-align:right;">Birim Fiyat</th>
-        <th style="width:70px;text-align:right;">Tutar</th>
+        <th style="width:18px;">No</th>
+        <th>Ürün / Parça</th>
+        <th style="width:36px;text-align:center;">Miktar</th>
+        <th style="width:36px;text-align:center;">Birim</th>
+        <th style="width:64px;">Malzeme</th>
+        <th style="width:78px;">İmalat Ölçüsü</th>
+        <th style="width:78px;">Sipariş Ölçüsü</th>
+        <th style="width:56px;text-align:right;">Birim Fiyat</th>
+        <th style="width:56px;text-align:right;">Tutar</th>
       </tr>
     </thead>
     <tbody>${rowsHtml}</tbody>
