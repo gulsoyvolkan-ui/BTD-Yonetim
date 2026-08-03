@@ -9,6 +9,8 @@
 <title>BTD Yönetim | MES Core 4.0 - Çoklu Şirket Üretim Yönetim Sistemi</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2831,7 +2833,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"></path></svg>
         WhatsApp
       </button>
-      <button id="quotePreviewPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl transition-colors" title="PDF olarak kaydet (yazdır kalitesi)">
+      <button id="quotePreviewPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl transition-colors" title="PDF indir">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M12 18v-6"></path><path d="m9 15 3 3 3-3"></path></svg>
         PDF
       </button>
@@ -2910,7 +2912,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4V4Z"></path><path d="m22 6-10 7L2 6"></path></svg>
         Mail
       </button>
-      <button id="orderPreviewPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl transition-colors" title="PDF olarak kaydet (yazdır kalitesi)">
+      <button id="orderPreviewPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl transition-colors" title="PDF indir">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M12 18v-6"></path><path d="m9 15 3 3 3-3"></path></svg>
         PDF
       </button>
@@ -3745,7 +3747,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h8"/></svg>
           Excel
         </button>
-        <button type="button" id="materialRfqPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl" title="PDF olarak kaydet (yazdır kalitesi)">
+        <button type="button" id="materialRfqPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl" title="PDF indir">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
           PDF
         </button>
@@ -3795,7 +3797,7 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
           Yazdır
         </button>
-        <button type="button" id="rfqFormPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl" title="PDF olarak kaydet (yazdır kalitesi)">
+        <button type="button" id="rfqFormPdfBtn" class="inline-flex items-center gap-1.5 text-sm font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-3.5 py-2.5 rounded-xl" title="PDF indir">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3 3 3-3"/></svg>
           PDF
         </button>
@@ -11038,9 +11040,8 @@ ${vadeLine}`;
   });
 
   /**
-   * PDF = yazdır ile AYNI tarayıcı motoru.
-   * html2canvas/html2pdf flex + tablo belgelerinde ölçeği bozduğu için kullanılmaz;
-   * yazıcı listesinden «PDF olarak kaydet» / «Microsoft Print to PDF» seçilir.
+   * Doğrudan PDF indir — yazdır HTML’ini izole iframe’de render edip
+   * html2canvas 1.4 + jsPDF ile A4’e ölçekler (yazdır diyaloğu yok).
    */
   function downloadHtmlAsPdf(html, filename) {
     const src = String(html || '');
@@ -11048,69 +11049,124 @@ ${vadeLine}`;
       showToast('PDF için içerik yok.', 'error');
       return;
     }
-    const title = String(filename || 'belge.pdf').replace(/\.pdf$/i, '');
-    let docHtml = src;
-    if (/<title>[\s\S]*?<\/title>/i.test(docHtml)) {
-      docHtml = docHtml.replace(/<title>[\s\S]*?<\/title>/i, `<title>${title.replace(/</g, '')}</title>`);
-    } else if (/<\/head>/i.test(docHtml)) {
-      docHtml = docHtml.replace(/<\/head>/i, `<title>${title.replace(/</g, '')}</title></head>`);
-    } else if (!/<html[\s>]/i.test(docHtml)) {
-      docHtml = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8" /><title>${title.replace(/</g, '')}</title></head><body>${docHtml}</body></html>`;
-    }
-
-    document.getElementById('pdf-staging-frame')?.remove();
-    document.getElementById('pdf-staging-host')?.remove();
-    document.getElementById('pdf-print-frame')?.remove();
-
-    const triggerPrint = (win) => {
-      const doc = win.document;
-      const imgs = [...(doc.images || [])];
-      const ready = imgs.length
-        ? Promise.all(imgs.map(img => {
-            if (img.complete && img.naturalWidth) return Promise.resolve();
-            return new Promise(r => {
-              img.onload = img.onerror = () => r();
-              setTimeout(r, 3000);
-            });
-          }))
-        : Promise.resolve();
-      ready.then(() => new Promise(r => setTimeout(r, 200))).then(() => {
-        try {
-          win.focus();
-          win.print();
-        } catch (err) {
-          console.error(err);
-          showToast('Yazdır penceresi açılamadı.', 'error');
-        }
-      });
-    };
-
-    showToast('Yazdır ile aynı kalite · yazıcıdan «PDF olarak kaydet» veya «Microsoft Print to PDF» seçin.', 'info');
-
-    const w = window.open('', '_blank');
-    if (w) {
-      w.document.open();
-      w.document.write(docHtml);
-      w.document.close();
-      if (w.document.readyState === 'complete') triggerPrint(w);
-      else w.onload = () => triggerPrint(w);
+    const h2c = window.html2canvas;
+    const JsPDF = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+    if (typeof h2c !== 'function' || !JsPDF) {
+      showToast('PDF modülü yüklenemedi, internet bağlantınızı kontrol edin.', 'error');
       return;
     }
 
-    // Pop-up engelli → gizli iframe ile aynı motor
+    showToast('PDF hazırlanıyor...', 'info');
+
+    let docHtml = src;
+    if (!/<html[\s>]/i.test(docHtml)) {
+      docHtml = `<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8" /></head><body>${docHtml}</body></html>`;
+    }
+    const inject = `<style id="pdf-capture-only">
+      html, body { margin:0!important; padding:0!important; background:#fff!important; }
+      * { -webkit-print-color-adjust:exact!important; print-color-adjust:exact!important; }
+    </style>`;
+    docHtml = /<\/head>/i.test(docHtml)
+      ? docHtml.replace(/<\/head>/i, `${inject}</head>`)
+      : docHtml.replace(/<html[^>]*>/i, (m) => `${m}<head>${inject}</head>`);
+
+    document.getElementById('pdf-staging-frame')?.remove();
+    document.getElementById('pdf-print-frame')?.remove();
+    document.getElementById('pdf-staging-host')?.remove();
+
     const iframe = document.createElement('iframe');
-    iframe.id = 'pdf-print-frame';
+    iframe.id = 'pdf-staging-frame';
     iframe.setAttribute('aria-hidden', 'true');
-    iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+    // 210mm genişlik = yazdırma şablonundaki mm ölçüleriyle aynı yerleşim
+    iframe.style.cssText = [
+      'position:fixed',
+      'left:0',
+      'top:0',
+      'width:210mm',
+      'height:297mm',
+      'border:0',
+      'opacity:0.01',
+      'pointer-events:none',
+      'z-index:-1',
+      'background:#fff',
+    ].join(';');
     document.body.appendChild(iframe);
-    const idoc = iframe.contentDocument || iframe.contentWindow.document;
-    idoc.open();
-    idoc.write(docHtml);
-    idoc.close();
-    triggerPrint(iframe.contentWindow);
+
+    let started = false;
     const cleanup = () => { try { iframe.remove(); } catch (_) {} };
-    try { iframe.contentWindow.onafterprint = cleanup; } catch (_) {}
-    setTimeout(cleanup, 120000);
+
+    const run = async () => {
+      if (started) return;
+      started = true;
+      try {
+        const idoc = iframe.contentDocument || iframe.contentWindow.document;
+        const imgs = [...(idoc.images || [])];
+        await Promise.all(imgs.map(img => {
+          if (img.complete && img.naturalWidth) return Promise.resolve();
+          return new Promise(r => {
+            img.onload = img.onerror = () => r();
+            setTimeout(r, 3000);
+          });
+        }));
+        await new Promise(r => setTimeout(r, 200));
+
+        const target = idoc.querySelector('.sheet') || idoc.body;
+        const contentH = Math.max(target.scrollHeight, target.offsetHeight, idoc.body.scrollHeight, 1123);
+        iframe.style.height = `${contentH + 48}px`;
+        await new Promise(r => setTimeout(r, 120));
+
+        const canvas = await h2c(target, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          scrollX: 0,
+          scrollY: 0,
+          onclone: (clonedDoc) => {
+            const sheet = clonedDoc.querySelector('.sheet');
+            if (sheet) {
+              sheet.style.minHeight = 'auto';
+              sheet.style.height = 'auto';
+            }
+            // margin-top:auto html2canvas’ta büyük boşluk bırakır
+            clonedDoc.querySelectorAll('.doc-footer, .signatures').forEach(node => {
+              node.style.marginTop = '14pt';
+            });
+          },
+        });
+
+        const pdf = new JsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgW = pageW;
+        const imgH = (canvas.height * imgW) / canvas.width;
+        const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+        let heightLeft = imgH;
+        let y = 0;
+        pdf.addImage(imgData, 'JPEG', 0, y, imgW, imgH, undefined, 'FAST');
+        heightLeft -= pageH;
+        while (heightLeft > 0.5) {
+          y = heightLeft - imgH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, y, imgW, imgH, undefined, 'FAST');
+          heightLeft -= pageH;
+        }
+
+        pdf.save(filename || 'belge.pdf');
+        cleanup();
+        showToast('PDF indirildi.', 'success');
+      } catch (err) {
+        console.error(err);
+        cleanup();
+        showToast('PDF oluşturulurken bir hata oluştu.', 'error');
+      }
+    };
+
+    iframe.onload = () => { run(); };
+    iframe.srcdoc = docHtml;
+    setTimeout(() => { if (!started) run(); }, 900);
   }
 
   // Müşteri/ilgili kişi kaydından e-posta adresini bulur.
@@ -17165,7 +17221,7 @@ ${vadeLine}`;
     const html = buildProcSupplierOrderHtml(wo, supplierName, items);
     const safe = String(supplierName).replace(/[^\w\-]+/g, '_').slice(0, 40);
     downloadHtmlAsPdf(html, `Malzeme_Siparis_${wo.id}_${safe}.pdf`);
-    showToast('Yazdır ile aynı kalite · yazıcıdan PDF olarak kaydedin.', 'info');
+    showToast('PDF indiriliyor…', 'info');
   }
 
   function sendProcSupplierOrders(woId, onlySupplier) {
