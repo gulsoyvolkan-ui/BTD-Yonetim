@@ -3762,14 +3762,70 @@
       <iframe id="rfqFormPreviewFrame" title="RFQ Form Önizleme" class="w-full h-full min-h-[58vh] bg-white rounded-xl shadow-sm border border-steel-200"></iframe>
     </div>
     <div class="p-4 border-t border-steel-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
-      <p class="text-[11px] text-steel-400">Birim fiyat sütunu tedarikçi tarafından doldurulur.</p>
+      <p class="text-[11px] text-steel-400">Sarı sütunlar tedarikçi fiyatı · dijital yanıt için «Teklif Yanıtı Gir».</p>
       <div class="flex flex-wrap gap-2">
         <button type="button" id="rfqFormPrintBtn" class="text-sm font-semibold text-steel-600 bg-steel-100 hover:bg-steel-200 px-4 py-2.5 rounded-xl">Yazdır</button>
         <button type="button" id="rfqFormPdfBtn" class="text-sm font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-4 py-2.5 rounded-xl">PDF</button>
         <button type="button" id="rfqFormMailBtn" class="text-sm font-semibold text-steel-700 bg-steel-100 hover:bg-steel-200 px-4 py-2.5 rounded-xl">E-posta</button>
         <button type="button" id="rfqFormWaBtn" class="text-sm font-semibold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 px-4 py-2.5 rounded-xl">WhatsApp</button>
+        <button type="button" id="rfqFormReplyBtn" class="text-sm font-semibold text-amber-800 bg-amber-100 hover:bg-amber-200 px-4 py-2.5 rounded-xl">Teklif Yanıtı Gir</button>
         <button type="button" id="rfqFormSendGroupBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-navy/25">Bu Gruba Gönder</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ RFQ TEKLİF YANITI (dijital) ============ -->
+<div id="rfqQuoteReplyOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[92] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[94vh] flex flex-col overflow-hidden">
+    <div class="bg-navy px-5 py-4 flex items-start justify-between shrink-0">
+      <div class="min-w-0">
+        <p class="text-[11px] text-white/50 font-semibold uppercase tracking-wide">Dijital teklif yanıtı</p>
+        <h3 id="rfqQuoteReplyTitle" class="text-white font-bold text-lg mt-0.5 truncate">—</h3>
+        <p id="rfqQuoteReplySub" class="text-white/60 text-xs mt-1">Tedarikçi fiyatlarını gir · iskonto · onay</p>
+      </div>
+      <button type="button" id="rfqQuoteReplyCloseBtn" class="text-white/70 hover:text-white hover:bg-white/10 rounded-lg p-1.5 shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+      <div class="overflow-x-auto rounded-xl border border-steel-200">
+        <table class="w-full text-sm">
+          <thead class="bg-steel-50 text-[10px] uppercase tracking-wide text-steel-500">
+            <tr>
+              <th class="px-3 py-2 text-left">Parça</th>
+              <th class="px-3 py-2 text-left">Malzeme</th>
+              <th class="px-3 py-2 text-right">Adet</th>
+              <th class="px-3 py-2 text-right">Birim fiyat</th>
+              <th class="px-3 py-2 text-right">Tutar</th>
+            </tr>
+          </thead>
+          <tbody id="rfqQuoteReplyBody"></tbody>
+        </table>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Ara toplam</label>
+          <p id="rfqQuoteReplySubtotal" class="mt-1 text-lg font-bold text-steel-800 mono">0</p>
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">İskonto %</label>
+          <input id="rfqQuoteReplyDiscount" type="number" min="0" max="100" step="0.5" value="0" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Manuel iskonto tutarı</label>
+          <input id="rfqQuoteReplyDiscountAmt" type="number" min="0" step="0.01" value="0" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+      </div>
+      <div class="rounded-xl border border-navy/15 bg-navy/5 px-4 py-3 flex items-center justify-between gap-3">
+        <span class="text-sm font-semibold text-steel-700">Onaylanacak net tutar</span>
+        <span id="rfqQuoteReplyNet" class="text-xl font-bold text-navy mono">0</span>
+      </div>
+      <p class="text-[11px] text-steel-400">İskonto % veya sabit tutar (ikisi birden uygulanır: önce %, sonra tutar). Kaydet → yanıtlandı; Onayla → sipariş verildi.</p>
+    </div>
+    <div class="p-4 border-t border-steel-100 flex flex-wrap justify-end gap-2 shrink-0">
+      <button type="button" id="rfqQuoteReplySaveBtn" class="text-sm font-semibold text-steel-700 bg-steel-100 hover:bg-steel-200 px-4 py-2.5 rounded-xl">Yanıtı Kaydet</button>
+      <button type="button" id="rfqQuoteReplyApproveBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl">Onayla · Sipariş Ver</button>
     </div>
   </div>
 </div>
@@ -11668,6 +11724,7 @@ ${vadeLine}`;
   const procStatusStyle = {
     'Bekliyor': 'text-amber-700 bg-amber-50',
     'Teklif Bekleniyor': 'text-violet-700 bg-violet-50',
+    'Yanıtlandı': 'text-sky-700 bg-sky-50',
     'RFQ Kapatıldı': 'text-steel-500 bg-steel-100',
     'Sipariş Verildi': 'text-amber-700 bg-amber-50',
     'Yolda': 'text-emerald-700 bg-emerald-50',
@@ -11676,7 +11733,7 @@ ${vadeLine}`;
   };
 
   function procEffectiveStatus(item) {
-    if (item.status === 'Tamamlandı' || item.status === 'Teklif Bekleniyor' || item.status === 'RFQ Kapatıldı') return item.status;
+    if (item.status === 'Tamamlandı' || item.status === 'Teklif Bekleniyor' || item.status === 'Yanıtlandı' || item.status === 'RFQ Kapatıldı') return item.status;
     const days = daysUntilDate(item.dueDate);
     if (days != null && days <= 2 && item.status !== 'Tamamlandı') return 'Kritik';
     return item.status;
@@ -12144,12 +12201,13 @@ ${vadeLine}`;
         <td class="px-4 py-3.5 text-steel-500">${fmtDate(p.dueDate)}</td>
         <td class="px-4 py-3.5">
           <select data-proc-status="${p.id}" class="text-[11px] font-bold px-2 py-1 rounded-full border-0 focus:outline-none focus:ring-2 focus:ring-navy/30 cursor-pointer ${procStatusStyle[status] || procStatusStyle['Bekliyor']}">
-            ${['Teklif Bekleniyor', 'Bekliyor', 'Sipariş Verildi', 'Yolda', 'Tamamlandı', 'RFQ Kapatıldı'].map(s => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s}</option>`).join('')}
+            ${['Teklif Bekleniyor', 'Yanıtlandı', 'Bekliyor', 'Sipariş Verildi', 'Yolda', 'Tamamlandı', 'RFQ Kapatıldı'].map(s => `<option value="${s}" ${s === p.status ? 'selected' : ''}>${s}</option>`).join('')}
             ${status === 'Kritik' ? `<option value="Kritik" selected disabled>Kritik (Gecikti)</option>` : ''}
           </select>
         </td>
         <td class="px-4 py-3.5 text-right whitespace-nowrap">
-          ${p.status === 'Teklif Bekleniyor' ? `<button type="button" data-rfq-approve="${p.id}" class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg mr-1">Onayla</button>` : ''}
+          ${(p.status === 'Teklif Bekleniyor' || p.status === 'Yanıtlandı') ? `<button type="button" data-rfq-reply="${p.id}" class="text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg mr-1">Teklif Yanıtı</button>` : ''}
+          ${(p.status === 'Teklif Bekleniyor' || p.status === 'Yanıtlandı') ? `<button type="button" data-rfq-approve="${p.id}" class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded-lg mr-1">Onayla</button>` : ''}
           ${canXfer ? `<button type="button" data-proc-to-wo="${p.id}" class="text-[11px] font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-2 py-1 rounded-lg mr-1">İE'ye Aktar</button>` : ''}
           <button data-del-proc="${p.id}" class="text-steel-300 hover:text-red-500 transition-colors p-1.5 rounded-lg hover:bg-red-50" title="Kaydı Sil">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg>
@@ -12174,12 +12232,20 @@ ${vadeLine}`;
         renderProcurementPage();
       });
     });
+    tbody.querySelectorAll('[data-rfq-reply]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = procurementItems.find(p => p.id === btn.dataset.rfqReply);
+        if (!item) return;
+        const pkg = materialRfqs.find(r => r.id === item.rfqId);
+        if (!pkg) { showToast('RFQ paketi bulunamadı — önce formdan gönderin.', 'error'); return; }
+        openRfqQuoteReply(pkg, item.supplier, item.materialGroup || normalizeMaterialGroupName(item.material));
+      });
+    });
     tbody.querySelectorAll('[data-rfq-approve]').forEach(btn => {
       btn.addEventListener('click', () => {
         const item = procurementItems.find(p => p.id === btn.dataset.rfqApprove);
         if (!item) return;
-        const amt = window.prompt(`${item.supplier} teklif tutarı (${item.materialGroup || item.material}):`, '');
-        approveRfqSupplierQuote(item.rfqId, item.supplier, item.materialGroup || normalizeMaterialGroupName(item.material), amt);
+        approveRfqSupplierQuote(item.rfqId, item.supplier, item.materialGroup || normalizeMaterialGroupName(item.material), null);
       });
     });
     tbody.querySelectorAll('[data-proc-to-wo]').forEach(btn => {
@@ -15668,9 +15734,165 @@ ${vadeLine}`;
     showPage('procurement');
   }
   // RFQ onay → satınalma (öncelik / seçilen teklif)
+  let rfqQuoteReplyState = null;
+
+  function findRfqGroupForProc(pkg, groupName) {
+    if (!pkg) return null;
+    return (pkg.groups || []).find(g => g.groupName === groupName) || pkg.groups?.[0] || null;
+  }
+
+  function calcRfqQuoteTotals(lines, discountPct, discountAmt) {
+    const sub = (lines || []).reduce((s, l) => s + (Number(l.lineTotal) || 0), 0);
+    const pct = Math.max(0, Number(discountPct) || 0);
+    const afterPct = sub * (1 - pct / 100);
+    const amt = Math.max(0, Number(discountAmt) || 0);
+    const net = Math.max(0, afterPct - amt);
+    return { subtotal: sub, net };
+  }
+
+  function openRfqQuoteReply(pkg, supplierName, groupName) {
+    if (!pkg) { showToast('RFQ paketi bulunamadı.', 'error'); return; }
+    const g = findRfqGroupForProc(pkg, groupName);
+    if (!g) { showToast('Malzeme grubu yok.', 'error'); return; }
+    const existing = (pkg.quotes || []).find(q => q.supplier === supplierName && q.groupName === g.groupName);
+    const lines = (g.items || []).map((it, idx) => {
+      const prev = existing?.lines?.[idx];
+      const qty = Number(it.qty) || 1;
+      const unit = prev?.unitPrice != null ? Number(prev.unitPrice) : 0;
+      return {
+        part: it.part || '—',
+        material: [it.material, it.alloy].filter(Boolean).join(' · '),
+        qty,
+        unitPrice: unit,
+        lineTotal: unit * qty,
+      };
+    });
+    rfqQuoteReplyState = {
+      pkg,
+      supplierName,
+      groupName: g.groupName,
+      lines,
+      discountPct: existing?.discountPct || 0,
+      discountAmt: existing?.discountAmt || 0,
+    };
+    document.getElementById('rfqQuoteReplyTitle').textContent = `${supplierName} · ${g.groupName}`;
+    document.getElementById('rfqQuoteReplySub').textContent = `${pkg.id} · ${pkg.company} · ${lines.length} kalem`;
+    document.getElementById('rfqQuoteReplyDiscount').value = String(rfqQuoteReplyState.discountPct || 0);
+    document.getElementById('rfqQuoteReplyDiscountAmt').value = String(rfqQuoteReplyState.discountAmt || 0);
+    renderRfqQuoteReplyTable();
+    document.getElementById('rfqQuoteReplyOverlay')?.classList.remove('hidden');
+  }
+
+  function renderRfqQuoteReplyTable() {
+    const st = rfqQuoteReplyState;
+    const body = document.getElementById('rfqQuoteReplyBody');
+    if (!st || !body) return;
+    body.innerHTML = st.lines.map((l, i) => `
+      <tr class="border-t border-steel-100">
+        <td class="px-3 py-2 font-medium text-steel-800">${String(l.part).replace(/</g, '&lt;')}</td>
+        <td class="px-3 py-2 text-xs text-steel-500">${String(l.material || '—').replace(/</g, '&lt;')}</td>
+        <td class="px-3 py-2 text-right mono">${l.qty}</td>
+        <td class="px-3 py-2 text-right">
+          <input type="number" min="0" step="0.01" data-rfq-unit="${i}" value="${l.unitPrice || ''}"
+            class="w-28 ml-auto block rounded-lg border border-steel-200 px-2 py-1.5 text-right text-sm mono" placeholder="0.00" />
+        </td>
+        <td class="px-3 py-2 text-right mono font-semibold" data-rfq-line-total="${i}">${(Number(l.lineTotal) || 0).toFixed(2)}</td>
+      </tr>`).join('');
+    body.querySelectorAll('[data-rfq-unit]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const i = Number(inp.dataset.rfqUnit);
+        const unit = Number(inp.value) || 0;
+        st.lines[i].unitPrice = unit;
+        st.lines[i].lineTotal = unit * (Number(st.lines[i].qty) || 1);
+        const cell = body.querySelector(`[data-rfq-line-total="${i}"]`);
+        if (cell) cell.textContent = st.lines[i].lineTotal.toFixed(2);
+        refreshRfqQuoteReplyTotals();
+      });
+    });
+    refreshRfqQuoteReplyTotals();
+  }
+
+  function refreshRfqQuoteReplyTotals() {
+    const st = rfqQuoteReplyState;
+    if (!st) return;
+    st.discountPct = Number(document.getElementById('rfqQuoteReplyDiscount')?.value) || 0;
+    st.discountAmt = Number(document.getElementById('rfqQuoteReplyDiscountAmt')?.value) || 0;
+    const t = calcRfqQuoteTotals(st.lines, st.discountPct, st.discountAmt);
+    const cur = st.pkg.form?.currency || '€';
+    const subEl = document.getElementById('rfqQuoteReplySubtotal');
+    const netEl = document.getElementById('rfqQuoteReplyNet');
+    if (subEl) subEl.textContent = `${t.subtotal.toFixed(2)} ${cur}`;
+    if (netEl) netEl.textContent = `${t.net.toFixed(2)} ${cur}`;
+    return t;
+  }
+
+  function saveRfqQuoteReply({ approve } = {}) {
+    const st = rfqQuoteReplyState;
+    if (!st?.pkg) return;
+    const t = refreshRfqQuoteReplyTotals();
+    if (!st.lines.some(l => Number(l.unitPrice) > 0) && !approve) {
+      showToast('En az bir birim fiyat girin.', 'error');
+      return;
+    }
+    const pkg = st.pkg;
+    if (!Array.isArray(pkg.quotes)) pkg.quotes = [];
+    let q = pkg.quotes.find(x => x.supplier === st.supplierName && x.groupName === st.groupName);
+    if (!q) {
+      q = { supplier: st.supplierName, groupName: st.groupName, status: 'Teklif Bekleniyor', amount: null, at: new Date().toISOString().slice(0, 10) };
+      pkg.quotes.push(q);
+    }
+    q.lines = st.lines.map(l => ({ ...l }));
+    q.discountPct = st.discountPct;
+    q.discountAmt = st.discountAmt;
+    q.amount = t.net;
+    q.subtotal = t.subtotal;
+    q.status = approve ? 'Onaylandı' : 'Yanıtlandı';
+    q.at = new Date().toISOString().slice(0, 10);
+    q.note = approve
+      ? `Dijital onay · iskonto %${st.discountPct || 0}${st.discountAmt ? ` + ${st.discountAmt}` : ''}`
+      : 'Dijital teklif yanıtı kaydedildi';
+
+    if (approve) {
+      procurementItems.forEach(p => {
+        if (p.rfqId === pkg.id && (p.materialGroup === st.groupName || !p.materialGroup)) {
+          if (p.supplier === st.supplierName) {
+            p.status = 'Sipariş Verildi';
+            p.quoteAmount = t.net;
+            p.discountPct = st.discountPct;
+            p.discountAmt = st.discountAmt;
+          } else if (p.status === 'Teklif Bekleniyor' || p.status === 'Yanıtlandı') {
+            p.status = 'RFQ Kapatıldı';
+          }
+          cloudSave('saveProcurementItem', p, companies);
+        }
+      });
+      pkg.status = 'Sipariş Verildi';
+    } else {
+      procurementItems.forEach(p => {
+        if (p.rfqId === pkg.id && p.supplier === st.supplierName && (p.materialGroup === st.groupName || !p.materialGroup)) {
+          p.status = 'Yanıtlandı';
+          p.quoteAmount = t.net;
+          cloudSave('saveProcurementItem', p, companies);
+        }
+      });
+    }
+    cloudSave('saveMaterialRfq', pkg, companies);
+    document.getElementById('rfqQuoteReplyOverlay')?.classList.add('hidden');
+    rfqQuoteReplyState = null;
+    if (typeof renderProcurementPage === 'function') renderProcurementPage();
+    showToast(approve
+      ? `${st.supplierName} onaylandı · sipariş verildi (${t.net.toFixed(2)})`
+      : `${st.supplierName} teklif yanıtı kaydedildi.`, approve ? 'success' : 'info');
+  }
+
   function approveRfqSupplierQuote(rfqId, supplierName, groupName, amount) {
     const pkg = materialRfqs.find(r => r.id === rfqId) || activeMaterialRfq;
     if (!pkg) return;
+    // Dijital yanıt ekranını aç (miktar/iskonto ile); amount dolu gelirse klasik onay
+    if (amount == null || amount === '') {
+      openRfqQuoteReply(pkg, supplierName, groupName);
+      return;
+    }
     pkg.quotes.forEach(q => {
       if (q.supplier === supplierName && q.groupName === groupName) {
         q.status = 'Onaylandı';
@@ -15680,7 +15902,7 @@ ${vadeLine}`;
     procurementItems.forEach(p => {
       if (p.rfqId === rfqId && p.materialGroup === groupName) {
         if (p.supplier === supplierName) p.status = 'Sipariş Verildi';
-        else if (p.status === 'Teklif Bekleniyor') p.status = 'RFQ Kapatıldı';
+        else if (p.status === 'Teklif Bekleniyor' || p.status === 'Yanıtlandı') p.status = 'RFQ Kapatıldı';
         cloudSave('saveProcurementItem', p, companies);
       }
     });
@@ -16127,6 +16349,26 @@ ${vadeLine}`;
     );
     window.open(`https://wa.me/${String(wa).replace(/\D/g, '')}?text=${msg}`, '_blank');
   });
+  document.getElementById('rfqFormReplyBtn')?.addEventListener('click', () => {
+    const { pkg, groupIndex, supplierName } = rfqPreviewState;
+    if (!pkg) return;
+    const g = pkg.groups[groupIndex];
+    openRfqQuoteReply(pkg, supplierName || g?.suppliers?.[0]?.name || '', g?.groupName || '');
+  });
+  document.getElementById('rfqQuoteReplyCloseBtn')?.addEventListener('click', () => {
+    document.getElementById('rfqQuoteReplyOverlay')?.classList.add('hidden');
+    rfqQuoteReplyState = null;
+  });
+  document.getElementById('rfqQuoteReplyOverlay')?.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'rfqQuoteReplyOverlay') {
+      e.currentTarget.classList.add('hidden');
+      rfqQuoteReplyState = null;
+    }
+  });
+  document.getElementById('rfqQuoteReplyDiscount')?.addEventListener('input', refreshRfqQuoteReplyTotals);
+  document.getElementById('rfqQuoteReplyDiscountAmt')?.addEventListener('input', refreshRfqQuoteReplyTotals);
+  document.getElementById('rfqQuoteReplySaveBtn')?.addEventListener('click', () => saveRfqQuoteReply({ approve: false }));
+  document.getElementById('rfqQuoteReplyApproveBtn')?.addEventListener('click', () => saveRfqQuoteReply({ approve: true }));
   document.getElementById('rfqFormSendGroupBtn')?.addEventListener('click', () => {
     const { pkg, groupIndex } = rfqPreviewState;
     if (!pkg) return;
