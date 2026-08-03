@@ -15220,7 +15220,7 @@ ${vadeLine}`;
           <input id="rfqFormDue" type="date" value="${f.dueDate || ''}" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm" />
         </div>
         <div>
-          <label class="text-[10px] font-semibold text-steel-500 uppercase">Teklif geçerlilik</label>
+          <label class="text-[10px] font-semibold text-steel-500 uppercase">Talep Geçerlilik</label>
           <input id="rfqFormValid" type="date" value="${f.validUntil || ''}" class="mt-1 w-full rounded-lg border border-steel-200 px-2.5 py-2 text-sm" />
         </div>
         <div class="sm:col-span-2">
@@ -15541,7 +15541,7 @@ ${vadeLine}`;
     <div class="cond-box">
       <p class="section-label">Teklif koşulları</p>
       <table class="kv">
-        <tr><td class="k">Teklif geçerlilik</td><td class="v">${esc(fmtD(f.validUntil))}</td></tr>
+        <tr><td class="k">Talep Geçerlilik</td><td class="v">${esc(fmtD(f.validUntil))}</td></tr>
         <tr><td class="k">Talep no</td><td class="v">${esc(pkg.id)}</td></tr>
         <tr><td class="k">Kaynak</td><td class="v">${esc(pkg.source === 'order' ? 'Sipariş' : pkg.source === 'reproc' ? 'Yeniden tedarik' : 'Maliyet')}</td></tr>
         <tr><td class="k">Teslim süresi (tedarikçi)</td><td class="v">……… iş günü</td></tr>
@@ -16331,7 +16331,7 @@ ${vadeLine}`;
       `${pkg.company} adına ${g?.groupName || ''} malzeme grubu için Ürün Tedarik Fiyat Talebi (RFQ) gönderiyoruz.\n` +
       `RFQ No: ${pkg.id}\nProje/Ref: ${pkg.refLabel}\n` +
       `Teslim yeri: ${pkg.form?.deliveryPlace || ''}\nİstenen teslim: ${pkg.form?.dueDate || ''}\n` +
-      `Teklif geçerlilik: ${pkg.form?.validUntil || ''}\n` +
+      `Talep Geçerlilik: ${pkg.form?.validUntil || ''}\n` +
       `Ödeme: ${pkg.form?.paymentTerms || ''}\n\n` +
       `Kurumsal formu ekte / yazdır çıktısı olarak ileteceğiz.\n\nSaygılarımızla,\n${pkg.company}`
     );
