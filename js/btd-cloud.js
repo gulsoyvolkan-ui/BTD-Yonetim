@@ -1057,7 +1057,7 @@
         o.dbId = dbId;
       }
       await client.from('siparis_kalemleri').delete().eq('siparis_id', dbId);
-      const items = (o.items || []).map((it, i) => ({
+      const itemsFull = (o.items || []).map((it, i) => ({
         siparis_id: dbId,
         sira: i + 1,
         parca_no: it.partNo || null,
@@ -1066,9 +1066,15 @@
         birim_fiyat: it.unitPrice ?? 0,
         iskonto_pct: it.discountPct ?? 0,
         ek_gider: it.extraCost ?? 0,
+        teknik_resim: it.techDrawing || null,
+        qr_anahtar: it.qrKey || null,
       }));
-      if (items.length) {
-        const { error } = await client.from('siparis_kalemleri').insert(items);
+      if (itemsFull.length) {
+        let { error } = await client.from('siparis_kalemleri').insert(itemsFull);
+        if (error && /teknik_resim|qr_anahtar/i.test(error.message || '')) {
+          const itemsBasic = itemsFull.map(({ teknik_resim, qr_anahtar, ...rest }) => rest);
+          ({ error } = await client.from('siparis_kalemleri').insert(itemsBasic));
+        }
         if (error) throw error;
       }
       return ok({ dbId });
@@ -1122,6 +1128,8 @@
             unitPrice: Number(it.birim_fiyat) || 0,
             discountPct: Number(it.iskonto_pct) || 0,
             extraCost: Number(it.ek_gider) || 0,
+            techDrawing: it.teknik_resim || '',
+            qrKey: it.qr_anahtar || '',
           })),
       };
     });
@@ -1172,18 +1180,29 @@
         await client.from('is_emri_parcalari').delete().eq('is_emri_id', dbId);
       }
       for (const part of wo.parts || []) {
-        const { data: pRow, error: pErr } = await client
+        const partPayload = {
+          is_emri_id: dbId,
+          parca_no: Number(part.no) || 1,
+          ad: part.name || '',
+          malzeme: part.material || null,
+          operator_adi: part.operator || null,
+          aktif_cam: part.activeCam ?? 0,
+          teknik_resim: part.techDrawing || null,
+          qr_anahtar: part.qrKey || null,
+        };
+        let { data: pRow, error: pErr } = await client
           .from('is_emri_parcalari')
-          .insert({
-            is_emri_id: dbId,
-            parca_no: Number(part.no) || 1,
-            ad: part.name || '',
-            malzeme: part.material || null,
-            operator_adi: part.operator || null,
-            aktif_cam: part.activeCam ?? 0,
-          })
+          .insert(partPayload)
           .select('id')
           .single();
+        if (pErr && /teknik_resim|qr_anahtar/i.test(pErr.message || '')) {
+          const { teknik_resim, qr_anahtar, ...basic } = partPayload;
+          ({ data: pRow, error: pErr } = await client
+            .from('is_emri_parcalari')
+            .insert(basic)
+            .select('id')
+            .single());
+        }
         if (pErr) throw pErr;
         const cams = (part.cam || []).map((c, i) => ({
           parca_id: pRow.id,
@@ -1243,6 +1262,8 @@
           material: p.malzeme || '',
           operator: p.operator_adi || '',
           activeCam: p.aktif_cam || 0,
+          techDrawing: p.teknik_resim || '',
+          qrKey: p.qr_anahtar || '',
           cam: (p.is_emri_cam_adimlari || [])
             .sort((a, b) => (a.sira || 0) - (b.sira || 0))
             .map((c) => ({

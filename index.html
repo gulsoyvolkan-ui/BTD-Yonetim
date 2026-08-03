@@ -2120,14 +2120,14 @@
       </div>
     </div>
 
-    <!-- Technical Drawing / 3D Model Button -->
-    <button class="w-full flex items-center gap-4 bg-steel-800 hover:bg-steel-900 text-white rounded-2xl px-5 py-4 transition-colors group">
+    <!-- Technical Drawing — QR bilgilendirme ekranı -->
+    <button type="button" id="drawerTechDrawBtn" class="w-full flex items-center gap-4 bg-steel-800 hover:bg-steel-900 text-white rounded-2xl px-5 py-4 transition-colors group">
       <div class="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></svg>
       </div>
       <span class="text-left flex-1">
-        <span class="block font-semibold text-sm">Teknik Resim PDF / 3D Model</span>
-        <span class="block text-xs text-white/50 mt-0.5">Görüntülemek için tıklayın</span>
+        <span class="block font-semibold text-sm">Teknik Resim / Künye</span>
+        <span id="drawerTechDrawHint" class="block text-xs text-white/50 mt-0.5">QR bilgilendirme ekranını aç</span>
       </span>
       <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-white/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
     </button>
@@ -2200,6 +2200,56 @@
     <button type="button" id="orderDrawerPreviewBtn" class="flex-1 text-sm font-semibold text-navy bg-navy/10 hover:bg-navy/15 py-2.5 rounded-xl">Belge Önizle</button>
   </div>
 </aside>
+
+<!-- ============ PARÇA / KALEM QR BİLGİLENDİRME ============ -->
+<div id="partInfoOverlay" class="hidden fixed inset-0 bg-steel-900/75 backdrop-blur-panel z-[95] flex items-center justify-center p-3 sm:p-5">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden border border-steel-200/80">
+    <div class="relative shrink-0 bg-gradient-to-br from-[#0f2a4a] via-[#1a3d66] to-[#0f2a4a] px-5 py-4 text-white overflow-hidden">
+      <div class="absolute -right-8 -top-10 w-36 h-36 rounded-full bg-white/5 pointer-events-none"></div>
+      <div class="relative flex items-start justify-between gap-3">
+        <div class="min-w-0">
+          <p class="text-[11px] text-white/50 font-semibold uppercase tracking-wide">Parça Künyesi · QR</p>
+          <h3 id="partInfoTitle" class="text-white font-bold text-lg sm:text-xl mt-0.5 truncate">—</h3>
+          <p id="partInfoSub" class="text-white/65 text-xs mt-1 truncate">—</p>
+        </div>
+        <button type="button" id="partInfoCloseBtn" class="text-white/70 hover:text-white hover:bg-white/10 rounded-lg p-1.5 shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="rounded-2xl border border-steel-200 bg-steel-50/60 overflow-hidden flex flex-col min-h-[220px]">
+        <div class="px-3.5 py-2.5 border-b border-steel-200/80 flex items-center justify-between gap-2">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-steel-500">Teknik Resim</p>
+          <label class="text-[11px] font-semibold text-navy cursor-pointer hover:underline">
+            Yükle / Değiştir
+            <input type="file" id="partInfoTechUpload" accept="image/*,application/pdf" class="hidden" />
+          </label>
+        </div>
+        <div id="partInfoTechBody" class="flex-1 flex items-center justify-center p-3 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2f7_50%,#f8fafc_100%)] min-h-[200px]">
+          <p class="text-xs text-steel-400 text-center px-4">Teknik resim henüz yüklenmedi.<br/>İş emri oluştururken veya buradan ekleyebilirsiniz.</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <div class="rounded-2xl border border-steel-200 p-3.5 space-y-2.5">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-steel-500">Künye</p>
+          <dl id="partInfoMeta" class="grid grid-cols-1 gap-2 text-sm"></dl>
+        </div>
+        <div class="rounded-2xl border border-navy/15 bg-navy/5 p-3.5 flex items-center gap-3">
+          <div id="partInfoQrBox" class="w-16 h-16 bg-white rounded-lg border border-steel-200 p-1 shrink-0"></div>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-steel-700">Bu kaleme özel QR</p>
+            <p id="partInfoQrUrl" class="text-[10px] mono text-steel-500 mt-1 break-all">—</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="p-4 border-t border-steel-100 shrink-0 flex flex-wrap gap-2 justify-end bg-white">
+      <button type="button" id="partInfoOpenWoBtn" class="text-sm font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-4 py-2.5 rounded-xl">İş Emrine Git</button>
+      <button type="button" id="partInfoCloseBtn2" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Kapat</button>
+    </div>
+  </div>
+</div>
 
 <!-- ============ QR TARAMA ============ -->
 <div id="qrScanOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[90] flex items-center justify-center p-4">
@@ -2309,6 +2359,17 @@
           <div class="sm:col-span-2">
             <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Parça Adı <span class="text-red-500">*</span></label>
             <input id="newWOPartName" type="text" placeholder="Örn. Flanş Gövde Adaptörü" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+          </div>
+          <div class="sm:col-span-2 rounded-xl border border-steel-200 bg-steel-50/50 p-3 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Teknik Resim</label>
+              <span class="text-[10px] text-steel-400">QR okutulunca bu görsel açılır</span>
+            </div>
+            <input id="newWOTechDrawing" type="file" accept="image/*,application/pdf" class="block w-full text-xs text-steel-600 file:mr-3 file:rounded-lg file:border-0 file:bg-navy file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-navy-light" />
+            <div id="newWOTechPreview" class="hidden rounded-lg border border-steel-200 bg-white overflow-hidden">
+              <img id="newWOTechPreviewImg" alt="Teknik resim önizleme" class="hidden max-h-40 w-full object-contain bg-white" />
+              <p id="newWOTechPreviewPdf" class="hidden px-3 py-2 text-xs text-steel-600 font-medium">PDF teknik resim yüklendi</p>
+            </div>
           </div>
           <div id="materialComboWrapper" class="relative">
             <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Malzeme</label>
@@ -3185,7 +3246,9 @@
         </div>
         <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">İlgili Kişi</label>
-          <input id="newCostContact" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+          <select id="newCostContact" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30 bg-white">
+            <option value="">Önce firma seçin</option>
+          </select>
         </div>
         <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Para Birimi</label>
@@ -4283,6 +4346,47 @@
     return parts.length ? parts.join(' · ') : '—';
   }
 
+  /** Etiket ölçü satırı: ölçüleri " X " ile ayırır (nokta değil). */
+  function formatLabelDims(dims) {
+    if (!dims || typeof dims !== 'object') return '—';
+    const parts = Object.entries(dims)
+      .filter(([, v]) => v != null && v !== '' && Number(v) !== 0)
+      .map(([k, v]) => `${k}: ${v}`);
+    return parts.length ? parts.join(' X ') : '—';
+  }
+
+  async function fileToTechDrawingData(file) {
+    if (!file) return '';
+    if (file.type && file.type.startsWith('image/')) {
+      return compressImageToDataUrl(file, 1400, 1800, 0.82);
+    }
+    if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '')) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('PDF okunamadı'));
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(file);
+      });
+    }
+    throw new Error('Yalnızca görsel veya PDF yükleyin');
+  }
+
+  function ensureOrderItemQrKey(order, item, idx) {
+    if (!order || !item) return '';
+    if (!item.qrKey) {
+      item.qrKey = `${order.id}~L${String(idx + 1).padStart(2, '0')}`;
+    }
+    return item.qrKey;
+  }
+
+  function ensurePartQrKey(wo, part) {
+    if (!wo || !part) return '';
+    if (!part.qrKey) {
+      part.qrKey = partCode(wo, part);
+    }
+    return part.qrKey;
+  }
+
   function openPrintDocument(html, title) {
     const w = window.open('', '_blank', 'width=960,height=720');
     if (!w) {
@@ -4451,6 +4555,7 @@
     const mfgDims = item.mfgDims || cost?.mfgDims || item.ordDims || cost?.ordDims || null;
     const serial = item.serial || item.partNo || cost?.partNo || `${order.id}-${String(idx + 1).padStart(2, '0')}`;
     const name = item.desc || cost?.desc || '—';
+    const refId = ensureOrderItemQrKey(order, item, idx);
     return {
       serial,
       name,
@@ -4458,11 +4563,12 @@
       orderDate: order.approvalDate || order.date || '',
       dueDate: order.deliveryDate || '',
       qty: item.qty ?? cost?.qty ?? 0,
-      mfgDimsText: formatDimsCompact(mfgDims),
+      mfgDimsText: formatLabelDims(mfgDims),
       materialCode: matCode || '—',
       heat: item.heatType || cost?.heatType || '—',
       coating: coatUnique.length ? coatUnique.join(' + ') : '—',
-      refId: `${order.id}/${idx + 1}/${serial}`,
+      refId,
+      techDrawing: item.techDrawing || cost?.techDrawing || '',
     };
   }
 
@@ -4485,6 +4591,7 @@
     const woNo = findFirstWorkOrderIdForOrder(order);
     const labels = itemsWithIdx.map(({ item, idx }) => {
       const d = resolveOrderLabelData(order, item, idx);
+      // Her kalem kendi QR anahtarını taşır — ortak / sipariş geneli QR yok
       const qrSrc = qrDataUrl(buildTraceUrl('OL', order.company, d.refId), 2);
       const partNo = (item.partNo || d.serial || '').trim();
       const partName = (item.desc || d.name || '').trim();
@@ -4508,15 +4615,17 @@
             </div>
           </div>
           <div class="right">
-            <p class="part">${escapeHtmlPrint(partTop)}</p>
-            <div class="meta">
-              <div class="cell grow">
-                <span class="lbl">Termin</span>
-                <p class="val">${escapeHtmlPrint(termin || '—')}</p>
-              </div>
-              <div class="cell qty">
+            <div class="part-row">
+              <p class="part">${escapeHtmlPrint(partTop)}</p>
+              <div class="qty-chip">
                 <span class="lbl">Adet</span>
                 <p class="val">${escapeHtmlPrint(d.qty)}</p>
+              </div>
+            </div>
+            <div class="meta">
+              <div class="cell full termin">
+                <span class="lbl">Termin</span>
+                <p class="val termin-val">${escapeHtmlPrint(termin || '—')}</p>
               </div>
               <div class="cell full">
                 <span class="lbl">İmalat Ölçüsü</span>
@@ -4549,53 +4658,58 @@
   .stack { display: flex; flex-direction: column; align-items: center; gap: 4mm; padding: 4mm; }
   .label {
     width: 89mm; height: 36mm; background: #fff; border: 0.25mm solid #cbd5e1;
-    display: flex; gap: 2.2mm; padding: 1.8mm 2.2mm 1.6mm 1.8mm;
+    display: flex; gap: 2mm; padding: 1.6mm 2mm 1.4mm 1.6mm;
     page-break-after: always; overflow: hidden;
   }
   .left {
-    width: 24mm; flex-shrink: 0; display: flex; flex-direction: column; align-items: center;
-    gap: 0.7mm;
+    width: 23mm; flex-shrink: 0; display: flex; flex-direction: column; align-items: center;
+    gap: 0.55mm;
   }
   .logo {
-    height: 5.2mm; max-width: 22mm; width: auto; object-fit: contain;
+    height: 4.8mm; max-width: 21mm; width: auto; object-fit: contain;
     display: block;
   }
   .logo-ph {
-    height: 5.2mm; min-width: 14mm; padding: 0 1.5mm; border-radius: 0.6mm;
+    height: 4.8mm; min-width: 14mm; padding: 0 1.5mm; border-radius: 0.6mm;
     background: #0f2a4a; color: #fff; font-size: 5.5pt; font-weight: 800;
     display: flex; align-items: center; justify-content: center; letter-spacing: .3pt;
   }
   .qr-wrap {
-    width: 20mm; height: 20mm; display: flex; align-items: center; justify-content: center;
-    border: 0.2mm solid #e2e8f0; border-radius: 0.6mm; background: #fff; padding: 0.4mm;
+    width: 19.5mm; height: 19.5mm; display: flex; align-items: center; justify-content: center;
+    border: 0.2mm solid #e2e8f0; border-radius: 0.6mm; background: #fff; padding: 0.35mm;
   }
   .qr { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
-  .wo-block { width: 100%; text-align: center; margin-top: 0.2mm; }
+  .wo-block { width: 100%; text-align: center; margin-top: 0.15mm; }
   .lbl {
-    display: block; font-size: 4.6pt; font-weight: 700; color: #64748b;
+    display: block; font-size: 4.4pt; font-weight: 700; color: #64748b;
     text-transform: uppercase; letter-spacing: .28pt; line-height: 1.1; margin: 0;
   }
   .wo-no {
-    margin: 0.25mm 0 0; font-size: 5.6pt; font-weight: 700; color: #0f2a4a;
+    margin: 0.2mm 0 0; font-size: 5.4pt; font-weight: 700; color: #0f2a4a;
     line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .mono { font-family: ui-monospace, Consolas, "Courier New", monospace; }
-  .right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.7mm; }
+  .right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.55mm; }
+  .part-row { display: flex; align-items: flex-start; gap: 1.5mm; padding-bottom: 0.45mm; border-bottom: 0.35mm solid #0f2a4a; }
   .part {
-    margin: 0; font-size: 8pt; font-weight: 800; color: #0f172a; line-height: 1.12;
+    margin: 0; flex: 1; min-width: 0; font-size: 7.6pt; font-weight: 800; color: #0f172a; line-height: 1.12;
     letter-spacing: .1pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    padding-bottom: 0.5mm; border-bottom: 0.35mm solid #0f2a4a;
   }
+  .qty-chip { flex-shrink: 0; text-align: right; min-width: 8mm; }
+  .qty-chip .val { font-size: 7pt; font-weight: 800; color: #0f2a4a; margin: 0.1mm 0 0; }
   .meta {
-    display: grid; grid-template-columns: 1fr auto; gap: 0.55mm 2mm; align-content: start; flex: 1;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.45mm 2mm; align-content: start; flex: 1;
   }
   .cell { min-width: 0; }
-  .cell.grow { min-width: 0; }
-  .cell.qty { text-align: right; padding-left: 1mm; }
   .cell.full { grid-column: 1 / -1; }
+  .cell.termin { grid-column: 1 / -1; }
   .val {
-    margin: 0.15mm 0 0; font-size: 5.8pt; font-weight: 650; color: #0f172a;
+    margin: 0.12mm 0 0; font-size: 5.6pt; font-weight: 650; color: #0f172a;
     line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .termin-val {
+    font-size: 5.5pt; letter-spacing: 0; white-space: nowrap;
+    overflow: visible; text-overflow: clip;
   }
   @media print {
     body { background: #fff; }
@@ -4606,7 +4720,7 @@
 </style></head><body>
   <div class="toolbar">
     <button onclick="window.print()">Yazdır · Dymo 99012 (89×36 mm)</button>
-    <p class="hint">Sol: logo + QR + iş emri · Sağ: parça / termin / ölçü / malzeme · Etiket 89×36 mm</p>
+    <p class="hint">Her kalemin kendine özel QR’si · Termin satırı tam genişlik · Ölçü ayıracı: X</p>
   </div>
   <div class="stack">${labels}</div>
 </body></html>`;
@@ -4625,9 +4739,14 @@
       showToast('Yazdırılacak kalem seçilmedi.', 'error');
       return;
     }
+    // Kalem QR anahtarlarını sabitle (sonraki okutma için)
+    idxs.forEach(idx => ensureOrderItemQrKey(order, order.items[idx], idx));
+    if (typeof cloudSave === 'function') {
+      try { cloudSave('saveOrder', order, companies); } catch (_) { /* ignore */ }
+    }
     const payload = idxs.map(idx => ({ item: order.items[idx], idx }));
     openPrintDocument(buildDymoOrderLabelHtml(order, payload), `Etiket · ${order.id}`);
-    showToast(`${idxs.length} QR etiket hazırlandı (Dymo 99012).`, 'success');
+    showToast(`${idxs.length} kalem QR etiketi hazırlandı (her biri benzersiz).`, 'success');
   }
   function docLetterheadCss() {
     return `
@@ -5990,8 +6109,7 @@ ${vadeLine}`;
       tr.addEventListener('click', (e) => {
         if (e.target.closest('.qr-btn')) {
           e.stopPropagation();
-          const payload = buildTraceUrl('PT', wo.company, partCode(wo, part));
-          showStockQr({ sku: partCode(wo, part), name: part.name, company: wo.company, qrPayload: payload });
+          openWoPartInfo(wo, part);
           return;
         }
         openDrawer(wo, part);
@@ -6076,8 +6194,11 @@ ${vadeLine}`;
       btn.addEventListener('click', () => {
         const wo = workOrders.find(w => w.id === btn.dataset.woCardQr);
         if (!wo || !wo.parts[0]) return;
-        const payload = buildTraceUrl('PT', wo.company, partCode(wo, wo.parts[0]));
-        showStockQr({ sku: partCode(wo, wo.parts[0]), name: wo.parts[0].name, company: wo.company, qrPayload: payload });
+        // Ortak WO QR yok — ilk parçanın kalem QR / künyesini aç
+        openWoPartInfo(wo, wo.parts[0]);
+        if ((wo.parts || []).length > 1) {
+          showToast('Birden fazla parça var — her satırın kendi QR’sini kullanın.', 'info');
+        }
       });
     });
   }
@@ -6774,24 +6895,224 @@ ${vadeLine}`;
 
   // ---------- QR tarama / derin bağlantı ----------
   let qrScanState = { stream: null, raf: 0, busy: false };
+  let partInfoCtx = null;
 
   function findPartByRef(refId) {
     for (const wo of workOrders) {
       for (const part of wo.parts || []) {
-        if (partCode(wo, part) === refId) return { wo, part };
+        if (partCode(wo, part) === refId || part.qrKey === refId) return { wo, part };
       }
     }
     return null;
   }
+
+  function findOrderLineByRef(refId) {
+    const key = String(refId || '').trim();
+    if (!key) return null;
+    for (const order of orders || []) {
+      const items = order.items || [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const legacyKey = `${order.id}~L${String(i + 1).padStart(2, '0')}`;
+        if (it.qrKey === key || legacyKey === key) return { order, item: it, idx: i };
+      }
+    }
+    // Eski format: orderId/idx/serial
+    const m = key.match(/^(.+)\/(\d+)\/(.+)$/);
+    if (m) {
+      const order = (orders || []).find(o => o.id === m[1]);
+      if (order) {
+        const idx = Number(m[2]) - 1;
+        if (order.items && order.items[idx]) return { order, item: order.items[idx], idx };
+      }
+    }
+    return null;
+  }
+
+  function findLinkedWoForOrderLine(order, item, idx) {
+    if (!order) return null;
+    const linked = (workOrders || []).filter(w =>
+      w.orderId === order.id || (order.quoteId && (w.quoteId === order.quoteId || w.orderId === order.quoteId))
+    );
+    for (const wo of linked) {
+      const byNo = (wo.parts || []).find(p => String(p.no) === String(idx + 1) || String(p.no) === String(item.partNo));
+      if (byNo) return { wo, part: byNo };
+      const name = (item.desc || item.partNo || '').trim().toLowerCase();
+      if (name) {
+        const byName = (wo.parts || []).find(p => (p.name || '').trim().toLowerCase() === name);
+        if (byName) return { wo, part: byName };
+      }
+    }
+    if (linked.length === 1 && linked[0].parts && linked[0].parts[0] && (order.items || []).length === 1) {
+      return { wo: linked[0], part: linked[0].parts[0] };
+    }
+    return linked[0] ? { wo: linked[0], part: (linked[0].parts || [])[0] || null } : null;
+  }
+
+  function renderTechDrawingBody(el, dataUrl) {
+    if (!el) return;
+    const src = String(dataUrl || '').trim();
+    if (!src) {
+      el.innerHTML = `<p class="text-xs text-steel-400 text-center px-4">Teknik resim henüz yüklenmedi.<br/>İş emri oluştururken veya buradan ekleyebilirsiniz.</p>`;
+      return;
+    }
+    if (src.startsWith('data:application/pdf') || /\.pdf($|\?)/i.test(src)) {
+      el.innerHTML = `<iframe src="${src}" title="Teknik resim PDF" class="w-full h-[280px] rounded-lg border border-steel-200 bg-white"></iframe>`;
+      return;
+    }
+    el.innerHTML = `<img src="${src}" alt="Teknik resim" class="max-h-[320px] w-full object-contain rounded-lg bg-white" />`;
+  }
+
+  function openPartInfoPanel(ctx) {
+    partInfoCtx = ctx || null;
+    const ov = document.getElementById('partInfoOverlay');
+    if (!ov || !ctx) return;
+
+    const title = ctx.title || '—';
+    const sub = ctx.sub || '';
+    document.getElementById('partInfoTitle').textContent = title;
+    document.getElementById('partInfoSub').textContent = sub;
+
+    const meta = document.getElementById('partInfoMeta');
+    const rows = ctx.metaRows || [];
+    meta.innerHTML = rows.map(([k, v]) => `
+      <div class="flex items-start justify-between gap-3 border-b border-steel-100 pb-1.5 last:border-0">
+        <dt class="text-[11px] font-semibold uppercase tracking-wide text-steel-400 shrink-0">${escapeHtmlPrint(k)}</dt>
+        <dd class="text-sm font-semibold text-steel-800 text-right">${escapeHtmlPrint(v == null || v === '' ? '—' : v)}</dd>
+      </div>`).join('');
+
+    renderTechDrawingBody(document.getElementById('partInfoTechBody'), ctx.techDrawing);
+
+    const qrUrl = ctx.qrUrl || '';
+    const qrBox = document.getElementById('partInfoQrBox');
+    const qrUrlEl = document.getElementById('partInfoQrUrl');
+    if (qrBox) {
+      const src = qrDataUrl(qrUrl, 2);
+      qrBox.innerHTML = src ? `<img src="${src}" alt="QR" class="w-full h-full object-contain" />` : '';
+    }
+    if (qrUrlEl) qrUrlEl.textContent = qrUrl || '—';
+
+    const woBtn = document.getElementById('partInfoOpenWoBtn');
+    if (woBtn) {
+      const hasWo = !!(ctx.wo && ctx.part);
+      woBtn.classList.toggle('hidden', !hasWo);
+      woBtn.onclick = () => {
+        if (!ctx.wo || !ctx.part) return;
+        closePartInfoPanel();
+        showPage('workorders');
+        openDrawer(ctx.wo, ctx.part);
+      };
+    }
+
+    ov.classList.remove('hidden');
+  }
+
+  function closePartInfoPanel() {
+    partInfoCtx = null;
+    const ov = document.getElementById('partInfoOverlay');
+    if (ov) ov.classList.add('hidden');
+  }
+
+  function openOrderLineInfo(order, item, idx) {
+    const d = resolveOrderLabelData(order, item, idx);
+    const linked = findLinkedWoForOrderLine(order, item, idx);
+    let tech = item.techDrawing || d.techDrawing || '';
+    if (!tech && linked?.part?.techDrawing) tech = linked.part.techDrawing;
+    const woIdShow = linked?.wo?.id || findFirstWorkOrderIdForOrder(order) || '—';
+    openPartInfoPanel({
+      kind: 'OL',
+      order, item, idx,
+      wo: linked?.wo || null,
+      part: linked?.part || null,
+      title: d.partLabel,
+      sub: `${order.company} · Sipariş ${order.id}`,
+      techDrawing: tech,
+      qrUrl: buildTraceUrl('OL', order.company, d.refId),
+      metaRows: [
+        ['Sipariş', order.id],
+        ['İş Emri', woIdShow],
+        ['Müşteri', order.customer || '—'],
+        ['Termin', [fmtDate?.(d.orderDate) || d.orderDate, fmtDate?.(d.dueDate) || d.dueDate].filter(Boolean).join(' — ') || '—'],
+        ['Adet', d.qty],
+        ['İmalat Ölçüsü', d.mfgDimsText],
+        ['Malzeme', d.materialCode],
+        ['Isıl İşlem', d.heat],
+        ['Kaplama', d.coating],
+      ],
+    });
+  }
+
+  function openWoPartInfo(wo, part) {
+    if (!wo || !part) return;
+    const key = ensurePartQrKey(wo, part);
+    const order = wo.orderId ? (orders || []).find(o => o.id === wo.orderId) : null;
+    let orderItem = null;
+    let orderIdx = -1;
+    if (order) {
+      orderIdx = (order.items || []).findIndex(it =>
+        (it.desc && it.desc === part.name) ||
+        (it.partNo && String(it.partNo) === String(part.no))
+      );
+      if (orderIdx >= 0) orderItem = order.items[orderIdx];
+    }
+    const cost = order && orderItem ? findCostItemForOrderLine(order, orderItem, orderIdx) : null;
+    const mfgDims = part.mfgDims || orderItem?.mfgDims || cost?.mfgDims || null;
+    openPartInfoPanel({
+      kind: 'PT',
+      wo, part,
+      order: order || null,
+      item: orderItem,
+      idx: orderIdx,
+      title: part.name || partCode(wo, part),
+      sub: `${wo.company} · İş Emri ${wo.id}`,
+      techDrawing: part.techDrawing || orderItem?.techDrawing || '',
+      qrUrl: buildTraceUrl('PT', wo.company, key),
+      metaRows: [
+        ['İş Emri', wo.id],
+        ['Parça Kodu', partCode(wo, part)],
+        ['Sipariş', wo.orderId || '—'],
+        ['Müşteri', wo.customer || '—'],
+        ['Malzeme', part.material || '—'],
+        ['Operatör', part.operator || '—'],
+        ['İmalat Ölçüsü', formatLabelDims(mfgDims)],
+        ['Durum', wo.status || '—'],
+      ],
+    });
+  }
+
+  async function applyTechDrawingToCtx(file) {
+    if (!partInfoCtx || !file) return;
+    try {
+      const data = await fileToTechDrawingData(file);
+      partInfoCtx.techDrawing = data;
+      if (partInfoCtx.part) {
+        partInfoCtx.part.techDrawing = data;
+        if (partInfoCtx.wo && typeof cloudSave === 'function') cloudSave('saveWorkOrder', partInfoCtx.wo, companies);
+      }
+      if (partInfoCtx.item && partInfoCtx.order) {
+        partInfoCtx.item.techDrawing = data;
+        if (typeof cloudSave === 'function') cloudSave('saveOrder', partInfoCtx.order, companies);
+      }
+      renderTechDrawingBody(document.getElementById('partInfoTechBody'), data);
+      showToast('Teknik resim kaydedildi.', 'success');
+      if (openPartRef?.part === partInfoCtx.part) {
+        const hint = document.getElementById('drawerTechDrawHint');
+        if (hint) hint.textContent = 'Teknik resim yüklü · görüntülemek için tıklayın';
+      }
+    } catch (err) {
+      showToast(err?.message || 'Yükleme başarısız.', 'error');
+    }
+  }
+
   function userMayOpenTrace(kind, company) {
     if (!currentUser) return { ok: false, reason: 'Önce giriş yapın.' };
     if (company && !userCanAccessCompany(currentUser, company)) {
       return { ok: false, reason: 'Bu firmanın kaydına erişim yetkiniz yok.' };
     }
     const blue = isBlueCollar(currentUser);
-    if (kind === 'PT' || kind === 'WO') {
-      if (!userCanAccessPage(currentUser, 'workorders')) {
-        return { ok: false, reason: 'İş emri görüntüleme yetkiniz yok.' };
+    if (kind === 'PT' || kind === 'WO' || kind === 'OL') {
+      if (!userCanAccessPage(currentUser, 'workorders') && !userCanAccessPage(currentUser, 'orders')) {
+        return { ok: false, reason: 'İş emri / sipariş görüntüleme yetkiniz yok.' };
       }
       return { ok: true };
     }
@@ -6811,8 +7132,10 @@ ${vadeLine}`;
       return { ok: true };
     }
     if (kind === 'FS') {
-      // Fason portal sonraki faz — şimdilik yalnızca beyaz yaka / yönetici iş emrine yönlenebilir
       if (blue) return { ok: false, reason: 'Fason harici portal sonraki adımda açılacak.' };
+      return { ok: true };
+    }
+    if (kind === 'HR') {
       return { ok: true };
     }
     return { ok: false, reason: 'Bilinmeyen QR türü.' };
@@ -6832,22 +7155,30 @@ ${vadeLine}`;
       if (typeof setActiveCompany === 'function') setActiveCompany(parsed.company);
     }
 
+    if (parsed.kind === 'OL') {
+      const hit = findOrderLineByRef(parsed.refId);
+      if (!hit) { showToast('Kalem / parça kaydı bulunamadı.', 'error'); return false; }
+      openOrderLineInfo(hit.order, hit.item, hit.idx);
+      showToast(`Kalem açıldı: ${hit.item.partNo || hit.item.desc || parsed.refId}`, 'success');
+      return true;
+    }
     if (parsed.kind === 'PT') {
       const hit = findPartByRef(parsed.refId);
       if (!hit) { showToast('Parça iş emri bulunamadı.', 'error'); return false; }
-      showPage('workorders');
-      openDrawer(hit.wo, hit.part);
+      openWoPartInfo(hit.wo, hit.part);
       showToast(`Parça açıldı: ${parsed.refId}`, 'success');
       return true;
     }
     if (parsed.kind === 'WO') {
       const wo = workOrders.find(w => w.id === parsed.refId);
       if (!wo) { showToast('İş emri bulunamadı.', 'error'); return false; }
-      showPage('workorders');
       const part = (wo.parts && wo.parts[0]) || null;
-      if (part) openDrawer(wo, part);
-      else if (typeof openWorkOrderPreview === 'function' && !isBlueCollar(currentUser)) openWorkOrderPreview(wo);
-      else showToast(`${wo.id} iş emri (parça yok).`, 'info');
+      if (part) openWoPartInfo(wo, part);
+      else {
+        showPage('workorders');
+        if (typeof openWorkOrderPreview === 'function' && !isBlueCollar(currentUser)) openWorkOrderPreview(wo);
+        else showToast(`${wo.id} iş emri (parça yok).`, 'info');
+      }
       showToast(`İş emri: ${wo.id}`, 'success');
       return true;
     }
@@ -7008,6 +7339,21 @@ ${vadeLine}`;
   });
   window.addEventListener('hashchange', () => {
     if (currentUser) tryConsumeQrDeepLink();
+  });
+  document.getElementById('partInfoCloseBtn')?.addEventListener('click', closePartInfoPanel);
+  document.getElementById('partInfoCloseBtn2')?.addEventListener('click', closePartInfoPanel);
+  document.getElementById('partInfoOverlay')?.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'partInfoOverlay') closePartInfoPanel();
+  });
+  document.getElementById('partInfoTechUpload')?.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) applyTechDrawingToCtx(f);
+    e.target.value = '';
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const ov = document.getElementById('partInfoOverlay');
+    if (ov && !ov.classList.contains('hidden')) closePartInfoPanel();
   });
 
   function sessionFromFoundUser(found, company) {
@@ -7177,7 +7523,7 @@ ${vadeLine}`;
       ? 'Operasyonlar tamam'
       : ((act && (act.machine || act.plannedMachine)) || 'Atanmadı');
 
-    const partUrl = buildTraceUrl('PT', wo.company, partCode(wo, part));
+    const partUrl = buildTraceUrl('PT', wo.company, ensurePartQrKey(wo, part));
     const qrBox = document.getElementById('drawerQrBox');
     const qrUrlEl = document.getElementById('drawerQrUrl');
     if (qrBox) {
@@ -7185,6 +7531,12 @@ ${vadeLine}`;
       qrBox.innerHTML = src ? `<img src="${src}" alt="QR" class="w-full h-full object-contain" />` : '';
     }
     if (qrUrlEl) qrUrlEl.textContent = partUrl;
+    const techHint = document.getElementById('drawerTechDrawHint');
+    if (techHint) techHint.textContent = part.techDrawing
+      ? 'Teknik resim yüklü · görüntülemek için tıklayın'
+      : 'Künye + teknik resim ekranını aç / yükle';
+    const techBtn = document.getElementById('drawerTechDrawBtn');
+    if (techBtn) techBtn.onclick = () => openWoPartInfo(wo, part);
 
     const camContainer = document.getElementById('camSteps');
     camContainer.innerHTML = '';
@@ -8686,6 +9038,33 @@ ${vadeLine}`;
 
   const newWOModalOverlay = document.getElementById('newWOModalOverlay');
   let newWOPrefill = null; // Sipariş kaleminden açıldığında { orderId, quoteId } izlenebilirlik bilgisi tutar.
+  let newWOTechDrawingDraft = '';
+
+  function setNewWOTechPreview(dataUrl) {
+    newWOTechDrawingDraft = dataUrl || '';
+    const wrap = document.getElementById('newWOTechPreview');
+    const img = document.getElementById('newWOTechPreviewImg');
+    const pdf = document.getElementById('newWOTechPreviewPdf');
+    if (!wrap) return;
+    if (!dataUrl) {
+      wrap.classList.add('hidden');
+      if (img) { img.classList.add('hidden'); img.removeAttribute('src'); }
+      if (pdf) pdf.classList.add('hidden');
+      return;
+    }
+    wrap.classList.remove('hidden');
+    const isPdf = String(dataUrl).startsWith('data:application/pdf');
+    if (isPdf) {
+      if (img) { img.classList.add('hidden'); img.removeAttribute('src'); }
+      if (pdf) pdf.classList.remove('hidden');
+    } else {
+      if (pdf) pdf.classList.add('hidden');
+      if (img) {
+        img.src = dataUrl;
+        img.classList.remove('hidden');
+      }
+    }
+  }
 
   function openNewWOModal(prefill = null) {
     selectedRoute = [];
@@ -8698,13 +9077,22 @@ ${vadeLine}`;
     document.getElementById('newWOPartName').value = (prefill && prefill.partName) || '';
     document.getElementById('newWOMaterial').value = (prefill && prefill.material) || '';
     document.getElementById('newWOOperator').value = '';
+    const techInput = document.getElementById('newWOTechDrawing');
+    if (techInput) techInput.value = '';
+    setNewWOTechPreview((prefill && prefill.techDrawing) || '');
     document.getElementById('newWOCustomerList').innerHTML = companyCustomers()
       .map(c => `<option value="${c.name.replace(/"/g, '&quot;')}"></option>`).join('');
     updateNewWOContactOptions();
     renderOpCatalog();
     renderRouteTimeline();
-    newWOPrefill = prefill ? { orderId: prefill.orderId || null, quoteId: prefill.quoteId || null, company } : null;
-    if (prefill) {
+    newWOPrefill = prefill ? {
+      orderId: prefill.orderId || null,
+      quoteId: prefill.quoteId || null,
+      company,
+      techDrawing: prefill.techDrawing || '',
+      itemIdx: prefill.itemIdx != null ? prefill.itemIdx : null,
+    } : null;
+    if (prefill && prefill.orderId) {
       showToast(`${prefill.orderId} numaralı siparişten iş emri hazırlanıyor. Lütfen operasyon rotasını seçin.`, 'info');
     }
     newWOModalOverlay.classList.remove('hidden');
@@ -8713,6 +9101,9 @@ ${vadeLine}`;
   function closeNewWOModal() {
     newWOModalOverlay.classList.add('hidden');
     newWOPrefill = null;
+    setNewWOTechPreview('');
+    const techInput = document.getElementById('newWOTechDrawing');
+    if (techInput) techInput.value = '';
   }
 
   // Müşteri alanına yazılan/seçilen ada göre kayıtlı iletişim kişilerini listeler.
@@ -8735,6 +9126,19 @@ ${vadeLine}`;
   document.getElementById('newWOCancelBtn').addEventListener('click', closeNewWOModal);
   document.getElementById('newWOPartName').addEventListener('input', updateNewWOSubmitState);
   document.getElementById('newWOCustomer').addEventListener('input', updateNewWOContactOptions);
+  document.getElementById('newWOTechDrawing')?.addEventListener('change', async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) { setNewWOTechPreview(''); return; }
+    try {
+      const data = await fileToTechDrawingData(file);
+      setNewWOTechPreview(data);
+      showToast('Teknik resim eklendi.', 'success');
+    } catch (err) {
+      setNewWOTechPreview('');
+      showToast(err?.message || 'Dosya yüklenemedi.', 'error');
+      e.target.value = '';
+    }
+  });
   newWOModalOverlay.addEventListener('click', (e) => {
     if (e.target === newWOModalOverlay) closeNewWOModal();
   });
@@ -8758,10 +9162,10 @@ ${vadeLine}`;
     const woCompany = (newWOPrefill && newWOPrefill.company) || activeCompany;
     const seq = nextWoSeq(woCompany);
     const newId = woId(woCompany, seq);
-    const linkedQuote = (newWOPrefill && newWOPrefill.quoteId)
-      ? quotes.find(q => q.id === newWOPrefill.quoteId)
-      : null;
-    const qrPayload = linkedQuote ? ensureQuoteQr(linkedQuote) : buildTraceUrl('WO', woCompany, newId);
+    // İş emri düzeyinde paylaşılan QR yok — her parça PT anahtarı alır
+    const partNo = 1;
+    const partQrKey = `${newId}-P${String(partNo).padStart(2, '0')}`;
+    const techDrawing = newWOTechDrawingDraft || (newWOPrefill && newWOPrefill.techDrawing) || '';
     const newWO = {
       id: newId,
       company: woCompany,
@@ -8771,16 +9175,32 @@ ${vadeLine}`;
       status: 'Aktif',
       orderId: (newWOPrefill && newWOPrefill.orderId) || null,
       quoteId: (newWOPrefill && newWOPrefill.quoteId) || null,
-      qrPayload,
+      qrPayload: buildTraceUrl('PT', woCompany, partQrKey),
       parts: [{
-        no: 1,
+        no: partNo,
         name: partName,
         material,
         operator,
         activeCam: 0,
+        techDrawing,
+        qrKey: partQrKey,
         cam: selectedRoute.map(s => ({ label: s.step, machine: null, plannedMachine: null })),
       }],
     };
+    // Sipariş kalemine teknik resmi geri yaz
+    if (newWO.orderId && techDrawing) {
+      const ord = orders.find(o => o.id === newWO.orderId);
+      if (ord && Array.isArray(ord.items)) {
+        const idx = newWOPrefill && newWOPrefill.itemIdx != null
+          ? Number(newWOPrefill.itemIdx)
+          : ord.items.findIndex(it => (it.desc || '').trim() === partName);
+        if (idx >= 0 && ord.items[idx]) {
+          ord.items[idx].techDrawing = techDrawing;
+          ensureOrderItemQrKey(ord, ord.items[idx], idx);
+          if (typeof cloudSave === 'function') cloudSave('saveOrder', ord, companies);
+        }
+      }
+    }
     workOrders.push(newWO);
     cloudSave('saveWorkOrder', newWO, companies);
     const linkedOrderId = newWOPrefill && newWOPrefill.orderId;
@@ -10767,6 +11187,9 @@ ${vadeLine}`;
               <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/><rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></svg>
               QR Etiket
             </button>
+            <button data-order-item-info="${o.id}" data-item-idx="${i}" class="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded-lg transition-colors" title="Kalem künye / teknik resim">
+              Künye
+            </button>
             <button data-order-to-wo="${o.id}" data-item-idx="${i}" class="inline-flex items-center gap-1.5 text-[11px] font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-2.5 py-1.5 rounded-lg transition-colors" title="Bu kalem için iş emri">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>
               İş Emri
@@ -10875,7 +11298,8 @@ ${vadeLine}`;
     tbody.querySelectorAll('[data-order-to-wo]').forEach(btn => {
       btn.addEventListener('click', () => {
         const o = orders.find(x => x.id === btn.dataset.orderToWo);
-        const item = o && o.items[Number(btn.dataset.itemIdx)];
+        const idx = Number(btn.dataset.itemIdx);
+        const item = o && o.items[idx];
         if (!o || !item) return;
         openNewWOModal({
           company: o.company,
@@ -10884,7 +11308,18 @@ ${vadeLine}`;
           material: '',
           orderId: o.id,
           quoteId: o.quoteId || o.id,
+          techDrawing: item.techDrawing || '',
+          itemIdx: idx,
         });
+      });
+    });
+    tbody.querySelectorAll('[data-order-item-info]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const o = orders.find(x => x.id === btn.dataset.orderItemInfo);
+        const idx = Number(btn.dataset.itemIdx);
+        if (!o || !o.items[idx]) return;
+        ensureOrderItemQrKey(o, o.items[idx], idx);
+        openOrderLineInfo(o, o.items[idx], idx);
       });
     });
   }
@@ -10923,6 +11358,8 @@ ${vadeLine}`;
       material: '',
       orderId: order.id,
       quoteId: order.quoteId || order.id,
+      techDrawing: first.techDrawing || '',
+      itemIdx: 0,
     });
   }
 
@@ -15279,6 +15716,8 @@ ${vadeLine}`;
           material: item.material || '—',
           operator: '—',
           activeCam: 0,
+          techDrawing: it.techDrawing || '',
+          qrKey: ensureOrderItemQrKey(order, it, i),
           cam: [
             { label: 'Malzeme Hazırlık', machine: null },
             { label: 'CNC İşleme', machine: null },
@@ -15910,6 +16349,31 @@ ${vadeLine}`;
   }
   let editingCostAnalysisId = null;
 
+  function updateNewCostContactOptions(preferName) {
+    const sel = document.getElementById('newCostContact');
+    if (!sel) return;
+    const typed = (document.getElementById('newCostCustomer')?.value || '').trim().toLowerCase();
+    const match = typed
+      ? customers.find(c => c.company === activeCompany && (c.name || '').trim().toLowerCase() === typed)
+      : null;
+    if (!match || !match.contacts || !match.contacts.length) {
+      sel.innerHTML = `<option value="">${match ? 'Bu firma için kayıtlı kişi yok' : 'Önce firma seçin'}</option>`;
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    const prefer = String(preferName || '').trim().toLowerCase();
+    sel.innerHTML = match.contacts.map(ct => {
+      const n = (ct.name || 'İsimsiz').trim();
+      const dept = ct.department ? ` — ${ct.department}` : '';
+      const selected = prefer && n.toLowerCase() === prefer ? ' selected' : '';
+      return `<option value="${n.replace(/"/g, '&quot;')}"${selected}>${n}${dept}</option>`;
+    }).join('');
+    if (!prefer || ![...sel.options].some(o => o.value.trim().toLowerCase() === prefer)) {
+      sel.selectedIndex = 0;
+    }
+  }
+
   function setCostModalMode(existing) {
     editingCostAnalysisId = existing ? existing.id : null;
     const title = document.getElementById('newCostModalTitle');
@@ -15932,7 +16396,6 @@ ${vadeLine}`;
     costCoating2Manual = false;
     costHeatManual = false;
     document.getElementById('newCostCustomer').value = existing ? (existing.customer || '') : '';
-    document.getElementById('newCostContact').value = existing ? (existing.contact || '') : '';
     document.getElementById('newCostCurrency').value = existing ? (existing.currency || '₺') : '₺';
     document.getElementById('newCostProfitPct').value = String(existing ? (existing.profitPct ?? 25) : 25);
     document.getElementById('costItemDesc').value = '';
@@ -15958,6 +16421,7 @@ ${vadeLine}`;
     updateCostLaborCurrencyLabel();
     const dl = document.getElementById('costCustomerList');
     dl.innerHTML = customers.filter(c => c.company === activeCompany).map(c => `<option value="${c.name}"></option>`).join('');
+    updateNewCostContactOptions(existing ? (existing.contact || '') : '');
     refreshTcmbRates().then(() => { updateCostDensityHint(); recalcCostItemPreview(); });
     renderCostMaterialSelects();
     renderCostDimRows();
@@ -16140,6 +16604,7 @@ ${vadeLine}`;
   document.getElementById('newCostSaveBtn')?.addEventListener('click', () => saveCostAnalysis(false));
   document.getElementById('newCostCustomer')?.addEventListener('change', () => {
     const name = document.getElementById('newCostCustomer').value.trim();
+    updateNewCostContactOptions();
     const c = customers.find(x => x.company === activeCompany && x.name === name);
     if (c && c.currency) {
       document.getElementById('newCostCurrency').value = c.currency;
@@ -16148,6 +16613,7 @@ ${vadeLine}`;
       renderCostItemsDraft();
     }
   });
+  document.getElementById('newCostCustomer')?.addEventListener('input', () => updateNewCostContactOptions());
   document.getElementById('costSummaryCloseBtn')?.addEventListener('click', () => document.getElementById('costSummaryModalOverlay').classList.add('hidden'));
   document.getElementById('costSummaryModalOverlay')?.addEventListener('click', (e) => { if (e.target.id === 'costSummaryModalOverlay') e.currentTarget.classList.add('hidden'); });
   document.getElementById('costSummaryToQuoteBtn')?.addEventListener('click', () => {
