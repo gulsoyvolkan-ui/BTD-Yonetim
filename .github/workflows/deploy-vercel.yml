@@ -1,5 +1,6 @@
 # BTD Yonetim - GitHub push sonrasi Vercel Production deploy
 # Secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+# Uses Deployments API (token cannot authenticate Vercel CLI /v2/user)
 
 name: Deploy Vercel
 
@@ -19,30 +20,67 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@41.7.8
-
-      - name: Link Vercel project
+      - name: Deploy Production (Vercel API)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          mkdir -p .vercel
-          printf '%s' "{\"projectId\":\"${VERCEL_PROJECT_ID}\",\"orgId\":\"${VERCEL_ORG_ID}\"}" > .vercel/project.json
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Pull Vercel env
-        run: vercel pull --yes --environment=production --token="${VERCEL_TOKEN}" --scope="${VERCEL_ORG_ID}"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        continue-on-error: true
-
-      - name: Deploy Production
-        run: vercel deploy --prod --yes --token="${VERCEL_TOKEN}" --scope="${VERCEL_ORG_ID}"
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          set -euo pipefail
+          ORG="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+          BODY=$(jq -n \
+            --arg name "$REPO" \
+            --arg project "$VERCEL_PROJECT_ID" \
+            --arg org "$ORG" \
+            --arg repo "$REPO" \
+            --arg ref "$GITHUB_SHA" \
+            '{
+              name: $name,
+              project: $project,
+              target: "production",
+              gitSource: {
+                type: "github",
+                org: $org,
+                repo: $repo,
+                ref: $ref
+              }
+            }')
+          echo "Creating production deployment for $ORG/$REPO@$GITHUB_SHA"
+          RESP=$(curl -sS -X POST \
+            "https://api.vercel.com/v13/deployments?teamId=${VERCEL_ORG_ID}&forceNew=1" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          echo "$RESP" | jq '{id, url, inspectorUrl, readyState, status, error}'
+          if echo "$RESP" | jq -e '.error' >/dev/null; then
+            echo "Deploy API error"
+            exit 1
+          fi
+          ID=$(echo "$RESP" | jq -r '.id')
+          if [ -z "$ID" ] || [ "$ID" = "null" ]; then
+            echo "No deployment id returned"
+            exit 1
+          fi
+          # Poll until READY or ERROR (up to ~3 min)
+          for i in $(seq 1 36); do
+            STATE_JSON=$(curl -sS \
+              "https://api.vercel.com/v13/deployments/${ID}?teamId=${VERCEL_ORG_ID}" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}")
+            STATE=$(echo "$STATE_JSON" | jq -r '.readyState // .status // "unknown"')
+            URL=$(echo "$STATE_JSON" | jq -r '.url // empty')
+            echo "poll=$i readyState=$STATE url=$URL"
+            case "$STATE" in
+              READY|ready)
+                echo "Deployment ready: https://$URL"
+                exit 0
+                ;;
+              ERROR|error|CANCELED|canceled)
+                echo "$STATE_JSON" | jq '{readyState, status, errorMessage, errorCode}'
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for deployment"
+          exit 1
