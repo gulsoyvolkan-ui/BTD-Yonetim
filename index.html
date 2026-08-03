@@ -4851,46 +4851,45 @@
     openPrintDocument(buildDymoOrderLabelHtml(order, payload), `Etiket · ${order.id}`);
     showToast(`${idxs.length} kalem QR etiketi hazırlandı (her biri benzersiz).`, 'success');
   }
+  /** Standart marka anteti — logo (sol) · QR (sağ) · firma bilgisi (teklif/RFQ ile aynı) */
   function docLetterheadCss() {
     return `
-  .sheet { width: 210mm; max-width: 210mm; margin: 0 auto; padding: 12mm; box-sizing: border-box; min-height: 273mm; display: flex; flex-direction: column; }
-  .letterhead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8pt; padding-bottom: 0; margin-bottom: 0; border-bottom: none; }
-  .letterhead .company-block { max-width: 62%; flex: 1; min-width: 0; }
-  .brand-name { font-weight: 800; font-size: 18pt; color: #0f2a4a; margin: 0; letter-spacing: 0.4pt; line-height: 1.05; }
-  .legal-name { font-weight: 500; font-size: 8pt; color: #334155; margin: 3pt 0 0; text-transform: none; letter-spacing: 0; line-height: 1.35; }
-  .mark-row { display: flex; gap: 3.5mm; align-items: stretch; flex-shrink: 0; }
-  .logo-box { width: 22mm; height: 22mm; border: 0.5pt solid #e2e8f0; border-radius: 2mm; display: flex; align-items: center; justify-content: center; padding: 1.5mm; background: #fff; }
-  .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .sheet { width: 210mm; max-width: 210mm; margin: 0 auto; padding: 11mm 12mm 10mm; box-sizing: border-box; min-height: 273mm; display: flex; flex-direction: column; }
+  .head { display: flex; align-items: center; justify-content: space-between; gap: 10pt; margin-bottom: 0; }
+  .logo-hero { width: 56mm; height: 20mm; display: flex; align-items: center; justify-content: flex-start; flex-shrink: 0; }
+  .logo-hero img { max-width: 100%; max-height: 100%; object-fit: contain; object-position: left center; }
+  .qr-box { width: 20mm; height: 20mm; border: 0.6pt solid #cbd5e1; border-radius: 2mm; padding: 1.2mm; flex-shrink: 0; background: #fff; display: flex; align-items: center; justify-content: center; }
   .qr-box img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
-  .letterhead-sub { border-top: 2.5pt solid #0f2a4a; padding-top: 6pt; margin: 7pt 0 10pt; }
-  .letterhead-sub .meta-line { font-size: 8.5pt; color: #475569; margin: 1.5pt 0; line-height: 1.35; }
+  .head-rule { border-top: 2.5pt solid #0f2a4a; margin: 7pt 0 6pt; }
+  .legal-name { font-weight: 700; font-size: 9pt; color: #0f2a4a; margin: 0 0 3pt; line-height: 1.3; }
+  .firm-meta { font-size: 8pt; color: #475569; line-height: 1.4; margin: 0 0 8pt; }
+  .firm-meta strong { color: #0f2a4a; font-weight: 700; }
   .doc-body { flex: 1 1 auto; }
-  .doc-footer { margin-top: auto; padding-top: 8pt; border-top: 0.5pt solid #e2e8f0; text-align: center; font-size: 8pt; color: #64748b; letter-spacing: 0.15pt; }`;
+  .doc-footer { margin-top: auto; padding-top: 7pt; border-top: 0.5pt solid #e2e8f0; text-align: center; font-size: 7.5pt; color: #64748b; line-height: 1.45; }`;
   }
   function docLetterheadHtml(info, companyName, qrPayload) {
+    const esc = typeof escapeHtml === 'function'
+      ? escapeHtml
+      : (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const logoHref = new URL(info.logo, window.location.href).href;
-    const qrSrc = qrPayload ? qrDataUrl(qrPayload, 3) : '';
-    const qrBox = qrSrc
-      ? `<div class="logo-box qr-box"><img src="${qrSrc}" alt="QR ${companyName}" /></div>`
-      : '';
+    const qrSrc = qrPayload && typeof qrDataUrl === 'function' ? qrDataUrl(qrPayload, 3) : '';
     return `
-  <div class="letterhead">
-    <div class="company-block">
-      <p class="brand-name">${companyName}</p>
-      <p class="legal-name">${info.legal}</p>
-    </div>
-    <div class="mark-row">
-      <div class="logo-box"><img src="${logoHref}" alt="${companyName}" /></div>
-      ${qrBox}
-    </div>
+  <div class="head">
+    <div class="logo-hero"><img src="${logoHref}" alt="${esc(companyName)}" /></div>
+    ${qrSrc ? `<div class="qr-box"><img src="${qrSrc}" alt="QR" /></div>` : ''}
   </div>
-  <div class="letterhead-sub">
-    <p class="meta-line">${info.address}</p>
-    <p class="meta-line">${info.taxOffice} · Vergi No: ${info.taxNo} &nbsp;·&nbsp; Tel: ${info.phone}</p>
-  </div>`;
+  <div class="head-rule"></div>
+  <p class="legal-name">${esc(info.legal)}</p>
+  <p class="firm-meta">
+    ${esc(info.address)}<br>
+    <strong>${esc(info.taxOffice)}</strong> · Vergi No: ${esc(info.taxNo)} · Tel: ${esc(info.phone)}
+  </p>`;
   }
   function docFooterHtml(info) {
-    return `<div class="doc-footer">${info.website} &nbsp;·&nbsp; ${info.email}</div>`;
+    const esc = typeof escapeHtml === 'function'
+      ? escapeHtml
+      : (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return `<div class="doc-footer">${esc(info.website)} &nbsp;·&nbsp; ${esc(info.email)}</div>`;
   }
 
   // 2026 yılı Türkiye resmi tatilleri (ISO tarih). Termin tarihi hesabında iş günü olarak sayılmaz.
@@ -12506,12 +12505,8 @@ ${vadeLine}`;
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; margin: 0; font-size: 10pt; line-height: 1.4; background: #fff; }
   ${docLetterheadCss()}
-  .sheet { width: 186mm; max-width: 186mm; padding: 12mm; }
-  .brand-name { font-size: 15pt; }
-  .legal-name { font-size: 7.5pt; }
-  .logo-box { width: 20mm; height: 20mm; }
   .title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8pt; }
-  .title-row h1 { font-size: 14pt; letter-spacing: 1pt; color: #0f2a4a; margin: 0; }
+  .title-row h1 { font-size: 14pt; letter-spacing: 1pt; color: #0f2a4a; margin: 0; font-weight: 800; }
   .meta-box { text-align: right; font-size: 8.5pt; color: #475569; }
   .meta-box .ref { font-weight: 700; color: #0f2a4a; font-size: 10pt; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6pt; margin-bottom: 8pt; }
@@ -16607,7 +16602,7 @@ ${vadeLine}`;
       </tr>`;
     }).join('');
     const dateStr = a.date || a.createdAt || new Date().toISOString().slice(0, 10);
-    const logoUrl = new URL(info.logo, window.location.href).href;
+    const qrPayload = buildTraceUrl('COST', a.company, a.id);
 
     return `<!DOCTYPE html>
 <html lang="tr">
@@ -16618,13 +16613,7 @@ ${vadeLine}`;
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 11pt; line-height: 1.4; background: #fff; }
-  .sheet { width: 210mm; max-width: 210mm; margin: 0 auto; padding: 12mm; box-sizing: border-box; }
-  .letterhead { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2.5pt solid #0f2a4a; padding-bottom: 8pt; margin-bottom: 10pt; }
-  .letterhead .company-block { max-width: 62%; }
-  .letterhead .legal-name { font-weight: 800; font-size: 11pt; text-transform: uppercase; color: #0f2a4a; margin: 0 0 3pt; }
-  .letterhead .meta-line { font-size: 8.5pt; color: #475569; margin: 1pt 0; }
-  .letterhead .logo-box { width: 22mm; height: 22mm; border: 0.5pt solid #e2e8f0; border-radius: 2mm; display: flex; align-items: center; justify-content: center; padding: 1.5mm; }
-  .letterhead .logo-box img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  ${docLetterheadCss()}
   .title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8pt; }
   .title-row h1 { font-size: 15pt; letter-spacing: 1.2pt; color: #0f2a4a; margin: 0; font-weight: 800; }
   .meta-box { text-align: right; font-size: 9pt; color: #475569; }
@@ -16651,24 +16640,13 @@ ${vadeLine}`;
   .signatures .label { font-size: 8.5pt; font-weight: 700; color: #0f2a4a; text-transform: uppercase; margin-bottom: 28pt; }
   .signatures .line { border-top: 0.5pt solid #94a3b8; padding-top: 4pt; font-size: 9pt; }
   .signatures .line .co { font-weight: 700; color: #0f2a4a; }
-  @media print {
-    body { margin: 0; }
-    .sheet { padding: 12mm 12mm; width: auto; max-width: none; }
-  }
+  @media print { body { margin: 0; } }
 </style>
 </head>
 <body>
 <div class="sheet">
-  <div class="letterhead">
-    <div class="company-block">
-      <p class="legal-name">${esc(info.legal)}</p>
-      <p class="meta-line">${esc(info.address)}</p>
-      <p class="meta-line">${esc(info.taxOffice)} · Vergi No: ${esc(info.taxNo)} &nbsp;·&nbsp; Tel: ${esc(info.phone)}</p>
-      <p class="meta-line">${esc(info.website)} &nbsp;·&nbsp; ${esc(info.email)}</p>
-    </div>
-    <div class="logo-box"><img src="${logoUrl}" alt="${esc(a.company)}" /></div>
-  </div>
-
+  ${docLetterheadHtml(info, a.company, qrPayload)}
+  <div class="doc-body">
   <div class="title-row">
     <h1>MALİYET ANALİZİ</h1>
     <div class="meta-box">
@@ -16725,6 +16703,8 @@ ${vadeLine}`;
       <p class="line"><span class="co">Kaşe / İmza</span><br>&nbsp;</p>
     </div>
   </div>
+  </div>
+  ${docFooterHtml(info)}
 </div>
 </body>
 </html>`;
@@ -17053,46 +17033,92 @@ ${vadeLine}`;
 
   function buildProcSupplierOrderHtml(wo, supplierName, items) {
     const info = companies[wo.company] || companies[activeCompany];
+    if (!info) return '';
     const contact = lookupSupplier(supplierName);
+    const esc = typeof escapeHtml === 'function'
+      ? escapeHtml
+      : (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const qrPayload = buildTraceUrl('PO', wo.company || activeCompany, `${wo.id}-${supplierName}`);
     const rows = items.map((it, i) => {
       const dims = it.ordDims ? Object.entries(it.ordDims).map(([k, v]) => `${k}:${v}`).join(' ') : '—';
       return `<tr>
-        <td style="text-align:center">${i + 1}</td>
-        <td>${it.part || '—'}</td>
-        <td>${it.material || ''} ${it.alloy || ''}</td>
-        <td>${it.shapeName || '—'}</td>
-        <td>${dims}</td>
-        <td style="text-align:center">${it.qty || 1}</td>
-        <td style="text-align:right">${it.totalKg ? Number(it.totalKg).toFixed(3) + ' kg' : '—'}</td>
-        <td>${it.status || '—'}</td>
+        <td class="c">${i + 1}</td>
+        <td>${esc(it.part || '—')}</td>
+        <td>${esc(`${it.material || ''} ${it.alloy || ''}`.trim() || '—')}</td>
+        <td>${esc(it.shapeName || '—')}</td>
+        <td class="mono">${esc(dims)}</td>
+        <td class="c">${it.qty || 1}</td>
+        <td class="r">${it.totalKg ? Number(it.totalKg).toFixed(3) + ' kg' : '—'}</td>
+        <td>${esc(it.status || '—')}</td>
       </tr>`;
     }).join('');
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      @page{size:A4;margin:0}
-      body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#1e293b;margin:0;background:#fff}
-      .sheet{width:186mm;max-width:186mm;margin:12mm auto;padding:0}
-      h1{font-size:16pt;margin:0 0 4px}
-      .meta{font-size:9.5pt;color:#64748b;margin-bottom:12px}
-      table{width:100%;border-collapse:collapse;margin-top:10px}
-      th,td{border:1px solid #cbd5e1;padding:6px 8px;font-size:9.5pt}
-      th{background:#f1f5f9;text-align:left}
-      .head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px}
-      .logo{max-height:42px}
-    </style></head><body><div class="sheet">
-      <div class="head">
-        <div>
-          <h1>Malzeme Sipariş Formu</h1>
-          <div class="meta">${info ? info.legal : activeCompany}<br>İş Emri: <strong>${wo.id}</strong> · Müşteri: ${wo.customer || '—'}<br>Tedarikçi: <strong>${supplierName}</strong></div>
-        </div>
-        ${info && info.logo ? `<img class="logo" src="${info.logo}" alt="">` : ''}
+    return `<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<title>Malzeme Sipariş · ${esc(wo.id)} · ${esc(supplierName)}</title>
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; margin: 0; padding: 0; font-size: 10pt; line-height: 1.35; background: #fff; }
+  ${docLetterheadCss()}
+  .title-row { display: flex; justify-content: space-between; align-items: flex-end; gap: 10pt; margin-bottom: 8pt; }
+  .title-row h1 { font-size: 14pt; letter-spacing: 0.8pt; color: #0f2a4a; margin: 0; font-weight: 800; text-transform: uppercase; }
+  .meta-box { text-align: right; font-size: 8.5pt; color: #475569; line-height: 1.45; }
+  .meta-box .ref { font-weight: 800; color: #0f2a4a; font-size: 10pt; }
+  .party-box { border: 0.6pt solid #e2e8f0; background: #f8fafc; border-radius: 2mm; padding: 6pt 8pt; margin-bottom: 10pt; }
+  .party-box .label { font-size: 7.5pt; font-weight: 800; letter-spacing: 0.5pt; text-transform: uppercase; color: #0f2a4a; margin: 0 0 4pt; }
+  .party-box p { margin: 0 0 2pt; font-size: 9pt; color: #334155; }
+  .party-box .name { font-weight: 700; font-size: 10pt; color: #0f2a4a; }
+  table.items { width: 100%; border-collapse: collapse; margin: 4pt 0 10pt; }
+  table.items th { background: #0f2a4a; color: #fff; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.3pt; padding: 5pt 4pt; text-align: left; }
+  table.items td { padding: 5pt 4pt; border-bottom: 0.5pt solid #e2e8f0; font-size: 9pt; vertical-align: top; }
+  table.items td.c { text-align: center; }
+  table.items td.r { text-align: right; }
+  table.items td.mono { font-size: 8pt; color: #334155; }
+  .note { font-size: 8pt; color: #64748b; margin-top: 8pt; }
+  @media print { body { margin: 0; } }
+</style>
+</head>
+<body>
+<div class="sheet">
+  ${docLetterheadHtml(info, wo.company || activeCompany, qrPayload)}
+  <div class="doc-body">
+    <div class="title-row">
+      <h1>Malzeme Sipariş Formu</h1>
+      <div class="meta-box">
+        <div class="ref">${esc(wo.id)}</div>
+        <div>Müşteri: ${esc(wo.customer || '—')}</div>
+        <div>${esc(new Date().toLocaleDateString('tr-TR'))}</div>
       </div>
-      <div class="meta">İlgili: ${contact.contact || '—'} · Tel: ${contact.phone || '—'} · E-posta: ${contact.email || '—'} · WhatsApp: ${contact.whatsapp || '—'}</div>
-      <table>
-        <thead><tr><th>#</th><th>Parça</th><th>Malzeme</th><th>Şekil</th><th>Sipariş Ebat</th><th>Adet</th><th>Ağırlık</th><th>Durum</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="8" style="text-align:center">Kayıt yok</td></tr>'}</tbody>
-      </table>
-      <p class="meta" style="margin-top:16px">Oluşturma: ${new Date().toLocaleString('tr-TR')} · BTD Yönetim</p>
-    </div></body></html>`;
+    </div>
+    <div class="party-box">
+      <p class="label">Tedarikçi</p>
+      <p class="name">${esc(supplierName)}</p>
+      <p>İlgili: ${esc(contact.contact || '—')} · Tel: ${esc(contact.phone || '—')}</p>
+      <p>E-posta: ${esc(contact.email || '—')} · WhatsApp: ${esc(contact.whatsapp || '—')}</p>
+    </div>
+    <table class="items">
+      <thead>
+        <tr>
+          <th style="width:28px;">#</th>
+          <th>Parça</th>
+          <th>Malzeme</th>
+          <th>Şekil</th>
+          <th>Sipariş Ebat</th>
+          <th style="width:48px;text-align:center;">Adet</th>
+          <th style="width:64px;text-align:right;">Ağırlık</th>
+          <th style="width:72px;">Durum</th>
+        </tr>
+      </thead>
+      <tbody>${rows || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">Kayıt yok</td></tr>'}</tbody>
+    </table>
+    <p class="note">Oluşturma: ${esc(new Date().toLocaleString('tr-TR'))} · BTD Yönetim</p>
+  </div>
+  ${docFooterHtml(info)}
+</div>
+</body>
+</html>`;
   }
 
   function findProcForPart(woId, partNo) {
