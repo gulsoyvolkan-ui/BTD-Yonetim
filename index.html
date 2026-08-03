@@ -11037,92 +11037,143 @@ ${vadeLine}`;
     if (previewingQuote) downloadHtmlAsPdf(buildQuoteHtml(previewingQuote), `${previewingQuote.id}.pdf`);
   });
 
-  // A4 dikey PDF — yazıcı çıktısıyla aynı oran (210×297 mm, 12 mm iç boşluk).
-  // Ölçek: html2canvas genişliği A4 px ile sabitlenir; sayfaya yeniden büyütülmez.
+  /** Şablon CSS’ini #pdf-staging-host altına bağla — ana uygulamayı bozmaz */
+  function scopeCssForPdf(cssText, scope) {
+    if (!cssText) return '';
+    let out = '';
+    const chunks = String(cssText).split('}');
+    for (const chunk of chunks) {
+      const idx = chunk.indexOf('{');
+      if (idx === -1) continue;
+      const rawSel = chunk.slice(0, idx).trim();
+      const body = chunk.slice(idx + 1).trim();
+      if (!rawSel) continue;
+      if (rawSel.startsWith('@page') || rawSel.startsWith('@media')) continue;
+      if (rawSel.startsWith('@')) {
+        out += `${rawSel}{${body}}`;
+        continue;
+      }
+      const scoped = rawSel.split(',').map(sel => {
+        sel = sel.trim();
+        if (!sel) return '';
+        if (sel === 'html' || sel === 'body' || sel === ':root') return scope;
+        if (/^(html|body)\s+/.test(sel)) return `${scope} ${sel.replace(/^(html|body)\s+/, '')}`;
+        return `${scope} ${sel}`;
+      }).filter(Boolean).join(', ');
+      if (scoped) out += `${scoped}{${body}}`;
+    }
+    return out;
+  }
+
+  // A4 dikey PDF — yazdırma HTML’ini izole staging’de render eder (tüm sekmeler ortak).
   function downloadHtmlAsPdf(html, filename) {
-    if (typeof html2pdf === 'undefined') { showToast('PDF modülü yüklenemedi, internet bağlantınızı kontrol edin.', 'error'); return; }
+    if (typeof html2pdf === 'undefined') {
+      showToast('PDF modülü yüklenemedi, internet bağlantınızı kontrol edin.', 'error');
+      return;
+    }
     showToast('PDF hazırlanıyor...', 'info');
+
+    const A4_W_PX = Math.round(210 * (96 / 25.4)); // ≈ 794 @ 96dpi
     const src = String(html || '');
     const bodyMatch = src.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     const styleBlocks = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map(m => m[1]).join('\n');
 
-    const A4_W_MM = 210;
-    const A4_H_MM = 297;
-    const PX_PER_MM = 96 / 25.4;
-    const A4_W_PX = Math.round(A4_W_MM * PX_PER_MM); // ≈ 794
+    document.getElementById('pdf-staging-host')?.remove();
+    document.getElementById('pdf-staging-frame')?.remove();
 
     const host = document.createElement('div');
     host.id = 'pdf-staging-host';
-    host.style.cssText = `position:fixed;left:-12000px;top:0;width:${A4_W_MM}mm;background:#fff;z-index:-1;pointer-events:none;box-sizing:border-box;`;
+    // Ekranda (görünmez) tut — off-screen (-12000px) html2canvas ölçülerini bozuyordu
+    host.style.cssText = [
+      'position:fixed',
+      'left:0',
+      'top:0',
+      `width:${A4_W_PX}px`,
+      'background:#fff',
+      'opacity:0',
+      'pointer-events:none',
+      'z-index:-1',
+      'overflow:visible',
+      'box-sizing:border-box',
+    ].join(';');
 
-    if (styleBlocks) {
-      const styleEl = document.createElement('style');
-      styleEl.textContent = `${styleBlocks}
-        html, body { margin:0!important; padding:0!important; background:#fff!important; width:${A4_W_MM}mm!important; }
-        .sheet {
-          width: ${A4_W_MM}mm !important;
-          max-width: ${A4_W_MM}mm !important;
-          min-height: ${A4_H_MM}mm;
-          margin: 0 !important;
-          padding: 12mm !important;
-          box-sizing: border-box !important;
-        }
-      `;
-      host.appendChild(styleEl);
-    }
+    const styleEl = document.createElement('style');
+    styleEl.textContent = `
+      #pdf-staging-host, #pdf-staging-host * { box-sizing: border-box; }
+      #pdf-staging-host {
+        font-family: Arial, Helvetica, sans-serif;
+        color: #1e293b;
+        font-size: 10pt;
+        line-height: 1.35;
+        background: #fff;
+      }
+      #pdf-staging-host .sheet {
+        width: ${A4_W_PX}px !important;
+        max-width: ${A4_W_PX}px !important;
+        margin: 0 !important;
+        box-sizing: border-box !important;
+      }
+      ${scopeCssForPdf(styleBlocks, '#pdf-staging-host')}
+    `;
+    host.appendChild(styleEl);
 
-    const inner = document.createElement('div');
-    inner.style.cssText = `width:${A4_W_MM}mm;margin:0;padding:0;background:#fff;box-sizing:border-box;`;
-    inner.innerHTML = bodyMatch ? bodyMatch[1] : src;
-    host.appendChild(inner);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = bodyMatch ? bodyMatch[1] : src;
+    host.appendChild(wrap);
     document.body.appendChild(host);
 
     const cleanup = () => { try { host.remove(); } catch (_) {} };
-    const imgs = [...inner.querySelectorAll('img')];
+
+    const imgs = [...host.querySelectorAll('img')];
     const waitImgs = imgs.length
       ? Promise.all(imgs.map(img => {
           if (img.complete && img.naturalWidth) return Promise.resolve();
-          return new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 2500); });
+          return new Promise(r => {
+            img.onload = img.onerror = () => r();
+            setTimeout(r, 3000);
+          });
         }))
       : Promise.resolve();
 
-    waitImgs.then(() => new Promise(r => setTimeout(r, 300))).then(() => {
-      const target = inner.querySelector('.sheet') || inner;
-      target.style.width = `${A4_W_MM}mm`;
-      target.style.maxWidth = `${A4_W_MM}mm`;
-      target.style.margin = '0';
-      target.style.padding = '12mm';
-      target.style.boxSizing = 'border-box';
+    waitImgs
+      .then(() => new Promise(r => setTimeout(r, 250)))
+      .then(() => {
+        const target = host.querySelector('.sheet') || wrap;
+        target.style.width = `${A4_W_PX}px`;
+        target.style.maxWidth = `${A4_W_PX}px`;
+        target.style.margin = '0';
+        target.style.boxSizing = 'border-box';
 
-      // Yerleşim sonrası gerçek px genişliği — ölçek kaymasını engeller
-      const measuredW = Math.max(A4_W_PX, Math.ceil(target.getBoundingClientRect().width) || A4_W_PX);
-
-      return html2pdf().set({
-        margin: [0, 0, 0, 0],
-        filename,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#ffffff',
-          logging: false,
-          scrollX: 0,
-          scrollY: 0,
-          width: measuredW,
-          windowWidth: measuredW,
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] },
-      }).from(target).save();
-    }).then(() => {
-      cleanup();
-      showToast('PDF indirildi.', 'success');
-    }).catch((err) => {
-      console.error(err);
-      cleanup();
-      showToast('PDF oluşturulurken bir hata oluştu.', 'error');
-    });
+        return html2pdf().set({
+          margin: [0, 0, 0, 0],
+          filename: filename || 'belge.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            scrollX: 0,
+            scrollY: 0,
+            width: A4_W_PX,
+            windowWidth: A4_W_PX,
+            x: 0,
+            y: 0,
+          },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['css', 'legacy'] },
+        }).from(target).save();
+      })
+      .then(() => {
+        cleanup();
+        showToast('PDF indirildi.', 'success');
+      })
+      .catch((err) => {
+        console.error(err);
+        cleanup();
+        showToast('PDF oluşturulurken bir hata oluştu.', 'error');
+      });
   }
 
   // Müşteri/ilgili kişi kaydından e-posta adresini bulur.
