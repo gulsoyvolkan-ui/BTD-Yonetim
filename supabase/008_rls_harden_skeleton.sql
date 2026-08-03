@@ -1,0 +1,23 @@
+-- Üretim öncesi: demo RLS'i kaldırıp sıkı politikalara geçiş iskeleti.
+-- ŞU AN ÇALIŞTIRMA — uygulama hâlâ anon key ile yazıyor; sıkı RLS uygulamayı kırar.
+-- Gerçek müşteri verisi öncesi: Supabase Auth + firma bazlı politikalar gerekir.
+
+-- 1) Demo politikalarını düşürmek için (yalnızca Auth hazır olduğunda):
+-- DO $$
+-- DECLARE r RECORD;
+-- BEGIN
+--   FOR r IN
+--     SELECT c.relname AS tablename
+--     FROM pg_class c
+--     JOIN pg_namespace n ON n.oid = c.relnamespace
+--     WHERE n.nspname = 'public' AND c.relkind = 'r'
+--   LOOP
+--     EXECUTE format('DROP POLICY IF EXISTS demo_all_access ON public.%I', r.tablename);
+--   END LOOP;
+-- END $$;
+
+-- 2) Örnek: authenticated kullanıcı yalnız kendi firma_id satırlarını görsün
+-- (uygulama JWT claim / app metadata ile firma_id taşımalı)
+-- CREATE POLICY firma_select ON public.siparisler
+--   FOR SELECT TO authenticated
+--   USING (firma_id::text = coalesce(auth.jwt() ->> 'firma_id', ''));
