@@ -6,6 +6,10 @@ __pycache__/
 .env
 .env.*
 !.env.example
+*.pem
+*.p12
+credentials.json
+secrets.json
 
 # Editör / OS
 .DS_Store
@@ -13,7 +17,9 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/**
 
 # Geçici yama / lokal script çıktıları
 _patch_*.py

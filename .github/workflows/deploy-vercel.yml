@@ -1,6 +1,6 @@
-# BTD Yönetim · GitHub push sonrası Vercel Production deploy
-# Alternatif (daha kolay): Vercel Dashboard → Import Git Repo → otomatik deploy
+# BTD Yonetim - GitHub push sonrasi Vercel Production deploy
 # Secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+# Uses Deployments API (token cannot authenticate Vercel CLI /v2/user)
 
 name: Deploy Vercel
 
@@ -20,25 +20,80 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
-
-      - name: Pull Vercel env
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Require secrets
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [ -n "${VERCEL_TOKEN:-}" ] || { echo "::error::VERCEL_TOKEN secret boş"; missing=1; }
+          [ -n "${VERCEL_ORG_ID:-}" ] || { echo "::error::VERCEL_ORG_ID secret boş"; missing=1; }
+          [ -n "${VERCEL_PROJECT_ID:-}" ] || { echo "::error::VERCEL_PROJECT_ID secret boş"; missing=1; }
+          exit "$missing"
 
-      - name: Build
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy Production (Vercel API)
         env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-
-      - name: Deploy Production
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          ORG="${GITHUB_REPOSITORY%/*}"
+          REPO="${GITHUB_REPOSITORY#*/}"
+          BODY=$(jq -n \
+            --arg name "$REPO" \
+            --arg project "$VERCEL_PROJECT_ID" \
+            --arg org "$ORG" \
+            --arg repo "$REPO" \
+            --arg ref "$GITHUB_SHA" \
+            '{
+              name: $name,
+              project: $project,
+              target: "production",
+              gitSource: {
+                type: "github",
+                org: $org,
+                repo: $repo,
+                ref: $ref
+              }
+            }')
+          echo "Creating production deployment for $ORG/$REPO@$GITHUB_SHA"
+          RESP=$(curl -sS -X POST \
+            "https://api.vercel.com/v13/deployments?teamId=${VERCEL_ORG_ID}&forceNew=1" \
+            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$BODY")
+          # Token sızdırmaz: sadece güvenli alanları yazdır
+          echo "$RESP" | jq '{id, url, inspectorUrl, readyState, error: (.error // null | if type=="object" then {code, message} else . end)}'
+          if echo "$RESP" | jq -e '.error' >/dev/null; then
+            echo "Deploy API error"
+            exit 1
+          fi
+          ID=$(echo "$RESP" | jq -r '.id')
+          if [ -z "$ID" ] || [ "$ID" = "null" ]; then
+            echo "No deployment id returned"
+            exit 1
+          fi
+          for i in $(seq 1 36); do
+            STATE_JSON=$(curl -sS \
+              "https://api.vercel.com/v13/deployments/${ID}?teamId=${VERCEL_ORG_ID}" \
+              -H "Authorization: Bearer ${VERCEL_TOKEN}")
+            STATE=$(echo "$STATE_JSON" | jq -r '.readyState // .status // "unknown"')
+            URL=$(echo "$STATE_JSON" | jq -r '.url // empty')
+            echo "poll=$i readyState=$STATE url=$URL"
+            case "$STATE" in
+              READY|ready)
+                echo "Deployment ready: https://$URL"
+                exit 0
+                ;;
+              ERROR|error|CANCELED|canceled)
+                echo "$STATE_JSON" | jq '{readyState, status, errorMessage, errorCode}'
+                exit 1
+                ;;
+            esac
+            sleep 5
+          done
+          echo "Timed out waiting for deployment"
+          exit 1
