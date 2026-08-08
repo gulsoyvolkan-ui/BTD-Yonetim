@@ -2338,7 +2338,12 @@
       const client = sb();
       const label = 'saveFasonMfgCatalog';
       if (!client || !Array.isArray(arr)) return fail('no-client', label);
-      const existing = await selectAll(client, 'fason_imalat_katalogu', 'id');
+      let existing = [];
+      try {
+        existing = await selectAll(client, 'fason_imalat_katalogu', 'id');
+      } catch (e) {
+        return fail(e?.message || e || 'fason_imalat_katalogu tablosu yok — SQL 016 çalıştırın', label);
+      }
       const keepIds = new Set();
       for (const h of arr) {
         if (!h?.name) continue;
@@ -2549,21 +2554,33 @@
       }
     }
 
-    // Isıl / kaplama
+    // Isıl / kaplama / fason imalat
+    // NOT: alreadySeeded + boş tablo → diziyi silme (yeni eklenen tablolarda veri kaybı yapıyordu).
+    // Boşsa mevcut yerel diziyi seed et; tablo yoksa yerel dizi korunur.
     async function syncNamedCatalog(table, arr, mapTo, mapFrom) {
       if (!arr) return;
-      const n = await countTable(client, table);
-      if (!n && arr.length) {
-        if (alreadySeeded()) {
-          replaceArray(arr, []);
+      let n = 0;
+      try {
+        n = await countTable(client, table);
+      } catch (e) {
+        console.warn(`[BtdCloud] katalog okunamadı (${table}) — yerel dizi korunuyor:`, e?.message || e);
+        return;
+      }
+      if (!n) {
+        if (!arr.length) return;
+        const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
+        if (error) {
+          console.warn(`[BtdCloud] katalog seed başarısız (${table}):`, error.message || error);
           return;
         }
-        const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
-        if (error) throw error;
-      } else if (n) {
-        const rows = await selectAll(client, table, '*');
-        replaceArray(arr, rows.map(mapFrom));
+        try {
+          const rows = await selectAll(client, table, '*');
+          if (rows.length) replaceArray(arr, rows.map(mapFrom));
+        } catch (_) { /* ids sonra save ile gelir */ }
+        return;
       }
+      const rows = await selectAll(client, table, '*');
+      replaceArray(arr, rows.map(mapFrom));
     }
     await syncNamedCatalog(
       'isil_islem_katalogu',

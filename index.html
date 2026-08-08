@@ -7201,6 +7201,32 @@ ${vadeLine}`;
     }
   }
 
+  /** Katalog kaydı: önce localStorage, sonra Supabase; sonucu toast ile bildir */
+  async function persistNamedCatalog(method, arr, localPersistFn, okMsg) {
+    try { localPersistFn?.(); } catch (_) { /* ignore */ }
+    const fn = window.BtdCloud?.[method];
+    if (typeof fn !== 'function') {
+      showToast((okMsg || 'Yerel kaydedildi') + ' (bulut bağlı değil)', 'info');
+      return { ok: true, localOnly: true };
+    }
+    try {
+      const r = await fn(arr);
+      if (r && r.ok === false) {
+        const reason = String(r.reason || r.error || 'bulut hatası');
+        console.warn('[BTD cloud]', method, reason);
+        showToast(`Yerelde duruyor; buluta yazılamadı. SQL 016 çalıştırın.`, 'error');
+        return r;
+      }
+      try { localPersistFn?.(); } catch (_) { /* ignore */ }
+      if (okMsg) showToast(okMsg, 'success');
+      return r || { ok: true };
+    } catch (e) {
+      console.warn('[BTD cloud]', method, e);
+      showToast('Yerelde duruyor; bulut kaydı başarısız.', 'error');
+      return { ok: false, reason: e };
+    }
+  }
+
   /** Silme onayı — Evet/Hayır (tarayıcı confirm) */
   function confirmDelete(what) {
     const label = what ? String(what) : 'Bu kayıt';
@@ -13103,6 +13129,36 @@ ${vadeLine}`;
     { name: 'Lazer Kesim', priceEurPerHour: 60, priceEurPerPcs: 0 },
     { name: 'Abkant', priceEurPerHour: 35, priceEurPerPcs: 0 },
   ];
+  const FASON_MFG_LS_KEY = 'btd_fason_mfg_catalog_v1';
+  const HEAT_CAT_LS_KEY = 'btd_heat_catalog_v1';
+  const COAT_CAT_LS_KEY = 'btd_coat_catalog_v1';
+
+  function readCatalogLocal(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) && arr.length ? arr : null;
+    } catch (_) { return null; }
+  }
+  function writeCatalogLocal(key, arr) {
+    try {
+      localStorage.setItem(key, JSON.stringify((arr || []).map((x) => ({ ...x }))));
+    } catch (_) { /* quota */ }
+  }
+  function persistFasonMfgCatalogLocal() { writeCatalogLocal(FASON_MFG_LS_KEY, fasonMfgCatalog); }
+  function persistHeatCatalogLocal() { writeCatalogLocal(HEAT_CAT_LS_KEY, heatTreatmentCatalog); }
+  function persistCoatCatalogLocal() { writeCatalogLocal(COAT_CAT_LS_KEY, coatingCatalog); }
+
+  // Bulut gelmeden önce yerel yedeği yükle (yenilemede kayıp olmasın)
+  (() => {
+    const local = readCatalogLocal(FASON_MFG_LS_KEY);
+    if (local) {
+      fasonMfgCatalog.length = 0;
+      local.forEach((x) => fasonMfgCatalog.push(x));
+    }
+  })();
+
   let heatCatEditIndex = null;
   let coatCatEditIndex = null;
   let fasonMfgCatEditIndex = null;
@@ -15944,8 +16000,7 @@ Teşekkürler.`;
         fasonMfgCatEditIndex = null;
         document.getElementById('fasonMfgCatSaveBtn').textContent = 'Kaydet';
         renderFasonMfgCatalogTable();
-        cloudSave('saveFasonMfgCatalog', fasonMfgCatalog);
-        showToast('Kayıt silindi.', 'success');
+        persistNamedCatalog('saveFasonMfgCatalog', fasonMfgCatalog, persistFasonMfgCatalogLocal, 'Kayıt silindi.');
       });
     });
   }
@@ -15955,17 +16010,18 @@ Teşekkürler.`;
     const priceEurPerPcs = Number(document.getElementById('fasonMfgCatPricePcs')?.value) || 0;
     if (!name) { showToast('Hizmet adı girin.', 'error'); return; }
     const entry = { name, priceEurPerHour, priceEurPerPcs };
+    let okMsg = 'Eklendi.';
     if (fasonMfgCatEditIndex != null && fasonMfgCatalog[fasonMfgCatEditIndex]) {
       if (fasonMfgCatalog[fasonMfgCatEditIndex].dbId) entry.dbId = fasonMfgCatalog[fasonMfgCatEditIndex].dbId;
       fasonMfgCatalog[fasonMfgCatEditIndex] = entry;
-      showToast('Güncellendi.', 'success');
+      okMsg = 'Güncellendi.';
     } else {
       const dup = fasonMfgCatalog.findIndex((m) => m.name.toLowerCase() === name.toLowerCase());
       if (dup >= 0) {
         if (fasonMfgCatalog[dup].dbId) entry.dbId = fasonMfgCatalog[dup].dbId;
         fasonMfgCatalog[dup] = entry;
+        okMsg = 'Güncellendi.';
       } else fasonMfgCatalog.push(entry);
-      showToast('Eklendi.', 'success');
     }
     fasonMfgCatEditIndex = null;
     document.getElementById('fasonMfgCatName').value = '';
@@ -15973,7 +16029,7 @@ Teşekkürler.`;
     document.getElementById('fasonMfgCatPricePcs').value = 0;
     document.getElementById('fasonMfgCatSaveBtn').textContent = 'Kaydet';
     renderFasonMfgCatalogTable();
-    cloudSave('saveFasonMfgCatalog', fasonMfgCatalog);
+    persistNamedCatalog('saveFasonMfgCatalog', fasonMfgCatalog, persistFasonMfgCatalogLocal, okMsg);
   }
   function renderServiceCatalogTable(kind) {
     const isHeat = kind === 'heat';
@@ -16024,8 +16080,12 @@ Teşekkürler.`;
         else { coatCatEditIndex = null; document.getElementById('coatCatSaveBtn').textContent = 'Kaydet'; }
         renderServiceCatalogTable(kind);
         renderCostServiceSelects();
-        cloudSave(isHeat ? 'saveHeatTreatmentCatalog' : 'saveCoatingCatalog', catalog);
-        showToast('Kayıt silindi.', 'success');
+        persistNamedCatalog(
+          isHeat ? 'saveHeatTreatmentCatalog' : 'saveCoatingCatalog',
+          catalog,
+          isHeat ? persistHeatCatalogLocal : persistCoatCatalogLocal,
+          'Kayıt silindi.'
+        );
       });
     });
   }
@@ -16038,17 +16098,18 @@ Teşekkürler.`;
     if (!name) { showToast('Tür adı girin.', 'error'); return; }
     const entry = { name, priceEurPerKg, priceEurPerPcs };
     const editIdx = isHeat ? heatCatEditIndex : coatCatEditIndex;
+    let okMsg = 'Eklendi.';
     if (editIdx != null && catalog[editIdx]) {
       if (catalog[editIdx].dbId) entry.dbId = catalog[editIdx].dbId;
       catalog[editIdx] = entry;
-      showToast('Güncellendi.', 'success');
+      okMsg = 'Güncellendi.';
     } else {
       const dup = catalog.findIndex(m => m.name.toLowerCase() === name.toLowerCase());
       if (dup >= 0) {
         if (catalog[dup].dbId) entry.dbId = catalog[dup].dbId;
         catalog[dup] = entry;
+        okMsg = 'Güncellendi.';
       } else catalog.push(entry);
-      showToast('Eklendi.', 'success');
     }
     if (isHeat) {
       heatCatEditIndex = null;
@@ -16065,7 +16126,12 @@ Teşekkürler.`;
     }
     renderServiceCatalogTable(kind);
     renderCostServiceSelects();
-    cloudSave(isHeat ? 'saveHeatTreatmentCatalog' : 'saveCoatingCatalog', catalog);
+    persistNamedCatalog(
+      isHeat ? 'saveHeatTreatmentCatalog' : 'saveCoatingCatalog',
+      catalog,
+      isHeat ? persistHeatCatalogLocal : persistCoatCatalogLocal,
+      okMsg
+    );
   }
 
   function costId(company) {
@@ -20708,6 +20774,20 @@ Teşekkürler.`;
           renderServiceCatalogTable('heat');
           renderServiceCatalogTable('coat');
         }
+        // Bulut boşaltmışsa yerel yedeği geri yükle + tekrar yaz
+        if (typeof readCatalogLocal === 'function' && typeof fasonMfgCatalog !== 'undefined') {
+          if (!fasonMfgCatalog.length) {
+            const local = readCatalogLocal(FASON_MFG_LS_KEY);
+            if (local?.length) {
+              local.forEach((x) => fasonMfgCatalog.push(x));
+              persistNamedCatalog('saveFasonMfgCatalog', fasonMfgCatalog, persistFasonMfgCatalogLocal);
+            }
+          } else {
+            persistFasonMfgCatalogLocal();
+          }
+        }
+        if (typeof heatTreatmentCatalog !== 'undefined' && heatTreatmentCatalog.length) persistHeatCatalogLocal();
+        if (typeof coatingCatalog !== 'undefined' && coatingCatalog.length) persistCoatCatalogLocal();
         if (typeof renderFasonMfgCatalogTable === 'function') renderFasonMfgCatalogTable();
         if (typeof renderCostServiceSelects === 'function') renderCostServiceSelects();
       } catch (_) { /* ignore */ }
