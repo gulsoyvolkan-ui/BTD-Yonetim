@@ -160,6 +160,8 @@
       intercompany: !!c.intercompany,
       kaynak: c.source || null,
       linked_tedarikci_id: c.linkedSupplierDbId || null,
+      tl_bakiye: c.tlBalance == null || c.tlBalance === '' ? null : Number(c.tlBalance),
+      cari_rol: c.cariRole || null,
     };
   }
   function customerFromRow(r, companies) {
@@ -182,6 +184,8 @@
       intercompany: !!r.intercompany,
       source: r.kaynak || '',
       linkedSupplierDbId: r.linked_tedarikci_id || null,
+      tlBalance: r.tl_bakiye == null ? null : Number(r.tl_bakiye),
+      cariRole: r.cari_rol || '',
       contacts: (r.musteri_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -293,6 +297,8 @@
       intercompany: !!s.intercompany,
       kaynak: s.source || null,
       linked_musteri_id: s.linkedCustomerDbId || null,
+      tl_bakiye: s.tlBalance == null || s.tlBalance === '' ? null : Number(s.tlBalance),
+      cari_rol: s.cariRole || null,
     };
   }
   function supplierFromRow(r, companies) {
@@ -315,6 +321,8 @@
       intercompany: !!r.intercompany,
       source: r.kaynak || '',
       linkedCustomerDbId: r.linked_musteri_id || null,
+      tlBalance: r.tl_bakiye == null ? null : Number(r.tl_bakiye),
+      cariRole: r.cari_rol || '',
       materialGroups: (r.tedarikci_malzeme_gruplari || [])
         .map((x) => x.malzeme_gruplari?.ad)
         .filter(Boolean),
