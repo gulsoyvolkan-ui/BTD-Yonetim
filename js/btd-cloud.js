@@ -2532,10 +2532,11 @@
         const byKod = Object.fromEntries(ctx.productShapes.map((s) => [s.id, s]));
         const merged = rows.map((r) => {
           const prev = byKod[r.kod];
+          // Alan adları ve hacim formülü istemcide kaynak: eski DB alanlar[] uyumsuz kalırsa kg=0 olmasın
           return {
             id: r.kod,
-            name: r.ad,
-            fields: r.alanlar || [],
+            name: prev?.name || r.ad,
+            fields: (prev?.fields && prev.fields.length) ? prev.fields : (r.alanlar || []),
             dbId: r.id,
             volumeMm3: prev?.volumeMm3 || (() => 0),
           };

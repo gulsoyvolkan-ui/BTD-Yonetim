@@ -3576,7 +3576,7 @@
             </div>
             <div class="overflow-x-auto border border-steel-100 rounded-xl">
               <table class="w-full text-sm">
-                <thead><tr class="bg-steel-50 text-[11px] text-steel-400 font-semibold uppercase"><th class="px-2 py-2 text-left">Ölçü</th><th class="px-2 py-2 text-left">İmalat Ölçüleri</th><th class="px-2 py-2 text-left">Sipariş Ölçüleri</th></tr></thead>
+                <thead><tr class="bg-steel-50 text-[11px] text-steel-400 font-semibold uppercase"><th class="px-2 py-2 text-left">Alan</th><th class="px-2 py-2 text-left">İmalat Ölçüleri</th><th class="px-2 py-2 text-left">Sipariş Ölçüleri</th></tr></thead>
                 <tbody id="costDimsBody"></tbody>
               </table>
             </div>
@@ -13188,56 +13188,110 @@ ${vadeLine}`;
     return (procMaterialCatalog[mat] || []).find(a => a.name === alloyName) || null;
   }
 
+  // Ebat yorumu:
+  //  Ø50x100     → Yuvarlak: Çap × Uzunluk
+  //  50x50x50    → Levha/Sac (ve yassı/lama): Genişlik × Yükseklik × Uzunluk
+  //  Ø50x5x500   → Boru: Dış Çap × Çeper × Uzunluk
+  function dimVal(d, ...keys) {
+    if (!d) return 0;
+    for (const k of keys) {
+      if (d[k] != null && d[k] !== '') {
+        const n = Number(d[k]);
+        if (Number.isFinite(n)) return n;
+      }
+    }
+    return 0;
+  }
+  /** Eski kayıt: Ölçü/Genişlik/Uzunluk → Genişlik/Yükseklik/Uzunluk */
+  function normalizeSolidPlateDims(dims) {
+    const d = { ...(dims || {}) };
+    if (d['Ölçü'] != null && d['Ölçü'] !== '' && (d['Yükseklik'] == null || d['Yükseklik'] === '')) {
+      const olcu = d['Ölçü'];
+      const gen = d['Genişlik'];
+      d['Genişlik'] = olcu;
+      d['Yükseklik'] = gen;
+      delete d['Ölçü'];
+    }
+    return d;
+  }
+  function normalizePipeDims(dims) {
+    const d = { ...(dims || {}) };
+    if ((d['Çeper'] == null || d['Çeper'] === '') && d['Çeper kalınlığı'] != null && d['Çeper kalınlığı'] !== '') {
+      d['Çeper'] = d['Çeper kalınlığı'];
+    }
+    return d;
+  }
+  function normalizeDimsForShape(shape, dims) {
+    const id = shape?.id || '';
+    if (id === 'levha' || id === 'sac' || id === 'lama' || id === 'yassi') return normalizeSolidPlateDims(dims);
+    if (id === 'boru' || id === 'tube') return normalizePipeDims(dims);
+    return { ...(dims || {}) };
+  }
+  function solidPlateVolumeMm3(d) {
+    const n = normalizeSolidPlateDims(d);
+    return dimVal(n, 'Genişlik') * dimVal(n, 'Yükseklik') * dimVal(n, 'Uzunluk');
+  }
+  function pipeVolumeMm3(d) {
+    const n = normalizePipeDims(d);
+    const od = dimVal(n, 'Dış Çap');
+    const t = dimVal(n, 'Çeper', 'Çeper kalınlığı');
+    const L = dimVal(n, 'Uzunluk');
+    const id_ = Math.max(0, od - 2 * t);
+    return Math.PI * (Math.pow(od / 2, 2) - Math.pow(id_ / 2, 2)) * L;
+  }
+  /** Çeper / et kalınlığına sipariş +5 mm payı uygulanmaz */
+  function isWallThicknessField(f) {
+    return /çeper|kal[iı]nl[iı]k|i[çc]\s*çap/i.test(String(f || ''));
+  }
+  function stockAllowFromMfg(field, mfgRaw) {
+    if (mfgRaw === '' || mfgRaw == null) return '';
+    const n = Number(mfgRaw);
+    if (!Number.isFinite(n)) return '';
+    if (isWallThicknessField(field)) return String(n);
+    return String(Math.round((n + 5) * 10) / 10);
+  }
+
   // fields: imalat ebatı giriş alanları. volumeMm3(dims) sipariş ebatlarından hacim hesaplar.
   const productShapes = [
     { id: 'yuvarlak', name: 'Yuvarlak', fields: ['Çap', 'Uzunluk'],
-      volumeMm3: d => Math.PI * Math.pow((Number(d['Çap']) || 0) / 2, 2) * (Number(d['Uzunluk']) || 0) },
-    { id: 'yassi', name: 'Yassı Ürün', fields: ['Ölçü', 'Genişlik', 'Uzunluk'],
-      volumeMm3: d => (Number(d['Ölçü']) || 0) * (Number(d['Genişlik']) || 0) * (Number(d['Uzunluk']) || 0) },
+      volumeMm3: d => Math.PI * Math.pow((dimVal(d, 'Çap') || 0) / 2, 2) * dimVal(d, 'Uzunluk') },
+    { id: 'yassi', name: 'Yassı Ürün', fields: ['Genişlik', 'Yükseklik', 'Uzunluk'],
+      volumeMm3: solidPlateVolumeMm3 },
     { id: 'altikose', name: 'Altıköşe', fields: ['Çap', 'Uzunluk'],
-      // AF (anahtar ağzı) üzerinden yaklaşık düzgün altıgen alan
-      volumeMm3: d => { const af = Number(d['Çap']) || 0; return (Math.sqrt(3) / 2) * af * af * (Number(d['Uzunluk']) || 0); } },
-    { id: 'boru', name: 'Boru', fields: ['Dış Çap', 'Çeper kalınlığı', 'Uzunluk'],
-      volumeMm3: d => {
-        const od = Number(d['Dış Çap']) || 0, t = Number(d['Çeper kalınlığı']) || 0, L = Number(d['Uzunluk']) || 0;
-        const id_ = Math.max(0, od - 2 * t);
-        return Math.PI * (Math.pow(od / 2, 2) - Math.pow(id_ / 2, 2)) * L;
-      } },
-    { id: 'levha', name: 'Levha - Sac', fields: ['Ölçü', 'Genişlik', 'Uzunluk'],
-      volumeMm3: d => (Number(d['Ölçü']) || 0) * (Number(d['Genişlik']) || 0) * (Number(d['Uzunluk']) || 0) },
-    { id: 'lama', name: 'Lama Demiri', fields: ['Ölçü', 'Genişlik', 'Uzunluk'],
-      volumeMm3: d => (Number(d['Ölçü']) || 0) * (Number(d['Genişlik']) || 0) * (Number(d['Uzunluk']) || 0) },
+      volumeMm3: d => { const af = dimVal(d, 'Çap'); return (Math.sqrt(3) / 2) * af * af * dimVal(d, 'Uzunluk'); } },
+    { id: 'boru', name: 'Boru', fields: ['Dış Çap', 'Çeper', 'Uzunluk'],
+      volumeMm3: pipeVolumeMm3 },
+    { id: 'levha', name: 'Levha - Sac', fields: ['Genişlik', 'Yükseklik', 'Uzunluk'],
+      volumeMm3: solidPlateVolumeMm3 },
+    { id: 'lama', name: 'Lama Demiri', fields: ['Genişlik', 'Yükseklik', 'Uzunluk'],
+      volumeMm3: solidPlateVolumeMm3 },
     { id: 'dikdortgen', name: 'Dikdörtgen Profiller', fields: ['Yükseklik (A)', 'Genişlik (B)', 'Çeper (C)', 'Uzunluk'],
       volumeMm3: d => {
-        const A = Number(d['Yükseklik (A)']) || 0, B = Number(d['Genişlik (B)']) || 0, C = Number(d['Çeper (C)']) || 0, L = Number(d['Uzunluk']) || 0;
+        const A = dimVal(d, 'Yükseklik (A)'), B = dimVal(d, 'Genişlik (B)'), C = dimVal(d, 'Çeper (C)'), L = dimVal(d, 'Uzunluk');
         const Ai = Math.max(0, A - 2 * C), Bi = Math.max(0, B - 2 * C);
         return (A * B - Ai * Bi) * L;
       } },
     { id: 'celikboru', name: 'Çelik Boru', fields: ['Kalınlık', 'Dış Çap', 'İç Çap', 'Uzunluk'],
       volumeMm3: d => {
-        const od = Number(d['Dış Çap']) || 0;
-        let id_ = Number(d['İç Çap']);
-        const t = Number(d['Kalınlık']) || 0;
+        const od = dimVal(d, 'Dış Çap');
+        let id_ = dimVal(d, 'İç Çap');
+        const t = dimVal(d, 'Kalınlık');
         if (!id_ && t) id_ = Math.max(0, od - 2 * t);
-        const L = Number(d['Uzunluk']) || 0;
+        const L = dimVal(d, 'Uzunluk');
         return Math.PI * (Math.pow(od / 2, 2) - Math.pow((id_ || 0) / 2, 2)) * L;
       } },
-    { id: 'sac', name: 'Sac', fields: ['Ölçü', 'Genişlik', 'Uzunluk'],
-      volumeMm3: d => (Number(d['Ölçü']) || 0) * (Number(d['Genişlik']) || 0) * (Number(d['Uzunluk']) || 0) },
+    { id: 'sac', name: 'Sac', fields: ['Genişlik', 'Yükseklik', 'Uzunluk'],
+      volumeMm3: solidPlateVolumeMm3 },
     { id: 'kare', name: 'Kare Demirler', fields: ['Genişlik', 'Uzunluk'],
-      volumeMm3: d => { const s = Number(d['Genişlik']) || 0; return s * s * (Number(d['Uzunluk']) || 0); } },
+      volumeMm3: d => { const s = dimVal(d, 'Genişlik'); return s * s * dimVal(d, 'Uzunluk'); } },
     { id: 'kareprofil', name: 'Kare Profiller', fields: ['Dış Çap (A)', 'Çeper (B)', 'Uzunluk'],
       volumeMm3: d => {
-        const A = Number(d['Dış Çap (A)']) || 0, B = Number(d['Çeper (B)']) || 0, L = Number(d['Uzunluk']) || 0;
+        const A = dimVal(d, 'Dış Çap (A)'), B = dimVal(d, 'Çeper (B)'), L = dimVal(d, 'Uzunluk');
         const Ai = Math.max(0, A - 2 * B);
         return (A * A - Ai * Ai) * L;
       } },
-    { id: 'tube', name: 'Tube', fields: ['Dış Çap', 'Çeper kalınlığı', 'Uzunluk'],
-      volumeMm3: d => {
-        const od = Number(d['Dış Çap']) || 0, t = Number(d['Çeper kalınlığı']) || 0, L = Number(d['Uzunluk']) || 0;
-        const id_ = Math.max(0, od - 2 * t);
-        return Math.PI * (Math.pow(od / 2, 2) - Math.pow(id_ / 2, 2)) * L;
-      } },
+    { id: 'tube', name: 'Tube', fields: ['Dış Çap', 'Çeper', 'Uzunluk'],
+      volumeMm3: pipeVolumeMm3 },
   ];
 
   let procDimLocked = {}; // sipariş ebatı manuel düzenlendiyse true
@@ -13302,7 +13356,7 @@ ${vadeLine}`;
         const f = inp.dataset.mfgDim;
         if (!procDimLocked[f]) {
           const ord = [...tbody.querySelectorAll('[data-ord-dim]')].find(el => el.dataset.ordDim === f);
-          if (ord) ord.value = inp.value === '' ? '' : String(Math.round((Number(inp.value) + 5) * 10) / 10);
+          if (ord) ord.value = stockAllowFromMfg(f, inp.value);
         }
         calcProcWeight();
       });
@@ -13328,7 +13382,7 @@ ${vadeLine}`;
     const shape = currentProcShape();
     const density = currentProcDensity();
     const qty = Math.max(1, Number(document.getElementById('newProcQty').value) || 1);
-    const vol = shape.volumeMm3(readProcOrderDims());
+    const vol = shape.volumeMm3(normalizeDimsForShape(shape, readProcOrderDims()));
     const unitKg = density > 0 ? (vol * density) / 1e6 : 0;
     const totalKg = unitKg * qty;
     procCalcResult = { unitKg, totalKg };
@@ -16085,7 +16139,7 @@ Teşekkürler.`;
         const f = inp.dataset.costMfg;
         if (!costDimLocked[f]) {
           const ord = [...tbody.querySelectorAll('[data-cost-ord]')].find(el => el.dataset.costOrd === f);
-          if (ord) ord.value = inp.value === '' ? '' : String(Math.round((Number(inp.value) + 5) * 10) / 10);
+          if (ord) ord.value = stockAllowFromMfg(f, inp.value);
         }
         recalcCostItemPreview();
       });
@@ -16291,8 +16345,8 @@ Teşekkürler.`;
     const shape = currentCostShape();
     const density = currentCostDensity();
     const qty = Math.max(1, Number(document.getElementById('costQty').value) || 1);
-    const ordDims = readCostOrderDims();
-    const mfgDims = readCostMfgDims();
+    const ordDims = normalizeDimsForShape(shape, readCostOrderDims());
+    const mfgDims = normalizeDimsForShape(shape, readCostMfgDims());
     const volOrd = shape.volumeMm3(ordDims);
     const volMfg = shape.volumeMm3(mfgDims);
     const unitKg = density > 0 ? (volOrd * density) / 1e6 : 0;
@@ -16459,8 +16513,9 @@ Teşekkürler.`;
     const shapeSel = document.getElementById('costShape');
     if (shapeSel && it.shapeId && [...shapeSel.options].some(o => o.value === it.shapeId)) shapeSel.value = it.shapeId;
     renderCostDimRows();
-    const mfg = it.mfgDims || {};
-    const ord = it.ordDims || {};
+    const shape = currentCostShape();
+    const mfg = normalizeDimsForShape(shape, it.mfgDims || {});
+    const ord = normalizeDimsForShape(shape, it.ordDims || {});
     document.querySelectorAll('#costDimsBody [data-cost-mfg]').forEach((inp) => {
       const f = inp.dataset.costMfg;
       inp.value = mfg[f] != null && mfg[f] !== '' ? mfg[f] : '';
@@ -16907,9 +16962,37 @@ Teşekkürler.`;
     return pkg.form;
   }
 
-  function formatRfqDims(ordDims) {
+  function formatRfqDims(ordDims, shapeId) {
     if (!ordDims || typeof ordDims !== 'object') return '—';
-    const parts = Object.entries(ordDims)
+    const d = { ...ordDims };
+    let id = shapeId || '';
+    if (!id) {
+      if (d['Dış Çap'] != null && (d['Çeper'] != null || d['Çeper kalınlığı'] != null)) id = 'boru';
+      else if (d['Çap'] != null) id = 'yuvarlak';
+      else if (d['Yükseklik'] != null || d['Ölçü'] != null) id = 'levha';
+    }
+    // Kompakt endüstriyel gösterim
+    if (id === 'yuvarlak' || id === 'altikose') {
+      const c = dimVal(d, 'Çap');
+      const L = dimVal(d, 'Uzunluk');
+      if (c && L) return `Ø${c}x${L}`;
+    }
+    if (id === 'boru' || id === 'tube') {
+      const n = normalizePipeDims(d);
+      const od = dimVal(n, 'Dış Çap');
+      const t = dimVal(n, 'Çeper', 'Çeper kalınlığı');
+      const L = dimVal(n, 'Uzunluk');
+      if (od && t && L) return `Ø${od}x${t}x${L}`;
+    }
+    if (id === 'levha' || id === 'sac' || id === 'lama' || id === 'yassi') {
+      const n = normalizeSolidPlateDims(d);
+      const g = dimVal(n, 'Genişlik');
+      const y = dimVal(n, 'Yükseklik');
+      const L = dimVal(n, 'Uzunluk');
+      if (g && y && L) return `${g}x${y}x${L}`;
+      if (g && y) return `${g}x${y}`;
+    }
+    const parts = Object.entries(d)
       .filter(([, v]) => v != null && v !== '' && Number(v) !== 0)
       .map(([k, v]) => `${k}: ${v}`);
     return parts.length ? parts.join(' · ') : '—';
@@ -16995,7 +17078,7 @@ Teşekkürler.`;
         <tr class="border-t border-steel-100">
           <td class="px-3 py-2 text-sm font-medium text-steel-800">${it.part}</td>
           <td class="px-3 py-2 text-xs text-steel-500">${it.material || ''} ${it.alloy || ''}</td>
-          <td class="px-3 py-2 text-xs">${it.shapeName || '—'}<br><span class="text-[10px] text-steel-400 mono">${formatRfqDims(it.ordDims)}</span></td>
+          <td class="px-3 py-2 text-xs">${it.shapeName || '—'}<br><span class="text-[10px] text-steel-400 mono">${formatRfqDims(it.ordDims, it.shapeId)}</span></td>
           <td class="px-3 py-2 text-xs mono text-right">${it.qty || 1}</td>
           <td class="px-3 py-2 text-xs mono text-right">${it.totalKg ? Number(it.totalKg).toFixed(3) + ' kg' : '—'}</td>
         </tr>`).join('');
@@ -17144,7 +17227,7 @@ Teşekkürler.`;
       const mfgDims = it.mfgDims
         ? (typeof formatLabelDims === 'function' ? formatLabelDims(it.mfgDims) : formatRfqDims(it.mfgDims))
         : '—';
-      const ordDims = formatRfqDims(it.ordDims);
+      const ordDims = formatRfqDims(it.ordDims, it.shapeId);
       return `<tr>
         <td class="c">${i + 1}</td>
         <td>
@@ -17387,7 +17470,7 @@ Teşekkürler.`;
     pkg.groups.forEach(g => {
       const sups = (g.suppliers || []).filter(s => s.selected !== false);
       g.items.forEach(it => {
-        const dims = formatRfqDims(it.ordDims);
+        const dims = formatRfqDims(it.ordDims, it.shapeId);
         if (!sups.length) {
           lines.push([pkg.id, g.groupName, '', '', it.part, `${it.material || ''} ${it.alloy || ''}`.trim(), it.shapeName || '', dims, it.qty || 1, it.totalKg || '', f.deliveryPlace, f.dueDate, f.validUntil, f.paymentTerms]);
         } else {
@@ -18547,14 +18630,24 @@ Teşekkürler.`;
     const hit = keys.find(k => k.toLowerCase() === t || t.includes(k.toLowerCase()) || k.toLowerCase().includes(t));
     return hit || null;
   }
-  function guessShapeFromExcelDesc(desc) {
+  function guessShapeFromExcelDesc(desc, nums) {
     const t = String(desc || '').toLowerCase();
-    if (/yuvarlak|ø|⌀|\bmil\b/.test(t)) return 'yuvarlak';
+    const n = Array.isArray(nums) ? nums : extractDimsFromText(desc);
+    const hasO = /ø|⌀/.test(t);
+    // Ø50x5x500 → boru; Ø50x100 → yuvarlak
+    if (hasO) {
+      if (n.length >= 3 || /boru|tube|boru/.test(t)) return 'boru';
+      return 'yuvarlak';
+    }
+    if (/yuvarlak|\bmil\b/.test(t)) return 'yuvarlak';
+    if (/boru|tube/.test(t)) return 'boru';
     if (/\bsac\b/.test(t)) return 'sac';
     if (/levha/.test(t)) return 'levha';
     if (/lama|so[gğ]uk\s*[çc]ekme/.test(t)) return 'lama';
-    if (/kare/.test(t)) return 'yassi';
-    if (/boru/.test(t)) return 'boru';
+    if (/kare\s*profil/.test(t)) return 'kareprofil';
+    if (/kare/.test(t)) return 'kare';
+    // 50x50x50 gibi düz ebat → levha/sac ailesi
+    if (n.length >= 3) return 'levha';
     return 'lama';
   }
   function resolveExcelMaterialAlloy(codeG, desc) {
@@ -18619,32 +18712,30 @@ Teşekkürler.`;
     if (id === 'yuvarlak' || id === 'altikose') {
       dims['Çap'] = nums[0] || 0;
       dims['Uzunluk'] = nums[1] || 0;
-    } else if (id === 'boru' || id === 'celikboru') {
-      if (dims['Dış Çap'] !== undefined) dims['Dış Çap'] = nums[0] || 0;
-      if (dims['Çeper kalınlığı'] !== undefined) dims['Çeper kalınlığı'] = nums[1] || 0;
-      if (dims['Kalınlık'] !== undefined && !nums[1]) dims['Kalınlık'] = nums[0] || 0;
+    } else if (id === 'boru' || id === 'tube') {
+      dims['Dış Çap'] = nums[0] || 0;
+      dims['Çeper'] = nums[1] || 0;
+      dims['Uzunluk'] = nums[2] || 0;
+    } else if (id === 'celikboru') {
+      dims['Dış Çap'] = nums[0] || 0;
+      dims['Kalınlık'] = nums[1] || 0;
       dims['Uzunluk'] = nums[2] || nums[1] || 0;
+      if (nums[1]) dims['İç Çap'] = Math.max(0, (nums[0] || 0) - 2 * (nums[1] || 0));
     } else if (id === 'sac' || id === 'levha' || id === 'lama' || id === 'yassi') {
-      if (nums.length === 1) {
-        dims['Ölçü'] = nums[0];
-      } else {
-        const a = nums[0] || 0;
-        const b = nums[1] || 0;
-        // Lama 80x30 → Genişlik 80, kalınlık (Ölçü) 30
-        dims['Ölçü'] = Math.min(a, b) || a;
-        dims['Genişlik'] = Math.max(a, b) || b;
-        dims['Uzunluk'] = nums[2] || 0;
-      }
+      // 50x50x50 → Genişlik × Yükseklik × Uzunluk (sıra korunur)
+      dims['Genişlik'] = nums[0] || 0;
+      dims['Yükseklik'] = nums[1] != null ? nums[1] : 0;
+      dims['Uzunluk'] = nums[2] != null ? nums[2] : 0;
     } else {
       (shape.fields || []).forEach((f, i) => { if (nums[i] != null) dims[f] = nums[i]; });
     }
-    return dims;
+    return normalizeDimsForShape(shape, dims);
   }
   function addMmToDims(dims, add) {
     const out = { ...(dims || {}) };
     Object.keys(out).forEach((k) => {
       const n = Number(out[k]) || 0;
-      if (n > 0) out[k] = Math.round((n + add) * 10) / 10;
+      if (n > 0 && !isWallThicknessField(k)) out[k] = Math.round((n + add) * 10) / 10;
     });
     return out;
   }
@@ -18681,7 +18772,12 @@ Teşekkürler.`;
   }
   function buildCostItemFromExcelRow(row, currency = '₺') {
     const { material, alloy } = resolveExcelMaterialAlloy(row.matGrade, row.desc);
-    const shapeId = guessShapeFromExcelDesc(row.desc);
+    const mfgNums = extractDimsFromText(row.mfgDimText);
+    const ordNums = extractDimsFromText(row.ordDimText);
+    const descNums = extractDimsFromText(row.desc);
+    const baseNums = mfgNums.length ? mfgNums : (ordNums.length ? ordNums : descNums);
+    const shapeHint = [row.mfgDimText, row.ordDimText, row.desc].filter(Boolean).join(' ');
+    const shapeId = guessShapeFromExcelDesc(shapeHint, baseNums);
     const shape = productShapes.find(s => s.id === shapeId) || productShapes[0];
     const alloyObj = (procMaterialCatalog[material] || []).find(a => a.name === alloy);
     const density = alloyObj ? alloyObj.density : 0;
@@ -18690,10 +18786,6 @@ Teşekkürler.`;
     const qty = excelCellNum(row.qty) || 1;
     const excelAllInUnit = excelCellNum(row.unitPrice); // KDV hariç, her şey dahil satış/maliyet birim fiyatı
 
-    const mfgNums = extractDimsFromText(row.mfgDimText);
-    const ordNums = extractDimsFromText(row.ordDimText);
-    const descNums = extractDimsFromText(row.desc);
-    const baseNums = mfgNums.length ? mfgNums : descNums;
     let mfgDims = mapNumsToShapeDims(shape, baseNums);
     let ordDims = ordNums.length
       ? mapNumsToShapeDims(shape, ordNums)
