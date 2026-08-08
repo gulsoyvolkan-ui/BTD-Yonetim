@@ -1055,10 +1055,16 @@
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Müşteriler <span class="text-steel-400 font-medium">/ CRM</span></h1>
             <p class="text-sm text-steel-400 mt-1">Firma bazlı müşteri kayıtları · <span id="companyNameCustomers" class="font-semibold text-navy">Technomac</span></p>
           </div>
-          <button id="newCustomerBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="file" id="parasutCrmFileInput" accept=".xlsx,.xls" class="hidden" />
+            <button type="button" id="parasutCrmImportBtnCustomers" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-emerald-600/20">
+              Paraşüt Excel
+            </button>
+            <button id="newCustomerBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Yeni Müşteri Ekle
-          </button>
+            </button>
+          </div>
         </div>
 
         <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
@@ -1094,10 +1100,15 @@
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Tedarikçiler</h1>
             <p class="text-sm text-steel-400 mt-1">Hammadde, fason, hırdavat ve takım firmaları · otomatik tedarik eşleştirme · <span id="companyNameSuppliers" class="font-semibold text-navy">Technomac</span></p>
           </div>
-          <button id="newSupplierBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="parasutCrmImportBtnSuppliers" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-emerald-600/20">
+              Paraşüt Excel
+            </button>
+            <button id="newSupplierBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Yeni Tedarikçi
-          </button>
+            </button>
+          </div>
         </div>
 
         <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
@@ -2621,6 +2632,17 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Vergi No</label>
+          <input id="newSupplierTaxNo" type="text" placeholder="1234567890" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Vergi Dairesi</label>
+          <input id="newSupplierTaxOffice" type="text" placeholder="Örn. Kartal V.D." class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Firma Sabit Telefonu</label>
           <input id="newSupplierPhone" type="text" placeholder="0212 111 22 33" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
         </div>
@@ -3561,6 +3583,42 @@
     <div class="p-4 sm:p-5 border-t border-steel-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 bg-steel-50/60 shrink-0">
       <button id="newCostCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
       <button id="newCostSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-navy/25">Analizi Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PARAŞÜT CRM İÇE AKTARMA ============ -->
+<div id="parasutCrmImportOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[85] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div class="bg-emerald-700 px-5 py-4 flex items-start justify-between shrink-0">
+      <div>
+        <p class="text-[11px] text-white/70 font-semibold uppercase tracking-wide">Paraşüt · Cari Aktarım</p>
+        <h3 class="text-white font-bold text-lg mt-0.5">Müşteri / Tedarikçi Önizleme</h3>
+        <p class="text-white/70 text-xs mt-1">Hedef: <span id="parasutCrmTargetCompany" class="font-semibold text-white">Technomac</span> · vergi no / unvan eşlemesi · çift yönlü bağlantı</p>
+      </div>
+      <button type="button" id="parasutCrmImportCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5 shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="px-5 py-3 border-b border-steel-100 text-sm text-steel-600" id="parasutCrmImportMeta">—</div>
+    <div class="flex-1 overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-steel-50 text-[11px] uppercase text-steel-400 font-semibold">
+          <tr>
+            <th class="px-3 py-2.5 text-left">Aktar</th>
+            <th class="px-3 py-2.5 text-left">Unvan</th>
+            <th class="px-3 py-2.5 text-left">Rol</th>
+            <th class="px-3 py-2.5 text-left">Vergi No</th>
+            <th class="px-3 py-2.5 text-right">TL Bakiye</th>
+            <th class="px-3 py-2.5 text-left">Durum</th>
+          </tr>
+        </thead>
+        <tbody id="parasutCrmImportBody" class="divide-y divide-steel-100"></tbody>
+      </table>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex flex-wrap items-center justify-end gap-2 shrink-0">
+      <button type="button" id="parasutCrmImportCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="parasutCrmImportConfirmBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md">Seçilenleri Kaydet</button>
     </div>
   </div>
 </div>
@@ -5071,6 +5129,114 @@ ${vadeLine}`;
     if (hit) return hit;
     hit = pool.find((s) => partyMatchAliases(s).some((a) => normalizePartyMatchKey(a) === key));
     return hit || null;
+  }
+
+  /** Cari takip anahtarı: vergi no varsa VN:…, yoksa NM:normalizeUnvan */
+  function digitsOnly(s) {
+    return String(s || '').replace(/\D/g, '');
+  }
+  function normalizePartyKeyName(s) {
+    return String(s || '')
+      .trim()
+      .toLocaleUpperCase('tr-TR')
+      .replace(/İ/g, 'I')
+      .replace(/[^A-Z0-9ÇĞÖŞÜ]+/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function buildPartyKey(taxNo, name) {
+    const dig = digitsOnly(taxNo);
+    if (dig.length >= 10) return `VN:${dig}`;
+    const nm = normalizePartyKeyName(name);
+    return nm ? `NM:${nm}` : '';
+  }
+  function ensurePartyKey(party) {
+    if (!party) return '';
+    if (party.partyKey) return party.partyKey;
+    party.partyKey = buildPartyKey(party.taxNo, party.name);
+    return party.partyKey;
+  }
+  function guessCrmShortName(name) {
+    let s = String(name || '').trim();
+    if (!s) return '';
+    s = s
+      .replace(/\b(SANAYİ|SAN\.?|TİCARET|TİC\.?|LIMITED|LİMİTED|LTD\.?|ŞİRKETİ|ŞTİ\.?|ANONİM|A\.?\s*Ş\.?|AŞ\.?|VE|İTH\.?|İHR\.?|MÜHENDİSLİK|ENDÜSTRİ|END\.?)\b/gi, ' ')
+      .replace(/[.,]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const parts = s.split(' ').filter(Boolean);
+    return parts.slice(0, 3).join(' ') || String(name || '').trim().slice(0, 24);
+  }
+  function isIntercompanyPartyName(name) {
+    const u = normalizePartyKeyName(name);
+    return /\bBLUEMAC\b/.test(u) || /\bDEVORIAS\b/.test(u) || /\bTECHNOMAC\b/.test(u);
+  }
+  function guessSupplierCategoryFromName(name) {
+    const u = String(name || '').toLocaleUpperCase('tr-TR');
+    if (/KAPLAMA|ISIL|ISI\s*İŞLEM|BOYA|GALVAN/.test(u)) return 'Fason İmalatçı';
+    if (/HIRDAVAT|CİVATA|CIVATA|BAĞLANTI|VİDA/.test(u)) return 'Hırdavat';
+    if (/TAKIM|KALIP ELEMAN|FREZE|MATKAP/.test(u)) return 'Takım';
+    if (/YEDEK|PARÇA|OTOMOTİV|KAROSER|ASANSÖR/.test(u)) return 'Yedek Parça';
+    if (/ALÜMİNYUM|ALUMINYUM|ÇELİK|CELIK|METAL|DEMİR|DEMIR|SAC|PROFİL|PASLANMAZ|TOZ|METAL/.test(u)) return 'Hammadde';
+    return 'Hammadde';
+  }
+  function findCustomerByPartyKey(company, partyKey, taxNo, name) {
+    const key = partyKey || buildPartyKey(taxNo, name);
+    const dig = digitsOnly(taxNo);
+    const pool = customers.filter((c) => c.company === company);
+    if (key) {
+      const byKey = pool.find((c) => (c.partyKey || buildPartyKey(c.taxNo, c.name)) === key);
+      if (byKey) return byKey;
+    }
+    if (dig.length >= 10) {
+      const byTax = pool.find((c) => digitsOnly(c.taxNo) === dig);
+      if (byTax) return byTax;
+    }
+    return findCustomerByName(company, name);
+  }
+  function findSupplierByPartyKey(company, partyKey, taxNo, name) {
+    const key = partyKey || buildPartyKey(taxNo, name);
+    const dig = digitsOnly(taxNo);
+    const pool = suppliers.filter((s) => s.company === company);
+    if (key) {
+      const byKey = pool.find((s) => (s.partyKey || buildPartyKey(s.taxNo, s.name)) === key);
+      if (byKey) return byKey;
+    }
+    if (dig.length >= 10) {
+      const byTax = pool.find((s) => digitsOnly(s.taxNo) === dig);
+      if (byTax) return byTax;
+    }
+    return findSupplierByName(company, name);
+  }
+  function findLinkedSupplierForCustomer(c) {
+    if (!c) return null;
+    if (c.linkedSupplierDbId) {
+      const byId = suppliers.find((s) => s.dbId && s.dbId === c.linkedSupplierDbId);
+      if (byId) return byId;
+    }
+    const key = c.partyKey || buildPartyKey(c.taxNo, c.name);
+    if (!key) return null;
+    return suppliers.find((s) => s.company === c.company && (s.partyKey || buildPartyKey(s.taxNo, s.name)) === key) || null;
+  }
+  function findLinkedCustomerForSupplier(s) {
+    if (!s) return null;
+    if (s.linkedCustomerDbId) {
+      const byId = customers.find((c) => c.dbId && c.dbId === s.linkedCustomerDbId);
+      if (byId) return byId;
+    }
+    const key = s.partyKey || buildPartyKey(s.taxNo, s.name);
+    if (!key) return null;
+    return customers.find((c) => c.company === s.company && (c.partyKey || buildPartyKey(c.taxNo, c.name)) === key) || null;
+  }
+  async function cloudSaveAwait(method, ...args) {
+    try {
+      const fn = window.BtdCloud?.[method];
+      if (typeof fn !== 'function') return { ok: false, reason: 'no-fn' };
+      return await fn(...args);
+    } catch (e) {
+      console.warn('[BTD cloud await]', method, e);
+      return { ok: false, reason: e?.message || String(e) };
+    }
   }
   function resolveExcelCustomerName(company, rawName) {
     const raw = String(rawName || '').trim();
@@ -9624,6 +9790,8 @@ ${vadeLine}`;
           <td class="px-5 py-3.5">
             <p class="font-semibold text-steel-800">${c.name}</p>
             ${c.shortName ? `<p class="text-[11px] text-emerald-700 font-semibold mt-0.5">Kısa: ${c.shortName}</p>` : ''}
+            ${c.intercompany ? `<span class="inline-flex mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">Grup firması</span>` : ''}
+            ${c.linkedSupplierDbId || (typeof findLinkedSupplierForCustomer === 'function' && findLinkedSupplierForCustomer(c)) ? `<span class="inline-flex mt-1 ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">+ Tedarikçi bağlı</span>` : ''}
             ${c.address ? `<p class="text-xs text-steel-400 mt-0.5 max-w-xs truncate" title="${c.address.replace(/"/g, '&quot;')}">${c.address}</p>` : ''}
             ${primary ? `<p class="text-[11px] text-steel-500 mt-1">${primary.name || ''}${primary.email ? ' · ' + primary.email : ''}</p>` : ''}
           </td>
@@ -9727,6 +9895,9 @@ ${vadeLine}`;
         <td class="px-5 py-3.5">
           <p class="font-semibold text-steel-800">${s.name}</p>
           ${s.shortName ? `<p class="text-[11px] text-emerald-700 font-semibold mt-0.5">Kısa: ${s.shortName}</p>` : ''}
+          ${s.intercompany ? `<span class="inline-flex mt-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-50 text-violet-700">Grup firması</span>` : ''}
+          ${s.linkedCustomerDbId || (typeof findLinkedCustomerForSupplier === 'function' && findLinkedCustomerForSupplier(s)) ? `<span class="inline-flex mt-1 ml-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-50 text-sky-700">+ Müşteri bağlı</span>` : ''}
+          ${s.taxNo ? `<p class="text-[10px] text-steel-400 mt-0.5">VN: ${s.taxNo}</p>` : ''}
           ${s.address ? `<p class="text-xs text-steel-400 mt-0.5 truncate max-w-xs">${s.address}</p>` : ''}
           ${scopeBits ? `<p class="text-[10px] text-steel-400 mt-0.5">${scopeBits}${extra}</p>` : ''}
         </td>
@@ -9968,6 +10139,10 @@ ${vadeLine}`;
     document.getElementById('newSupplierSubmitBtn').textContent = supplier ? 'Değişiklikleri Kaydet' : 'Tedarikçi Ekle';
     document.getElementById('newSupplierName').value = supplier ? supplier.name : '';
     document.getElementById('newSupplierShortName').value = supplier ? (supplier.shortName || '') : '';
+    const taxNoEl = document.getElementById('newSupplierTaxNo');
+    const taxOffEl = document.getElementById('newSupplierTaxOffice');
+    if (taxNoEl) taxNoEl.value = supplier ? (supplier.taxNo || '') : '';
+    if (taxOffEl) taxOffEl.value = supplier ? (supplier.taxOffice || '') : '';
     const cat = supplier ? (supplier.category || 'Hammadde') : 'Hammadde';
     const catSel = document.getElementById('newSupplierCategory');
     if ([...catSel.options].some(o => o.value === cat)) catSel.value = cat;
@@ -10053,10 +10228,14 @@ ${vadeLine}`;
       .filter(ct => ct.name || ct.phone || ct.whatsapp || ct.email);
     const primary = cleanContacts[0] || null;
     const category = document.getElementById('newSupplierCategory').value;
+    const taxNoVal = document.getElementById('newSupplierTaxNo')?.value.trim() || '';
     const payload = {
       company: activeCompany,
       name,
       shortName: document.getElementById('newSupplierShortName').value.trim(),
+      taxNo: taxNoVal,
+      taxOffice: document.getElementById('newSupplierTaxOffice')?.value.trim() || '',
+      partyKey: buildPartyKey(taxNoVal, name),
       category,
       phone: document.getElementById('newSupplierPhone').value.trim(),
       whatsapp: primary ? primary.whatsapp : '',
@@ -10264,6 +10443,7 @@ ${vadeLine}`;
       target.phone = firmPhone;
       target.taxNo = document.getElementById('newCustomerTaxNo').value.trim();
       target.taxOffice = document.getElementById('newCustomerTaxOffice').value.trim();
+      target.partyKey = buildPartyKey(target.taxNo, target.name);
       target.currency = document.getElementById('newCustomerCurrency').value;
       target.paymentTerms = document.getElementById('newCustomerPaymentTerms').value;
       target.leadTimeDays = Math.max(1, Number(document.getElementById('newCustomerLeadTime').value) || 15);
@@ -10284,6 +10464,7 @@ ${vadeLine}`;
         phone: firmPhone,
         taxNo: document.getElementById('newCustomerTaxNo').value.trim(),
         taxOffice: document.getElementById('newCustomerTaxOffice').value.trim(),
+        partyKey: buildPartyKey(document.getElementById('newCustomerTaxNo').value.trim(), name),
         currency: document.getElementById('newCustomerCurrency').value,
         paymentTerms: document.getElementById('newCustomerPaymentTerms').value,
         leadTimeDays: Math.max(1, Number(document.getElementById('newCustomerLeadTime').value) || 15),
@@ -10695,7 +10876,13 @@ ${vadeLine}`;
         </td>
         <td class="px-4 py-3.5 text-steel-500">${fmtDate(q.date)}</td>
         <td class="px-4 py-3.5 text-steel-500">${q.items.length} kalem</td>
-        <td class="px-4 py-3.5 font-semibold text-steel-800 mono">${fmtMoney(quoteGrandTotal(q), q.currency)}</td>
+        <td class="px-4 py-3.5 font-semibold text-steel-800 mono">
+          ${(() => {
+            const money = quoteMoneyBreakdown(q);
+            return `<p>${fmtMoney(money.grand, q.currency)}</p>
+            <p class="text-[10px] text-steel-400 font-normal mt-0.5">KDV’siz: ${fmtMoney(money.subtotal, q.currency)} · KDV %${money.vatRate}</p>`;
+          })()}
+        </td>
         <td class="px-4 py-3.5">
           <select data-status-quote="${q.id}" class="text-[11px] font-bold px-2 py-1 rounded-full border-0 focus:outline-none focus:ring-2 focus:ring-navy/30 cursor-pointer ${statusStyle[q.status] || statusStyle['Taslak']}">
             ${statusOptions.map(s => `<option value="${s}" ${s === q.status ? 'selected' : ''}>${s}</option>`).join('')}
@@ -17833,6 +18020,315 @@ ${vadeLine}`;
   document.getElementById('costExcelImportConfirmBtn')?.addEventListener('click', confirmCostExcelImport);
   document.getElementById('costExcelImportOverlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'costExcelImportOverlay') closeCostExcelImport();
+  });
+
+  // ─── Paraşüt CRM Excel → Technomac müşteri/tedarikçi ─────────────────────
+  const PARASUT_CRM_TARGET = 'Technomac';
+  let parasutCrmPreviewRows = [];
+
+  function parasutPickCol(row, aliases) {
+    const keys = Object.keys(row || {});
+    for (const a of aliases) {
+      const hit = keys.find((k) => String(k).trim().toLocaleLowerCase('tr-TR') === a.toLocaleLowerCase('tr-TR'));
+      if (hit != null && row[hit] !== undefined && row[hit] !== null && String(row[hit]).trim() !== '') return row[hit];
+    }
+    for (const a of aliases) {
+      const hit = keys.find((k) => String(k).toLocaleLowerCase('tr-TR').includes(a.toLocaleLowerCase('tr-TR')));
+      if (hit != null && row[hit] !== undefined && row[hit] !== null && String(row[hit]).trim() !== '') return row[hit];
+    }
+    return '';
+  }
+  function parasutRoleFromBalance(tl) {
+    const n = Number(tl);
+    if (!Number.isFinite(n) || n === 0) return 'both';
+    return n < 0 ? 'supplier' : 'customer';
+  }
+  function parasutRoleLabel(role) {
+    if (role === 'customer') return 'Müşteri';
+    if (role === 'supplier') return 'Tedarikçi';
+    return 'Çift yönlü';
+  }
+  function parasutFormatTl(n) {
+    const v = Number(n) || 0;
+    return v.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ₺';
+  }
+  function buildParasutCrmPreview(wb) {
+    const sheetName = wb.SheetNames.find((n) => /müşteri|musteri|tedarik/i.test(n)) || wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
+    const byKey = new Map();
+    raw.forEach((row, idx) => {
+      const name = String(parasutPickCol(row, ['Müşteri/tedarikçi ismi', 'unvan', 'isim', 'adı', 'adi']) || '').trim();
+      if (!name) return;
+      const taxNo = digitsOnly(parasutPickCol(row, ['Vergi numarası/TC kimlik no', 'Vergi numarası/TC', 'vergi no', 'vergi numarası', 'vkn', 'tckn']));
+      const partyKey = buildPartyKey(taxNo, name);
+      const tl = Number(parasutPickCol(row, ['TL Bakiye', 'bakiye', 'tl'])) || 0;
+      const emailRaw = String(parasutPickCol(row, ['E-posta', 'eposta', 'email']) || '').trim();
+      const email = emailRaw.split(/[,;]/)[0].trim();
+      const phone = String(parasutPickCol(row, ['Telefon', 'tel', 'gsm']) || '').trim();
+      const taxOffice = String(parasutPickCol(row, ['Vergi dairesi', 'vergi dairesi']) || '').trim();
+      const adres = String(parasutPickCol(row, ['Adres', 'adres']) || '').trim();
+      const il = String(parasutPickCol(row, ['İl', 'il']) || '').trim();
+      const ilce = String(parasutPickCol(row, ['İlçe', 'ilce', 'ilçe']) || '').trim();
+      const addressParts = [adres, [ilce, il].filter(Boolean).join(' / ')].filter(Boolean);
+      const address = addressParts.join('\n').trim();
+      const existing = byKey.get(partyKey);
+      if (existing) {
+        existing.tlBalance = (Number(existing.tlBalance) || 0) + tl;
+        if (!existing.email && email) existing.email = email;
+        if (!existing.phone && phone) existing.phone = phone;
+        if (!existing.taxOffice && taxOffice) existing.taxOffice = taxOffice;
+        if (!existing.address && address) existing.address = address;
+        existing.dupCount = (existing.dupCount || 1) + 1;
+        return;
+      }
+      byKey.set(partyKey, {
+        selected: true,
+        name,
+        shortName: guessCrmShortName(name),
+        taxNo,
+        taxOffice,
+        partyKey,
+        email,
+        phone,
+        address,
+        tlBalance: tl,
+        role: 'both',
+        intercompany: isIntercompanyPartyName(name),
+        category: guessSupplierCategoryFromName(name),
+        company: PARASUT_CRM_TARGET,
+        source: 'parasut',
+        excelRow: idx + 2,
+        dupCount: 1,
+      });
+    });
+    const list = [...byKey.values()];
+    list.forEach((r) => { r.role = parasutRoleFromBalance(r.tlBalance); });
+    list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'tr'));
+    return list.map((r) => {
+      const existCust = findCustomerByPartyKey(r.company, r.partyKey, r.taxNo, r.name);
+      const existSupp = findSupplierByPartyKey(r.company, r.partyKey, r.taxNo, r.name);
+      let status = 'Yeni';
+      const bits = [];
+      if (existCust) bits.push('müşteri var');
+      if (existSupp) bits.push('tedarikçi var');
+      if (bits.length) status = 'Güncelle · ' + bits.join(' + ');
+      if (r.intercompany) status += (status === 'Yeni' ? '' : ' · ') + 'grup firması';
+      if (r.dupCount > 1) status += ` · ${r.dupCount} satır birleşti`;
+      return { ...r, status, existCust, existSupp };
+    });
+  }
+  function closeParasutCrmImport() {
+    parasutCrmPreviewRows = [];
+    document.getElementById('parasutCrmImportOverlay')?.classList.add('hidden');
+  }
+  function renderParasutCrmImportPreview() {
+    const body = document.getElementById('parasutCrmImportBody');
+    const meta = document.getElementById('parasutCrmImportMeta');
+    const targetEl = document.getElementById('parasutCrmTargetCompany');
+    if (targetEl) targetEl.textContent = PARASUT_CRM_TARGET;
+    if (!body) return;
+    const n = parasutCrmPreviewRows.length;
+    const sel = parasutCrmPreviewRows.filter((r) => r.selected).length;
+    const roles = {
+      customer: parasutCrmPreviewRows.filter((r) => r.role === 'customer').length,
+      supplier: parasutCrmPreviewRows.filter((r) => r.role === 'supplier').length,
+      both: parasutCrmPreviewRows.filter((r) => r.role === 'both').length,
+    };
+    if (meta) {
+      meta.innerHTML = `<strong>${n}</strong> cari (çiftler birleşik) · seçili <strong>${sel}</strong> · müşteri ${roles.customer} · tedarikçi ${roles.supplier} · çift yönlü ${roles.both} · hedef <span class="font-semibold text-navy">${PARASUT_CRM_TARGET}</span>`;
+    }
+    body.innerHTML = parasutCrmPreviewRows.map((r, i) => `
+      <tr class="hover:bg-steel-50/70 ${r.intercompany ? 'bg-violet-50/40' : ''}">
+        <td class="px-3 py-2.5"><input type="checkbox" data-parasut-sel="${i}" ${r.selected ? 'checked' : ''} class="rounded border-steel-300" /></td>
+        <td class="px-3 py-2.5">
+          <p class="font-semibold text-steel-800">${escapeHtml(r.name)}</p>
+          <p class="text-[10px] text-emerald-700 font-semibold">Kısa: ${escapeHtml(r.shortName || '—')} · ${escapeHtml(r.partyKey)}</p>
+          ${r.email ? `<p class="text-[10px] text-steel-400">${escapeHtml(r.email)}</p>` : ''}
+        </td>
+        <td class="px-3 py-2.5">
+          <span class="inline-flex text-[10px] font-bold px-1.5 py-0.5 rounded ${r.role === 'both' ? 'bg-sky-50 text-sky-700' : r.role === 'supplier' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}">${parasutRoleLabel(r.role)}</span>
+          ${r.role !== 'customer' ? `<p class="text-[10px] text-steel-400 mt-0.5">${escapeHtml(r.category)}</p>` : ''}
+        </td>
+        <td class="px-3 py-2.5 mono text-xs">${escapeHtml(r.taxNo || '—')}</td>
+        <td class="px-3 py-2.5 text-right mono text-xs ${Number(r.tlBalance) < 0 ? 'text-rose-600' : Number(r.tlBalance) > 0 ? 'text-emerald-700' : 'text-steel-500'}">${parasutFormatTl(r.tlBalance)}</td>
+        <td class="px-3 py-2.5 text-[11px] text-steel-500">${escapeHtml(r.status)}</td>
+      </tr>
+    `).join('') || `<tr><td colspan="6" class="px-3 py-8 text-center text-steel-400">Satır yok.</td></tr>`;
+    body.querySelectorAll('[data-parasut-sel]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const idx = Number(cb.dataset.parasutSel);
+        if (parasutCrmPreviewRows[idx]) parasutCrmPreviewRows[idx].selected = cb.checked;
+        const s = parasutCrmPreviewRows.filter((r) => r.selected).length;
+        if (meta) {
+          const roles = {
+            customer: parasutCrmPreviewRows.filter((r) => r.role === 'customer').length,
+            supplier: parasutCrmPreviewRows.filter((r) => r.role === 'supplier').length,
+            both: parasutCrmPreviewRows.filter((r) => r.role === 'both').length,
+          };
+          meta.innerHTML = `<strong>${n}</strong> cari (çiftler birleşik) · seçili <strong>${s}</strong> · müşteri ${roles.customer} · tedarikçi ${roles.supplier} · çift yönlü ${roles.both} · hedef <span class="font-semibold text-navy">${PARASUT_CRM_TARGET}</span>`;
+        }
+      });
+    });
+  }
+  function openParasutCrmImportPreview(rows) {
+    parasutCrmPreviewRows = rows;
+    renderParasutCrmImportPreview();
+    document.getElementById('parasutCrmImportOverlay')?.classList.remove('hidden');
+  }
+  async function handleParasutCrmFile(file) {
+    if (!file) return;
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel okuyucu yüklenemedi. Sayfayı yenileyip tekrar deneyin.', 'error');
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const rows = buildParasutCrmPreview(wb);
+      if (!rows.length) {
+        showToast('Excel’de müşteri/tedarikçi satırı bulunamadı.', 'error');
+        return;
+      }
+      openParasutCrmImportPreview(rows);
+    } catch (err) {
+      console.warn('[BTD] parasut crm', err);
+      showToast('Excel okunamadı: ' + (err.message || 'bilinmeyen hata'), 'error');
+    }
+  }
+  function upsertParasutCustomer(row) {
+    const company = row.company || PARASUT_CRM_TARGET;
+    let c = findCustomerByPartyKey(company, row.partyKey, row.taxNo, row.name);
+    const patch = {
+      company,
+      name: row.name,
+      shortName: row.shortName || guessCrmShortName(row.name),
+      taxNo: row.taxNo || '',
+      taxOffice: row.taxOffice || '',
+      partyKey: row.partyKey,
+      intercompany: !!row.intercompany,
+      source: 'parasut',
+      address: row.address || (c && c.address) || '',
+      phone: row.phone || (c && c.phone) || '',
+      currency: (c && c.currency) || '₺',
+      paymentTerms: (c && c.paymentTerms) || '30 gün',
+      notifyPrefs: (c && c.notifyPrefs) || { whatsapp: true, email: true },
+      contacts: (c && c.contacts && c.contacts.length)
+        ? c.contacts
+        : (row.email || row.phone)
+          ? [{ name: '', department: 'Yönetim', phone: row.phone || '', email: row.email || '', whatsapp: row.phone || '' }]
+          : [],
+    };
+    if (c) {
+      Object.assign(c, patch);
+      return c;
+    }
+    c = { ...patch };
+    customers.push(c);
+    return c;
+  }
+  function upsertParasutSupplier(row) {
+    const company = row.company || PARASUT_CRM_TARGET;
+    let s = findSupplierByPartyKey(company, row.partyKey, row.taxNo, row.name);
+    const patch = {
+      company,
+      name: row.name,
+      shortName: row.shortName || guessCrmShortName(row.name),
+      taxNo: row.taxNo || '',
+      taxOffice: row.taxOffice || '',
+      partyKey: row.partyKey,
+      intercompany: !!row.intercompany,
+      source: 'parasut',
+      category: row.category || guessSupplierCategoryFromName(row.name),
+      address: row.address || (s && s.address) || '',
+      phone: row.phone || (s && s.phone) || '',
+      email: row.email || (s && s.email) || '',
+      whatsapp: (s && s.whatsapp) || row.phone || '',
+      contact: (s && s.contact) || '',
+      bank: (s && s.bank) || '',
+      iban: (s && s.iban) || '',
+      materialGroups: (s && s.materialGroups) || [],
+      fasonServices: (s && s.fasonServices) || [],
+      contacts: (s && s.contacts && s.contacts.length)
+        ? s.contacts
+        : (row.email || row.phone)
+          ? [{ name: '', department: 'Satın Alma ve Tedarik', phone: row.phone || '', email: row.email || '', whatsapp: row.phone || '' }]
+          : [],
+    };
+    if (s) {
+      Object.assign(s, patch);
+      return s;
+    }
+    s = { ...patch };
+    suppliers.push(s);
+    return s;
+  }
+  async function confirmParasutCrmImport() {
+    const selected = parasutCrmPreviewRows.filter((r) => r.selected);
+    if (!selected.length) {
+      showToast('En az bir cari seçin.', 'error');
+      return;
+    }
+    const btn = document.getElementById('parasutCrmImportConfirmBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor…'; }
+    let custN = 0;
+    let suppN = 0;
+    let linkN = 0;
+    try {
+      if (activeCompany !== PARASUT_CRM_TARGET && typeof setActiveCompany === 'function') {
+        try { setActiveCompany(PARASUT_CRM_TARGET); } catch (_) { /* ignore */ }
+      }
+      const pairs = [];
+      for (const row of selected) {
+        let cust = null;
+        let supp = null;
+        if (row.role === 'customer' || row.role === 'both') {
+          cust = upsertParasutCustomer(row);
+          custN += 1;
+          await cloudSaveAwait('saveCustomer', cust, companies);
+        }
+        if (row.role === 'supplier' || row.role === 'both') {
+          supp = upsertParasutSupplier(row);
+          suppN += 1;
+          await cloudSaveAwait('saveSupplier', supp, companies);
+        }
+        if (cust && supp) pairs.push({ cust, supp });
+      }
+      for (const { cust, supp } of pairs) {
+        if (cust.dbId) supp.linkedCustomerDbId = cust.dbId;
+        if (supp.dbId) cust.linkedSupplierDbId = supp.dbId;
+        ensurePartyKey(cust);
+        ensurePartyKey(supp);
+        await cloudSaveAwait('saveCustomer', cust, companies);
+        await cloudSaveAwait('saveSupplier', supp, companies);
+        linkN += 1;
+      }
+      closeParasutCrmImport();
+      if (typeof renderCustomersPage === 'function') renderCustomersPage();
+      if (typeof renderSuppliersPage === 'function') renderSuppliersPage();
+      showToast(`${custN} müşteri · ${suppN} tedarikçi kaydedildi${linkN ? ` · ${linkN} çift yönlü bağ` : ''} (${PARASUT_CRM_TARGET}).`, 'success');
+    } catch (err) {
+      console.warn('[BTD] parasut confirm', err);
+      showToast('Aktarım sırasında hata: ' + (err.message || 'bilinmeyen'), 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Seçilenleri Kaydet'; }
+    }
+  }
+  function triggerParasutCrmFilePick() {
+    const inp = document.getElementById('parasutCrmFileInput');
+    if (inp) { inp.value = ''; inp.click(); }
+  }
+  document.getElementById('parasutCrmImportBtnCustomers')?.addEventListener('click', triggerParasutCrmFilePick);
+  document.getElementById('parasutCrmImportBtnSuppliers')?.addEventListener('click', triggerParasutCrmFilePick);
+  document.getElementById('parasutCrmFileInput')?.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleParasutCrmFile(f);
+  });
+  document.getElementById('parasutCrmImportCloseBtn')?.addEventListener('click', closeParasutCrmImport);
+  document.getElementById('parasutCrmImportCancelBtn')?.addEventListener('click', closeParasutCrmImport);
+  document.getElementById('parasutCrmImportConfirmBtn')?.addEventListener('click', confirmParasutCrmImport);
+  document.getElementById('parasutCrmImportOverlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'parasutCrmImportOverlay') closeParasutCrmImport();
   });
 
   document.getElementById('costMaterial')?.addEventListener('change', () => {

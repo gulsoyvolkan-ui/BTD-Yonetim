@@ -156,6 +156,10 @@
       teklif_kosullari: c.quoteTerms || null,
       notify_whatsapp: !!(c.notifyPrefs?.whatsapp ?? true),
       notify_eposta: !!(c.notifyPrefs?.email ?? true),
+      party_key: c.partyKey || null,
+      intercompany: !!c.intercompany,
+      kaynak: c.source || null,
+      linked_tedarikci_id: c.linkedSupplierDbId || null,
     };
   }
   function customerFromRow(r, companies) {
@@ -174,6 +178,10 @@
       manufacturingType: r.imalat_tipi || 'Malzemeli',
       quoteTerms: r.teklif_kosullari || '',
       notifyPrefs: { whatsapp: !!r.notify_whatsapp, email: !!r.notify_eposta },
+      partyKey: r.party_key || '',
+      intercompany: !!r.intercompany,
+      source: r.kaynak || '',
+      linkedSupplierDbId: r.linked_tedarikci_id || null,
       contacts: (r.musteri_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -279,6 +287,12 @@
       adres: s.address || null,
       banka: s.bank || null,
       iban: s.iban || null,
+      vergi_no: s.taxNo || null,
+      vergi_dairesi: s.taxOffice || null,
+      party_key: s.partyKey || null,
+      intercompany: !!s.intercompany,
+      kaynak: s.source || null,
+      linked_musteri_id: s.linkedCustomerDbId || null,
     };
   }
   function supplierFromRow(r, companies) {
@@ -295,6 +309,12 @@
       address: r.adres || '',
       bank: r.banka || '',
       iban: r.iban || '',
+      taxNo: r.vergi_no || '',
+      taxOffice: r.vergi_dairesi || '',
+      partyKey: r.party_key || '',
+      intercompany: !!r.intercompany,
+      source: r.kaynak || '',
+      linkedCustomerDbId: r.linked_musteri_id || null,
       materialGroups: (r.tedarikci_malzeme_gruplari || [])
         .map((x) => x.malzeme_gruplari?.ad)
         .filter(Boolean),
