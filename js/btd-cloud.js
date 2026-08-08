@@ -326,7 +326,14 @@
       materialGroups: (r.tedarikci_malzeme_gruplari || [])
         .map((x) => x.malzeme_gruplari?.ad)
         .filter(Boolean),
-      fasonServices: (r.tedarikci_fason_hizmetleri || []).map((x) => x.hizmet_adi).filter(Boolean),
+      fasonServices: (r.tedarikci_fason_hizmetleri || [])
+        .filter((x) => (x.hizmet_tipi || 'dis') !== 'imalat')
+        .map((x) => x.hizmet_adi)
+        .filter(Boolean),
+      fasonMfgServices: (r.tedarikci_fason_hizmetleri || [])
+        .filter((x) => x.hizmet_tipi === 'imalat')
+        .map((x) => x.hizmet_adi)
+        .filter(Boolean),
       contacts: (r.tedarikci_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -390,11 +397,12 @@
         );
         if (error) throw error;
       }
-      const services = (s.fasonServices || []).filter(Boolean);
+      const services = [
+        ...(s.fasonServices || []).filter(Boolean).map((h) => ({ tedarikci_id: dbId, hizmet_adi: h, hizmet_tipi: 'dis' })),
+        ...(s.fasonMfgServices || []).filter(Boolean).map((h) => ({ tedarikci_id: dbId, hizmet_adi: h, hizmet_tipi: 'imalat' })),
+      ];
       if (services.length) {
-        const { error } = await client.from('tedarikci_fason_hizmetleri').insert(
-          services.map((h) => ({ tedarikci_id: dbId, hizmet_adi: h }))
-        );
+        const { error } = await client.from('tedarikci_fason_hizmetleri').insert(services);
         if (error) throw error;
       }
       return ok({ dbId });
@@ -2325,6 +2333,46 @@
   async function saveCoatingCatalog(arr) {
     return saveNamedPriceCatalog('kaplama_katalogu', arr, 'saveCoatingCatalog');
   }
+  async function saveFasonMfgCatalog(arr) {
+    try {
+      const client = sb();
+      const label = 'saveFasonMfgCatalog';
+      if (!client || !Array.isArray(arr)) return fail('no-client', label);
+      const existing = await selectAll(client, 'fason_imalat_katalogu', 'id');
+      const keepIds = new Set();
+      for (const h of arr) {
+        if (!h?.name) continue;
+        const row = {
+          ad: h.name,
+          fiyat_eur_saat: h.priceEurPerHour || 0,
+          fiyat_eur_adet: h.priceEurPerPcs || 0,
+          aktif: true,
+        };
+        if (h.dbId) {
+          const { error } = await client.from('fason_imalat_katalogu').update(row).eq('id', h.dbId);
+          if (error) throw error;
+          keepIds.add(h.dbId);
+        } else {
+          const { data, error } = await client
+            .from('fason_imalat_katalogu')
+            .upsert(row, { onConflict: 'ad' })
+            .select('id')
+            .single();
+          if (error) throw error;
+          h.dbId = data.id;
+          keepIds.add(data.id);
+        }
+      }
+      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+      if (toDelete.length) {
+        const { error } = await client.from('fason_imalat_katalogu').delete().in('id', toDelete);
+        if (error) throw error;
+      }
+      return ok({ saved: keepIds.size, deleted: toDelete.length });
+    } catch (e) {
+      return fail(e, 'saveFasonMfgCatalog');
+    }
+  }
 
   // ─── Catalogs ──────────────────────────────────────────────────────────────
   async function hydrateCatalogs(ctx) {
@@ -2433,6 +2481,12 @@
       ctx.coatingCatalog,
       (h) => ({ ad: h.name, fiyat_eur_kg: h.priceEurPerKg || 0, fiyat_eur_adet: h.priceEurPerPcs || 0 }),
       (r) => ({ dbId: r.id, name: r.ad, priceEurPerKg: Number(r.fiyat_eur_kg) || 0, priceEurPerPcs: Number(r.fiyat_eur_adet) || 0 })
+    );
+    await syncNamedCatalog(
+      'fason_imalat_katalogu',
+      ctx.fasonMfgCatalog,
+      (h) => ({ ad: h.name, fiyat_eur_saat: h.priceEurPerHour || 0, fiyat_eur_adet: h.priceEurPerPcs || 0 }),
+      (r) => ({ dbId: r.id, name: r.ad, priceEurPerHour: Number(r.fiyat_eur_saat) || 0, priceEurPerPcs: Number(r.fiyat_eur_adet) || 0 })
     );
 
     // Operasyon katalogu
@@ -2651,5 +2705,6 @@
     saveMaterialCatalog,
     saveHeatTreatmentCatalog,
     saveCoatingCatalog,
+    saveFasonMfgCatalog,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

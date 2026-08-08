@@ -1172,6 +1172,9 @@
             <button type="button" id="toggleMatCatalogBtn" class="flex items-center gap-2 bg-white border border-steel-200 hover:border-navy/30 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-sm">
               Materyal
             </button>
+            <button type="button" id="toggleFasonMfgCatalogBtn" class="flex items-center gap-2 bg-white border border-steel-200 hover:border-navy/30 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-sm">
+              Fason Hizmetler
+            </button>
             <button type="button" id="toggleCoatCatalogBtn" class="flex items-center gap-2 bg-white border border-steel-200 hover:border-navy/30 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-sm">
               Kaplama
             </button>
@@ -1234,6 +1237,40 @@
                 </tr>
               </thead>
               <tbody id="matCatTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="fasonMfgCatalogPanel" class="hidden bg-white rounded-2xl border border-steel-200 shadow-sm p-4 sm:p-5 mb-5 cost-settings-panel">
+          <div class="mb-4">
+            <p class="text-sm font-bold text-steel-800">Fason Hizmetler (İmalat)</p>
+            <p class="text-xs text-steel-400 mt-0.5">Tornalama, freze vb. prosesler · varsayılan €/saat ve €/adet. Fason İmalatçı tedarikçilerine atanır.</p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end mb-4">
+            <div>
+              <label class="text-[11px] font-semibold text-steel-500 uppercase">Hizmet Adı *</label>
+              <input id="fasonMfgCatName" type="text" placeholder="Örn. Tornalama" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-steel-500 uppercase">€ / saat</label>
+              <input id="fasonMfgCatPriceHour" type="number" min="0" step="0.01" value="0" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+            </div>
+            <div>
+              <label class="text-[11px] font-semibold text-steel-500 uppercase">€ / adet</label>
+              <input id="fasonMfgCatPricePcs" type="number" min="0" step="0.01" value="0" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+            </div>
+            <button type="button" id="fasonMfgCatSaveBtn" class="bg-navy text-white text-sm font-semibold px-4 py-2.5 rounded-xl">Kaydet</button>
+          </div>
+          <div class="overflow-x-auto border border-steel-200 rounded-xl">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-steel-50 text-[11px] text-steel-400 font-semibold uppercase text-left">
+                  <th class="px-3 py-2">Hizmet</th>
+                  <th class="px-3 py-2">€/saat</th>
+                  <th class="px-3 py-2">€/adet</th>
+                  <th class="px-3 py-2 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="fasonMfgCatTableBody"></tbody>
             </table>
           </div>
         </div>
@@ -2731,6 +2768,7 @@
           <option value="Hammadde">Hammadde</option>
           <option value="Yedek Parça">Yedek Parça</option>
           <option value="Fason İmalatçı">Fason İmalatçı</option>
+          <option value="Fason Dış Hizmet">Fason Dış Hizmet</option>
           <option value="Hırdavat">Hırdavat</option>
           <option value="Takım">Takım</option>
         </select>
@@ -5286,7 +5324,8 @@ ${vadeLine}`;
   }
   function guessSupplierCategoryFromName(name) {
     const u = String(name || '').toLocaleUpperCase('tr-TR');
-    if (/KAPLAMA|ISIL|ISI\s*İŞLEM|BOYA|GALVAN/.test(u)) return 'Fason İmalatçı';
+    if (/KAPLAMA|ISIL|ISI\s*İŞLEM|BOYA|GALVAN/.test(u)) return 'Fason Dış Hizmet';
+    if (/TORNA|FREZE|KAYNAK|LAZER|ABKANT|BOHRWERK|İMALAT|IMALAT/.test(u)) return 'Fason İmalatçı';
     if (/HIRDAVAT|CİVATA|CIVATA|BAĞLANTI|VİDA/.test(u)) return 'Hırdavat';
     if (/TAKIM|KALIP ELEMAN|FREZE|MATKAP/.test(u)) return 'Takım';
     if (/YEDEK|PARÇA|OTOMOTİV|KAROSER|ASANSÖR/.test(u)) return 'Yedek Parça';
@@ -5719,18 +5758,23 @@ ${vadeLine}`;
     },
     'IsılPro Isıl İşlem': {
       contact: 'Mehmet Kaya', phone: '0532 111 22 33', whatsapp: '905321112233', email: 'info@isilpro.com',
-      category: 'Fason İmalatçı', materialGroups: [], fasonServices: ['İndüksiyon', 'Vakum', 'Tuz Banyosu', 'Normalize'],
+      category: 'Fason Dış Hizmet', materialGroups: [], fasonServices: ['İndüksiyon', 'Vakum', 'Tuz Banyosu', 'Normalize'], fasonMfgServices: [],
       bank: 'Denizbank', iban: 'TR77 0013 4000 0052 0001 0002 03', address: 'Gebze OSB, Kocaeli',
     },
     'Kaplama A.Ş.': {
       contact: 'Ayşe Demir', phone: '0545 999 88 77', whatsapp: '905459998877', email: 'siparis@kaplama.com',
-      category: 'Fason İmalatçı', materialGroups: [], fasonServices: ['Heloksal', 'Çinko', 'Galvaniz', 'Karartma', 'Tin', 'Toz Boya', 'Kataforez', 'Boya'],
+      category: 'Fason Dış Hizmet', materialGroups: [], fasonServices: ['Heloksal', 'Çinko', 'Galvaniz', 'Karartma', 'Tin', 'Toz Boya', 'Kataforez', 'Boya'], fasonMfgServices: [],
       bank: 'QNB', iban: 'TR88 0011 1000 0000 0012 3456 78', address: 'Dilovası, Kocaeli',
     },
     'MetalTerm': {
       contact: 'Can Öztürk', phone: '0531 222 33 44', whatsapp: '905312223344', email: 'info@metalterm.com',
-      category: 'Fason İmalatçı', materialGroups: [], fasonServices: ['Vakum', 'Normalize'],
+      category: 'Fason Dış Hizmet', materialGroups: [], fasonServices: ['Vakum', 'Normalize'], fasonMfgServices: [],
       bank: 'Halkbank', iban: 'TR99 0001 2009 1230 0012 3456 78', address: 'Çayırova, Kocaeli',
+    },
+    'Demo CNC Fason': {
+      contact: 'Can Demir', phone: '0532 111 00 44', whatsapp: '905321110044', email: 'info@democnc.local',
+      category: 'Fason İmalatçı', materialGroups: [], fasonServices: [], fasonMfgServices: ['Tornalama', 'Bohrwerk', 'Frezeleme', 'Kaynak'],
+      bank: '', iban: '', address: 'Gebze, Kocaeli',
     },
   };
   let suppliers = [];
@@ -5751,6 +5795,7 @@ ${vadeLine}`;
           iban: info.iban || '',
           materialGroups: [...(info.materialGroups || [])],
           fasonServices: [...(info.fasonServices || [])],
+          fasonMfgServices: [...(info.fasonMfgServices || [])],
           contacts: info.contact ? [{
             name: info.contact,
           department: 'Satın Alma ve Tedarik',
@@ -5786,8 +5831,16 @@ ${vadeLine}`;
   function isMaterialSupplierCategory(cat) {
     return ['Hammadde', 'Yedek Parça', 'Hırdavat', 'Takım', 'Malzeme'].includes(cat);
   }
+  /** Isıl / kaplama dış hizmet firmaları */
+  function isFasonDisHizmetCategory(cat) {
+    return ['Fason Dış Hizmet', 'Fason', 'Isıl İşlem', 'Kaplama'].includes(cat);
+  }
+  /** Torna / freze vb. fason imalat firmaları */
+  function isFasonImalatciCategory(cat) {
+    return cat === 'Fason İmalatçı';
+  }
   function isFasonSupplierCategory(cat) {
-    return ['Fason İmalatçı', 'Fason', 'Isıl İşlem', 'Kaplama'].includes(cat);
+    return isFasonDisHizmetCategory(cat) || isFasonImalatciCategory(cat);
   }
   function matchSupplierForNeed(company, need) {
     const list = listSuppliersForMaterialGroup(company, need && need.type === 'material' ? (need.materialGroup || '') : '');
@@ -5796,13 +5849,21 @@ ${vadeLine}`;
     if (!all.length || !need) return null;
     if (need.type === 'fason') {
       const svc = need.serviceName || '';
+      const mfgNames = new Set((typeof fasonMfgCatalog !== 'undefined' ? fasonMfgCatalog : []).map((x) => x.name));
+      const preferImalat = mfgNames.has(svc);
       const ranked = all
         .filter(s => isFasonSupplierCategory(s.category || ''))
         .map(s => {
-          const services = s.fasonServices || [];
+          const dis = s.fasonServices || [];
+          const mfg = s.fasonMfgServices || [];
           let score = 0;
-          if (svc && services.includes(svc)) score = 10;
-          else if (!services.length) score = 1;
+          if (preferImalat) {
+            if (svc && mfg.includes(svc)) score = 10;
+            else if (isFasonImalatciCategory(s.category) && !mfg.length) score = 1;
+          } else {
+            if (svc && dis.includes(svc)) score = 10;
+            else if (isFasonDisHizmetCategory(s.category) && !dis.length) score = 1;
+          }
           return { s, score };
         })
         .filter(x => x.score > 0)
@@ -10167,6 +10228,7 @@ ${vadeLine}`;
     'Hammadde': 'bg-navy/10 text-navy',
     'Yedek Parça': 'bg-sky-50 text-sky-700',
     'Fason İmalatçı': 'bg-amber-50 text-amber-700',
+    'Fason Dış Hizmet': 'bg-violet-50 text-violet-700',
     'Hırdavat': 'bg-emerald-50 text-emerald-700',
     'Takım': 'bg-violet-50 text-violet-700',
     'Malzeme': 'bg-navy/10 text-navy',
@@ -10200,12 +10262,16 @@ ${vadeLine}`;
 
     tbody.innerHTML = list.map((s, idx) => {
       const primary = supplierPrimaryContact(s);
-      const scopeBits = isFasonSupplierCategory(s.category)
-        ? (s.fasonServices || []).slice(0, 3).join(', ')
-        : (s.materialGroups || []).slice(0, 3).join(', ');
-      const extra = isFasonSupplierCategory(s.category)
-        ? ((s.fasonServices || []).length > 3 ? ` +${(s.fasonServices || []).length - 3}` : '')
-        : ((s.materialGroups || []).length > 3 ? ` +${(s.materialGroups || []).length - 3}` : '');
+      const scopeBits = isFasonImalatciCategory(s.category)
+        ? (s.fasonMfgServices || []).slice(0, 3).join(', ')
+        : isFasonDisHizmetCategory(s.category)
+          ? (s.fasonServices || []).slice(0, 3).join(', ')
+          : (s.materialGroups || []).slice(0, 3).join(', ');
+      const extra = isFasonImalatciCategory(s.category)
+        ? ((s.fasonMfgServices || []).length > 3 ? ` +${(s.fasonMfgServices || []).length - 3}` : '')
+        : isFasonDisHizmetCategory(s.category)
+          ? ((s.fasonServices || []).length > 3 ? ` +${(s.fasonServices || []).length - 3}` : '')
+          : ((s.materialGroups || []).length > 3 ? ` +${(s.materialGroups || []).length - 3}` : '');
       const role = resolveCariRole(s) || 'supplier';
       const bal = Number(s.tlBalance);
       const balCls = !Number.isFinite(bal) || bal === 0 ? 'text-steel-500' : bal < 0 ? 'text-rose-600' : 'text-emerald-700';
@@ -10345,6 +10411,7 @@ ${vadeLine}`;
   let supplierModalContacts = [];
   let supplierModalMaterialGroups = [];
   let supplierModalFasonServices = [];
+  let supplierModalFasonMfgServices = [];
 
   function updateNewSupplierSubmitState() {
     const btn = document.getElementById('newSupplierSubmitBtn');
@@ -10403,8 +10470,8 @@ ${vadeLine}`;
     const hintEl = document.getElementById('supplierCapabilityHint');
     if (!listEl) return;
     const cat = document.getElementById('newSupplierCategory')?.value || 'Hammadde';
-    if (isFasonSupplierCategory(cat)) {
-      if (titleEl) titleEl.textContent = 'Fason Hizmetleri';
+    if (isFasonDisHizmetCategory(cat)) {
+      if (titleEl) titleEl.textContent = 'Fason Dış Hizmetler';
       if (hintEl) hintEl.textContent = 'Isıl işlem ve kaplama kataloğundan verilebilecek hizmetleri seçin.';
       const heat = (typeof heatTreatmentCatalog !== 'undefined' ? heatTreatmentCatalog : []).map(h => h.name);
       const coat = (typeof coatingCatalog !== 'undefined' ? coatingCatalog : []).map(c => c.name);
@@ -10426,6 +10493,28 @@ ${vadeLine}`;
             if (!supplierModalFasonServices.includes(name)) supplierModalFasonServices.push(name);
           } else {
             supplierModalFasonServices = supplierModalFasonServices.filter(x => x !== name);
+          }
+          renderSupplierCapabilityList();
+        });
+      });
+    } else if (isFasonImalatciCategory(cat)) {
+      if (titleEl) titleEl.textContent = 'Fason İmalat Prosesleri';
+      if (hintEl) hintEl.textContent = 'Fason Hizmetler kataloğundan (torna, freze vb.) yetenekleri seçin.';
+      const chips = (typeof fasonMfgCatalog !== 'undefined' ? fasonMfgCatalog : []).map((c) => c.name);
+      listEl.innerHTML = chips.length ? chips.map((name) => {
+        const on = supplierModalFasonMfgServices.includes(name);
+        return `<label class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border cursor-pointer ${on ? 'border-navy bg-navy/10 text-navy font-semibold' : 'border-steel-200 bg-white text-steel-600'}">
+          <input type="checkbox" data-sup-fason-mfg="${name.replace(/"/g, '&quot;')}" class="rounded border-steel-300" ${on ? 'checked' : ''} />
+          ${name}
+        </label>`;
+      }).join('') : `<p class="text-xs text-steel-400">Önce Maliyet → Fason Hizmetler kataloğuna proses ekleyin.</p>`;
+      listEl.querySelectorAll('[data-sup-fason-mfg]').forEach(inp => {
+        inp.addEventListener('change', () => {
+          const name = inp.dataset.supFasonMfg;
+          if (inp.checked) {
+            if (!supplierModalFasonMfgServices.includes(name)) supplierModalFasonMfgServices.push(name);
+          } else {
+            supplierModalFasonMfgServices = supplierModalFasonMfgServices.filter(x => x !== name);
           }
           renderSupplierCapabilityList();
         });
@@ -10472,7 +10561,9 @@ ${vadeLine}`;
     const cat = supplier ? (supplier.category || 'Hammadde') : 'Hammadde';
     const catSel = document.getElementById('newSupplierCategory');
     if ([...catSel.options].some(o => o.value === cat)) catSel.value = cat;
-    else catSel.value = isFasonSupplierCategory(cat) ? 'Fason İmalatçı' : 'Hammadde';
+    else if (isFasonDisHizmetCategory(cat)) catSel.value = 'Fason Dış Hizmet';
+    else if (isFasonImalatciCategory(cat)) catSel.value = 'Fason İmalatçı';
+    else catSel.value = 'Hammadde';
     document.getElementById('newSupplierPhone').value = supplier ? (supplier.phone || '') : '';
     document.getElementById('newSupplierEmail').value = supplier ? (supplier.email || '') : '';
     document.getElementById('newSupplierAddress').value = supplier ? (supplier.address || '') : '';
@@ -10480,6 +10571,17 @@ ${vadeLine}`;
     document.getElementById('newSupplierIban').value = supplier ? (supplier.iban || '') : '';
     supplierModalMaterialGroups = supplier ? [...(supplier.materialGroups || [])] : [];
     supplierModalFasonServices = supplier ? [...(supplier.fasonServices || [])] : [];
+    supplierModalFasonMfgServices = supplier ? [...(supplier.fasonMfgServices || [])] : [];
+    // Eski kayıt: "Fason İmalatçı" ama ısıl/kaplama seçiliyse dış hizmete taşı
+    if (supplier && isFasonImalatciCategory(catSel.value) && supplierModalFasonServices.length && !supplierModalFasonMfgServices.length) {
+      const heatCoat = new Set([
+        ...(heatTreatmentCatalog || []).map((h) => h.name),
+        ...(coatingCatalog || []).map((c) => c.name),
+      ]);
+      if (supplierModalFasonServices.every((n) => heatCoat.has(n))) {
+        catSel.value = 'Fason Dış Hizmet';
+      }
+    }
     if (supplier && supplier.contacts && supplier.contacts.length) {
       supplierModalContacts = supplier.contacts.map(ct => ({
         ...ct,
@@ -10572,7 +10674,8 @@ ${vadeLine}`;
       contacts: cleanContacts,
       contact: primary ? primary.name : '',
       materialGroups: isMaterialSupplierCategory(category) ? [...supplierModalMaterialGroups] : [],
-      fasonServices: isFasonSupplierCategory(category) ? [...supplierModalFasonServices] : [],
+      fasonServices: isFasonDisHizmetCategory(category) ? [...supplierModalFasonServices] : [],
+      fasonMfgServices: isFasonImalatciCategory(category) ? [...supplierModalFasonMfgServices] : [],
     };
     if (supplierModalEditingTarget) {
       Object.assign(supplierModalEditingTarget, payload);
@@ -12686,8 +12789,18 @@ ${vadeLine}`;
     { name: 'Kataforez', priceEurPerKg: 2.80, priceEurPerPcs: 0 },
     { name: 'Boya', priceEurPerKg: 2.20, priceEurPerPcs: 0 },
   ];
+  /** Fason imalat prosesleri (€/saat + €/adet) */
+  let fasonMfgCatalog = [
+    { name: 'Tornalama', priceEurPerHour: 45, priceEurPerPcs: 0 },
+    { name: 'Bohrwerk', priceEurPerHour: 55, priceEurPerPcs: 0 },
+    { name: 'Frezeleme', priceEurPerHour: 50, priceEurPerPcs: 0 },
+    { name: 'Kaynak', priceEurPerHour: 40, priceEurPerPcs: 0 },
+    { name: 'Lazer Kesim', priceEurPerHour: 60, priceEurPerPcs: 0 },
+    { name: 'Abkant', priceEurPerHour: 35, priceEurPerPcs: 0 },
+  ];
   let heatCatEditIndex = null;
   let coatCatEditIndex = null;
+  let fasonMfgCatEditIndex = null;
 
   // TCMB satış kurları (EUR bazlı çevrim). Manuel döviz ayarı kaydedilirse otomatik çekim atlanır.
   let fxRates = { date: '', EURTRY: 38.50, USDTRY: 35.20, EURUSD: 1.09 };
@@ -15430,9 +15543,78 @@ Teşekkürler.`;
   }
 
   function hideAllCostSettingsPanels() {
-    ['matCatalogPanel', 'heatCatalogPanel', 'coatCatalogPanel'].forEach(id => {
+    ['matCatalogPanel', 'fasonMfgCatalogPanel', 'heatCatalogPanel', 'coatCatalogPanel'].forEach(id => {
       document.getElementById(id)?.classList.add('hidden');
     });
+  }
+  function renderFasonMfgCatalogTable() {
+    const tbody = document.getElementById('fasonMfgCatTableBody');
+    if (!tbody) return;
+    if (!fasonMfgCatalog.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="px-3 py-6 text-center text-steel-400 text-sm">Kayıt yok. Yukarıdan ekleyin.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = fasonMfgCatalog.map((m, i) => `
+      <tr class="border-t border-steel-100">
+        <td class="px-3 py-2 font-medium text-steel-800">${m.name}</td>
+        <td class="px-3 py-2 mono">${Number(m.priceEurPerHour || 0).toFixed(2)} €</td>
+        <td class="px-3 py-2 mono">${Number(m.priceEurPerPcs || 0).toFixed(2)} €</td>
+        <td class="px-3 py-2 text-right whitespace-nowrap">
+          <button type="button" data-fason-mfg-edit="${i}" class="text-[11px] font-semibold text-navy px-2 py-1 rounded-lg hover:bg-navy/5">Düzenle</button>
+          <button type="button" data-fason-mfg-del="${i}" class="text-[11px] font-semibold text-red-500 px-2 py-1 rounded-lg hover:bg-red-50">Sil</button>
+        </td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-fason-mfg-edit]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.fasonMfgEdit);
+        const item = fasonMfgCatalog[idx];
+        if (!item) return;
+        fasonMfgCatEditIndex = idx;
+        document.getElementById('fasonMfgCatName').value = item.name;
+        document.getElementById('fasonMfgCatPriceHour').value = item.priceEurPerHour ?? 0;
+        document.getElementById('fasonMfgCatPricePcs').value = item.priceEurPerPcs ?? 0;
+        document.getElementById('fasonMfgCatSaveBtn').textContent = 'Güncelle';
+      });
+    });
+    tbody.querySelectorAll('[data-fason-mfg-del]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.fasonMfgDel);
+        const name = fasonMfgCatalog[idx]?.name || 'Kayıt';
+        if (!confirmDelete(`“${name}” kaydı silinecek.`)) return;
+        fasonMfgCatalog.splice(idx, 1);
+        fasonMfgCatEditIndex = null;
+        document.getElementById('fasonMfgCatSaveBtn').textContent = 'Kaydet';
+        renderFasonMfgCatalogTable();
+        cloudSave('saveFasonMfgCatalog', fasonMfgCatalog);
+        showToast('Kayıt silindi.', 'success');
+      });
+    });
+  }
+  function saveFasonMfgCatalogItem() {
+    const name = document.getElementById('fasonMfgCatName')?.value.trim();
+    const priceEurPerHour = Number(document.getElementById('fasonMfgCatPriceHour')?.value) || 0;
+    const priceEurPerPcs = Number(document.getElementById('fasonMfgCatPricePcs')?.value) || 0;
+    if (!name) { showToast('Hizmet adı girin.', 'error'); return; }
+    const entry = { name, priceEurPerHour, priceEurPerPcs };
+    if (fasonMfgCatEditIndex != null && fasonMfgCatalog[fasonMfgCatEditIndex]) {
+      if (fasonMfgCatalog[fasonMfgCatEditIndex].dbId) entry.dbId = fasonMfgCatalog[fasonMfgCatEditIndex].dbId;
+      fasonMfgCatalog[fasonMfgCatEditIndex] = entry;
+      showToast('Güncellendi.', 'success');
+    } else {
+      const dup = fasonMfgCatalog.findIndex((m) => m.name.toLowerCase() === name.toLowerCase());
+      if (dup >= 0) {
+        if (fasonMfgCatalog[dup].dbId) entry.dbId = fasonMfgCatalog[dup].dbId;
+        fasonMfgCatalog[dup] = entry;
+      } else fasonMfgCatalog.push(entry);
+      showToast('Eklendi.', 'success');
+    }
+    fasonMfgCatEditIndex = null;
+    document.getElementById('fasonMfgCatName').value = '';
+    document.getElementById('fasonMfgCatPriceHour').value = 0;
+    document.getElementById('fasonMfgCatPricePcs').value = 0;
+    document.getElementById('fasonMfgCatSaveBtn').textContent = 'Kaydet';
+    renderFasonMfgCatalogTable();
+    cloudSave('saveFasonMfgCatalog', fasonMfgCatalog);
   }
   function renderServiceCatalogTable(kind) {
     const isHeat = kind === 'heat';
@@ -18736,6 +18918,7 @@ Teşekkürler.`;
       iban: (s && s.iban) || '',
       materialGroups: (s && s.materialGroups) || [],
       fasonServices: (s && s.fasonServices) || [],
+      fasonMfgServices: (s && s.fasonMfgServices) || [],
       contacts: (s && s.contacts && s.contacts.length)
         ? s.contacts
         : (row.email || row.phone)
@@ -18922,6 +19105,14 @@ Teşekkürler.`;
     hideAllCostSettingsPanels();
     if (opening) { panel.classList.remove('hidden'); renderMatCatalogGroupSelect(); }
   });
+  document.getElementById('toggleFasonMfgCatalogBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const panel = document.getElementById('fasonMfgCatalogPanel');
+    if (!panel) return;
+    const opening = panel.classList.contains('hidden');
+    hideAllCostSettingsPanels();
+    if (opening) { panel.classList.remove('hidden'); renderFasonMfgCatalogTable(); }
+  });
   document.getElementById('toggleHeatCatalogBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     const panel = document.getElementById('heatCatalogPanel');
@@ -18940,6 +19131,7 @@ Teşekkürler.`;
   });
   document.getElementById('heatCatSaveBtn')?.addEventListener('click', () => saveServiceCatalogItem('heat'));
   document.getElementById('coatCatSaveBtn')?.addEventListener('click', () => saveServiceCatalogItem('coat'));
+  document.getElementById('fasonMfgCatSaveBtn')?.addEventListener('click', saveFasonMfgCatalogItem);
   document.getElementById('fxRatesSaveBtn')?.addEventListener('click', applyManualFxRates);
   document.getElementById('fxRatesTcmbBtn')?.addEventListener('click', async () => {
     fxRatesManual = false;
@@ -18952,7 +19144,7 @@ Teşekkürler.`;
   // Boş alana tıklayınca maliyet alt panellerini kapat
   document.getElementById('page-costing')?.addEventListener('click', (e) => {
     if (e.target.closest('.cost-settings-panel')) return;
-    if (e.target.closest('#toggleMatCatalogBtn, #toggleHeatCatalogBtn, #toggleCoatCatalogBtn, #newCostBtn')) return;
+    if (e.target.closest('#toggleMatCatalogBtn, #toggleFasonMfgCatalogBtn, #toggleHeatCatalogBtn, #toggleCoatCatalogBtn, #newCostBtn')) return;
     if (e.target.closest('button, a, input, select, textarea, label, table, tr, td, th')) return;
     hideAllCostSettingsPanels();
   });
@@ -20103,6 +20295,7 @@ Teşekkürler.`;
         procMaterialCatalog,
         heatTreatmentCatalog,
         coatingCatalog,
+        fasonMfgCatalog,
         productShapes,
         operationCatalog,
         fxRates,
@@ -20118,6 +20311,7 @@ Teşekkürler.`;
           renderServiceCatalogTable('heat');
           renderServiceCatalogTable('coat');
         }
+        if (typeof renderFasonMfgCatalogTable === 'function') renderFasonMfgCatalogTable();
         if (typeof renderCostServiceSelects === 'function') renderCostServiceSelects();
       } catch (_) { /* ignore */ }
       // Hydrate sonrası kullanıcı bayraklarını düzelterek oturumu taze tut
