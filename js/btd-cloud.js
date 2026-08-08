@@ -111,6 +111,7 @@
     return {
       firma_id: fid,
       unvan: c.name,
+      kisa_ad: c.shortName || null,
       adres: c.address || null,
       telefon: c.phone || null,
       vergi_no: c.taxNo || null,
@@ -129,6 +130,7 @@
       dbId: r.id,
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
+      shortName: r.kisa_ad || '',
       address: r.adres || '',
       phone: r.telefon || '',
       taxNo: r.vergi_no || '',
@@ -225,6 +227,7 @@
     return {
       firma_id: fid,
       unvan: s.name,
+      kisa_ad: s.shortName || null,
       kategori: s.category || 'Hammadde',
       iletisim: s.contact || null,
       telefon: s.phone || null,
@@ -240,6 +243,7 @@
       dbId: r.id,
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
+      shortName: r.kisa_ad || '',
       category: r.kategori || 'Hammadde',
       contact: r.iletisim || '',
       phone: r.telefon || '',

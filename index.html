@@ -2459,6 +2459,11 @@
           <input id="newCustomerName" type="text" placeholder="Örn. Anadolu Hidrolik San. Ltd." class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
         </div>
         <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Kısa Ad / Excel Eşleme</label>
+          <input id="newCustomerShortName" type="text" placeholder="Örn. Keramik Makine · birden fazla için ; ile ayırın" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+          <p class="text-[10px] text-steel-400 mt-1">Sipariş formu Excel’deki “Firma” yazısı buradaki kısa adla eşleşirse resmi ünvan otomatik seçilir.</p>
+        </div>
+        <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Adres</label>
           <textarea id="newCustomerAddress" rows="2" placeholder="Örn. Organize Sanayi Bölgesi 5. Cad. No:12, Kartal / İstanbul" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy resize-none"></textarea>
         </div>
@@ -2591,6 +2596,11 @@
       <div>
         <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Firma İsmi <span class="text-red-500">*</span></label>
         <input id="newSupplierName" type="text" placeholder="Örn. Anadolu Metal Ticaret" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+      </div>
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Kısa Ad / Excel Eşleme</label>
+        <input id="newSupplierShortName" type="text" placeholder="Örn. Ege Çelik · birden fazla için ; ile ayırın" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30" />
+        <p class="text-[10px] text-steel-400 mt-1">Excel / RFQ dosyalarındaki kısa yazım buraya tanımlanırsa resmi ünvan otomatik seçilir.</p>
       </div>
 
       <div>
@@ -5018,10 +5028,49 @@ ${vadeLine}`;
     return { leadTimeDays, paymentTerms, manufacturingType, terms };
   }
 
+  function normalizePartyMatchKey(s) {
+    return String(s || '')
+      .trim()
+      .toLocaleLowerCase('tr-TR')
+      .replace(/\s+/g, ' ');
+  }
+  function partyMatchAliases(party) {
+    const list = [];
+    if (!party) return list;
+    if (party.name) list.push(String(party.name));
+    const short = String(party.shortName || '').trim();
+    if (short) {
+      short.split(/[;|,]/).map((x) => x.trim()).filter(Boolean).forEach((a) => list.push(a));
+    }
+    return list;
+  }
   function findCustomerByName(company, name) {
-    const key = (name || '').trim().toLowerCase();
+    const key = normalizePartyMatchKey(name);
     if (!key) return null;
-    return customers.find(c => c.company === company && c.name.trim().toLowerCase() === key) || null;
+    const pool = customers.filter((c) => c.company === company);
+    let hit = pool.find((c) => normalizePartyMatchKey(c.name) === key);
+    if (hit) return hit;
+    hit = pool.find((c) => partyMatchAliases(c).some((a) => normalizePartyMatchKey(a) === key));
+    return hit || null;
+  }
+  function findSupplierByName(company, name) {
+    const key = normalizePartyMatchKey(name);
+    if (!key) return null;
+    const pool = suppliers.filter((s) => s.company === company);
+    let hit = pool.find((s) => normalizePartyMatchKey(s.name) === key);
+    if (hit) return hit;
+    hit = pool.find((s) => partyMatchAliases(s).some((a) => normalizePartyMatchKey(a) === key));
+    return hit || null;
+  }
+  function resolveExcelCustomerName(company, rawName) {
+    const raw = String(rawName || '').trim();
+    if (!raw) return { name: 'Müşteri', matched: null, via: null };
+    const hit = findCustomerByName(company, raw);
+    if (hit) {
+      const via = normalizePartyMatchKey(hit.name) === normalizePartyMatchKey(raw) ? 'unvan' : 'kisa_ad';
+      return { name: hit.name, matched: hit, via };
+    }
+    return { name: raw, matched: null, via: null };
   }
 
   let quotes = [
@@ -9450,6 +9499,7 @@ ${vadeLine}`;
         <tr class="hover:bg-steel-50/60 transition-colors">
           <td class="px-5 py-3.5">
             <p class="font-semibold text-steel-800">${c.name}</p>
+            ${c.shortName ? `<p class="text-[11px] text-emerald-700 font-semibold mt-0.5">Kısa: ${c.shortName}</p>` : ''}
             ${c.address ? `<p class="text-xs text-steel-400 mt-0.5 max-w-xs truncate" title="${c.address.replace(/"/g, '&quot;')}">${c.address}</p>` : ''}
             ${primary ? `<p class="text-[11px] text-steel-500 mt-1">${primary.name || ''}${primary.email ? ' · ' + primary.email : ''}</p>` : ''}
           </td>
@@ -9549,6 +9599,7 @@ ${vadeLine}`;
       <tr class="hover:bg-steel-50/60 transition-colors">
         <td class="px-5 py-3.5">
           <p class="font-semibold text-steel-800">${s.name}</p>
+          ${s.shortName ? `<p class="text-[11px] text-emerald-700 font-semibold mt-0.5">Kısa: ${s.shortName}</p>` : ''}
           ${s.address ? `<p class="text-xs text-steel-400 mt-0.5 truncate max-w-xs">${s.address}</p>` : ''}
           ${scopeBits ? `<p class="text-[10px] text-steel-400 mt-0.5">${scopeBits}${extra}</p>` : ''}
         </td>
@@ -9787,6 +9838,7 @@ ${vadeLine}`;
     document.getElementById('newSupplierModalTitle').textContent = supplier ? supplier.name : 'Tedarikçi Ekle';
     document.getElementById('newSupplierSubmitBtn').textContent = supplier ? 'Değişiklikleri Kaydet' : 'Tedarikçi Ekle';
     document.getElementById('newSupplierName').value = supplier ? supplier.name : '';
+    document.getElementById('newSupplierShortName').value = supplier ? (supplier.shortName || '') : '';
     const cat = supplier ? (supplier.category || 'Hammadde') : 'Hammadde';
     const catSel = document.getElementById('newSupplierCategory');
     if ([...catSel.options].some(o => o.value === cat)) catSel.value = cat;
@@ -9875,6 +9927,7 @@ ${vadeLine}`;
     const payload = {
       company: activeCompany,
       name,
+      shortName: document.getElementById('newSupplierShortName').value.trim(),
       category,
       phone: document.getElementById('newSupplierPhone').value.trim(),
       whatsapp: primary ? primary.whatsapp : '',
@@ -10002,6 +10055,7 @@ ${vadeLine}`;
     document.getElementById('newCustomerSubmitBtn').textContent = customer ? 'Değişiklikleri Kaydet' : 'Müşteri Ekle';
 
     document.getElementById('newCustomerName').value = customer ? customer.name : '';
+    document.getElementById('newCustomerShortName').value = customer ? (customer.shortName || '') : '';
     document.getElementById('newCustomerAddress').value = customer ? (customer.address || '') : '';
     document.getElementById('newCustomerTaxNo').value = customer ? (customer.taxNo || '') : '';
     document.getElementById('newCustomerTaxOffice').value = customer ? (customer.taxOffice || '') : '';
@@ -10076,6 +10130,7 @@ ${vadeLine}`;
     if (customerModalEditingTarget) {
       const target = customerModalEditingTarget;
       target.name = name;
+      target.shortName = document.getElementById('newCustomerShortName').value.trim();
       target.address = document.getElementById('newCustomerAddress').value.trim();
       target.phone = firmPhone;
       target.taxNo = document.getElementById('newCustomerTaxNo').value.trim();
@@ -10095,6 +10150,7 @@ ${vadeLine}`;
       const newCustomer = {
         company: activeCompany,
         name,
+        shortName: document.getElementById('newCustomerShortName').value.trim(),
         address: document.getElementById('newCustomerAddress').value.trim(),
         phone: firmPhone,
         taxNo: document.getElementById('newCustomerTaxNo').value.trim(),
@@ -16907,7 +16963,15 @@ ${vadeLine}`;
     if (document.getElementById('costShipPackage')) document.getElementById('costShipPackage').value = '';
     updateCostLaborCurrencyLabel();
     const dl = document.getElementById('costCustomerList');
-    dl.innerHTML = customers.filter(c => c.company === activeCompany).map(c => `<option value="${c.name}"></option>`).join('');
+    dl.innerHTML = customers.filter(c => c.company === activeCompany).flatMap(c => {
+      const opts = [`<option value="${c.name}"></option>`];
+      partyMatchAliases(c).forEach((a) => {
+        if (normalizePartyMatchKey(a) !== normalizePartyMatchKey(c.name)) {
+          opts.push(`<option value="${c.name}" label="${a}"></option>`);
+        }
+      });
+      return opts;
+    }).join('');
     updateNewCostContactOptions(existing ? (existing.contact || '') : '');
     refreshTcmbRates().then(() => { updateCostDensityHint(); recalcCostItemPreview(); });
     renderCostMaterialSelects();
@@ -17177,11 +17241,16 @@ ${vadeLine}`;
       }
     }
     const laborSum = items.reduce((s, it) => s + (Number(it.laborTotal) || 0), 0);
+    const company = matchCompanyFromExcel(maker) || activeCompany;
+    const custRes = resolveExcelCustomerName(company, customer);
     return {
       sheetName,
-      customer: customer || 'Müşteri',
+      customerRaw: customer || '',
+      customer: custRes.name || 'Müşteri',
+      customerMatched: !!custRes.matched,
+      customerMatchVia: custRes.via,
       maker,
-      company: matchCompanyFromExcel(maker) || activeCompany,
+      company,
       orderNo,
       orderDate: orderDate || new Date().toISOString().slice(0, 10),
       deliveryDate,
@@ -17212,7 +17281,12 @@ ${vadeLine}`;
       <tr class="border-t border-steel-100">
         <td class="px-3 py-2.5"><input type="checkbox" data-ex-sel="${i}" ${sh.selected ? 'checked' : ''} class="rounded border-steel-300" /></td>
         <td class="px-3 py-2.5"><span class="font-semibold mono text-steel-800">${sh.orderNo || sh.sheetName}</span><p class="text-[10px] text-steel-400">Sayfa: ${sh.sheetName}</p></td>
-        <td class="px-3 py-2.5">${sh.customer}</td>
+        <td class="px-3 py-2.5">
+          <span class="font-medium text-steel-800">${sh.customer}</span>
+          ${sh.customerMatched
+            ? `<p class="text-[10px] text-emerald-700 mt-0.5">Eşleşti (${sh.customerMatchVia === 'kisa_ad' ? 'kısa ad' : 'ünvan'})${sh.customerRaw && sh.customerRaw !== sh.customer ? ` · Excel: ${sh.customerRaw}` : ''}</p>`
+            : `<p class="text-[10px] text-amber-700 mt-0.5">CRM’de yok — metin aynen kullanılacak${sh.customerRaw ? '' : ''}</p>`}
+        </td>
         <td class="px-3 py-2.5">${sh.maker || '—'} <span class="text-[10px] text-steel-400">→ ${sh.company}</span></td>
         <td class="px-3 py-2.5 mono">${sh.items.length}</td>
         <td class="px-3 py-2.5 text-right mono font-semibold">${fmtCostMoney(sh.laborSum, '₺')}</td>
