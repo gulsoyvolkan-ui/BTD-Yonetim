@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1148,6 +1149,11 @@
             </button>
             <button type="button" id="toggleHeatCatalogBtn" class="flex items-center gap-2 bg-white border border-steel-200 hover:border-navy/30 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-sm">
               Isıl İşlem
+            </button>
+            <input type="file" id="costExcelFileInput" accept=".xlsx,.xls,.xlsm" class="hidden" />
+            <button type="button" id="importCostExcelBtn" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-emerald-600/25" title="Sipariş Formu Excel şablonundan maliyet analizi oluştur">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+              Excel Yükle
             </button>
             <button id="newCostBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -3263,6 +3269,7 @@
         <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Kar Oranı %</label>
           <select id="newCostProfitPct" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/30">
+            <option value="0">%0 · Fiyatta kâr dahil</option>
             <option value="10">%10</option>
             <option value="15">%15</option>
             <option value="20">%20</option>
@@ -3272,6 +3279,7 @@
             <option value="40">%40</option>
             <option value="50">%50</option>
           </select>
+          <p class="text-[10px] text-steel-400 mt-1">Excel’den gelen işçilik fiyatında kâr varsa %0 bırakın; sonra buradan kâr ekleyebilirsiniz.</p>
         </div>
       </div>
 
@@ -3536,6 +3544,47 @@
     <div class="p-4 sm:p-5 border-t border-steel-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 bg-steel-50/60 shrink-0">
       <button id="newCostCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
       <button id="newCostSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-navy/25">Analizi Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ EXCEL → MALİYET İÇE AKTARMA ============ -->
+<div id="costExcelImportOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[85] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden max-h-[92vh] flex flex-col">
+    <div class="bg-emerald-700 px-5 sm:px-6 py-4 flex items-start justify-between shrink-0">
+      <div>
+        <p class="text-emerald-100 text-[11px] font-semibold uppercase tracking-wide">Sipariş Formu Excel</p>
+        <h3 class="text-white font-bold text-lg mt-0.5">Maliyet Analizine Aktar</h3>
+      </div>
+      <button type="button" id="costExcelImportCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5 transition-colors shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="p-4 sm:p-5 overflow-y-auto space-y-4">
+      <div class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-xs text-emerald-900 leading-relaxed">
+        <strong>Eşleme:</strong> E sütunu → <em>birim işçilik</em> · kâr varsayılan <strong>%0</strong> (fiyat kârlı kabul) · her sayfa ayrı analiz · G sütunu malzeme cinsi.
+        İsterseniz kayıt sonrası «Kâr ekle» ile oran girebilirsiniz.
+      </div>
+      <div id="costExcelImportMeta" class="text-sm text-steel-600"></div>
+      <div class="overflow-x-auto border border-steel-200 rounded-xl">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-steel-50 text-[11px] text-steel-400 font-semibold uppercase text-left">
+              <th class="px-3 py-2 w-10"></th>
+              <th class="px-3 py-2">Sayfa / Sipariş</th>
+              <th class="px-3 py-2">Müşteri</th>
+              <th class="px-3 py-2">İmalatçı</th>
+              <th class="px-3 py-2">Kalem</th>
+              <th class="px-3 py-2 text-right">İşçilik ∑</th>
+            </tr>
+          </thead>
+          <tbody id="costExcelImportBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="p-4 border-t border-steel-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 bg-steel-50/60 shrink-0">
+      <button type="button" id="costExcelImportCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="costExcelImportConfirmBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md shadow-emerald-600/25">Seçilenleri Maliyete Kaydet</button>
     </div>
   </div>
 </div>
@@ -15068,12 +15117,21 @@ ${vadeLine}`;
     tbody.innerHTML = list.map(a => {
       const tot = analysisTotals(a);
       const first = a.items[0];
+      const excelBadge = a.source === 'excel'
+        ? `<span class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 align-middle">Excel</span>`
+        : '';
+      const profitZeroHint = (Number(a.profitPct) === 0)
+        ? `<button type="button" data-cost-add-profit="${a.id}" class="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg" title="Excel fiyatında kâr dahil kabul edildi. İsterseniz kâr oranı ekleyin.">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+            Kâr ekle
+          </button>`
+        : `<span class="text-steel-700">%${a.profitPct}</span>`;
       return `<tr class="hover:bg-steel-50/60">
-        <td class="px-5 py-3.5 font-semibold mono text-steel-800">${a.id}</td>
+        <td class="px-5 py-3.5 font-semibold mono text-steel-800">${a.id}${excelBadge}${a.externalRef ? `<p class="text-[10px] text-steel-400 font-normal mt-0.5">Ref: ${a.externalRef}</p>` : ''}</td>
         <td class="px-4 py-3.5"><p class="font-medium text-steel-700">${a.customer}</p><p class="text-[11px] text-steel-400">${first ? formatCostPartLabel(first) : '—'}</p></td>
         <td class="px-4 py-3.5">${a.items.length}</td>
         <td class="px-4 py-3.5 mono">${fmtCostMoney(tot.cost, a.currency)}</td>
-        <td class="px-4 py-3.5">%${a.profitPct}</td>
+        <td class="px-4 py-3.5">${profitZeroHint}</td>
         <td class="px-4 py-3.5 mono font-semibold text-navy">${fmtCostMoney(tot.quote, a.currency)}</td>
         <td class="px-4 py-3.5"><span class="text-[11px] font-bold px-2 py-1 rounded-full ${a.quoteId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${a.quoteId ? 'Teklife aktarıldı' : 'Taslak'}</span>
           ${a.quoteId ? `<p class="text-[10px] text-steel-400 mono mt-0.5">${a.quoteId}</p>` : ''}</td>
@@ -15092,6 +15150,20 @@ ${vadeLine}`;
       btn.addEventListener('click', () => {
         const a = costAnalyses.find(x => x.id === btn.dataset.costEdit);
         if (a) openEditCostAnalysis(a);
+      });
+    });
+    tbody.querySelectorAll('[data-cost-add-profit]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const a = costAnalyses.find(x => x.id === btn.dataset.costAddProfit);
+        if (!a) return;
+        openEditCostAnalysis(a);
+        const sel = document.getElementById('newCostProfitPct');
+        if (sel) {
+          sel.focus();
+          sel.classList.add('ring-2', 'ring-amber-400');
+          setTimeout(() => sel.classList.remove('ring-2', 'ring-amber-400'), 1800);
+        }
+        showToast('Kâr oranını seçip kaydedin. Excel birim fiyatı işçilik olarak duruyor.', 'info');
       });
     });
     tbody.querySelectorAll('[data-cost-summary]').forEach(btn => {
@@ -16871,6 +16943,10 @@ ${vadeLine}`;
       leadTimeDays: prev ? (prev.leadTimeDays || 15) : 15,
       items: costItemsDraft.map(it => ({ ...it, shipping: 0 })),
       quoteId: prev ? prev.quoteId : null,
+      source: prev ? (prev.source || null) : null,
+      externalRef: prev ? (prev.externalRef || '') : '',
+      excelSheet: prev ? (prev.excelSheet || '') : '',
+      deliveryDate: prev ? (prev.deliveryDate || '') : '',
     };
     analysis.items = analysis.items.map(it => {
       const profitAmt = it.costSubtotal * (profitPct / 100);
@@ -16898,6 +16974,341 @@ ${vadeLine}`;
   document.getElementById('newCostCloseBtn')?.addEventListener('click', closeCostModal);
   document.getElementById('newCostCancelBtn')?.addEventListener('click', closeCostModal);
   document.getElementById('newCostModalOverlay')?.addEventListener('click', (e) => { if (e.target.id === 'newCostModalOverlay') closeCostModal(); });
+
+  // ---------- Excel sipariş formu → maliyet ----------
+  let costExcelPreviewSheets = [];
+
+  function excelCellStr(v) {
+    if (v == null || v === '') return '';
+    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      // Excel serial date heuristic
+      if (v > 20000 && v < 80000) {
+        const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+        if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+      }
+      return String(v);
+    }
+    return String(v).trim();
+  }
+  function excelCellNum(v) {
+    if (v == null || v === '') return 0;
+    if (typeof v === 'number') return v;
+    const n = Number(String(v).replace(/\s/g, '').replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  }
+  function matchCompanyFromExcel(name) {
+    const t = String(name || '').trim().toLowerCase();
+    if (!t) return null;
+    const keys = Object.keys(companies || {});
+    const hit = keys.find(k => k.toLowerCase() === t || t.includes(k.toLowerCase()) || k.toLowerCase().includes(t));
+    return hit || null;
+  }
+  function guessShapeFromExcelDesc(desc) {
+    const t = String(desc || '').toLowerCase();
+    if (/yuvarlak|ø|⌀| mil\b/.test(t)) return 'yuvarlak';
+    if (/\bsac\b|levha/.test(t)) return 'sac';
+    if (/lama/.test(t)) return 'lama';
+    if (/kare/.test(t)) return 'yassi';
+    return 'lama';
+  }
+  function resolveExcelMaterialAlloy(codeG, desc) {
+    const blob = `${codeG || ''} ${desc || ''}`;
+    const up = blob.toLocaleUpperCase('tr-TR');
+    let group = 'Çelik';
+    if (/AL[UÜ]M|6082|6013|6061|7075|5083/.test(up)) group = 'Alüminyum';
+    else if (/PASLANMAZ|AISI\s*3|INOX/.test(up)) group = 'Paslanmaz';
+    else if (/PİRİNÇ|PIRINC|MS58|BRONZ/.test(up)) group = /BRONZ/.test(up) ? 'Bronz' : 'Pirinç';
+    const alloys = procMaterialCatalog[group] || [];
+    let alloy = alloys[0]?.name || '';
+    const tryMatch = (re) => alloys.find(a => re.test(a.name));
+    let hit = null;
+    if (/CK\s*45|C45|1\.1191/.test(up)) hit = tryMatch(/CK45|1\.1191/i);
+    else if (/ST\s*37|S235/.test(up)) hit = tryMatch(/St37|S235/i);
+    else if (/ST\s*52|S355/.test(up)) hit = tryMatch(/4140|St52|S355|1018/i) || tryMatch(/./);
+    else if (/6082/.test(up)) hit = tryMatch(/6082/);
+    else if (/6061/.test(up)) hit = tryMatch(/6061/);
+    else if (/7075/.test(up)) hit = tryMatch(/7075/);
+    else if (codeG) {
+      const cg = String(codeG).trim().toUpperCase();
+      hit = alloys.find(a => a.name.toUpperCase().includes(cg) || cg.includes(a.name.toUpperCase().slice(0, 4)));
+    }
+    if (hit) alloy = hit.name;
+    return { material: group, alloy };
+  }
+  function rebuildCostItemTotals(it, profitPct) {
+    const qty = Number(it.qty) || 0;
+    const laborUnit = Number(it.laborUnit) || 0;
+    const materialTotal = Number(it.materialTotal) || 0;
+    const heat = Number(it.heat) || 0;
+    const coating = Number(it.coating) || 0;
+    const laborTotal = laborUnit * qty;
+    const costSubtotal = materialTotal + laborTotal + heat + coating;
+    const pct = Number(profitPct) || 0;
+    const profitAmt = costSubtotal * (pct / 100);
+    const quoteTotal = costSubtotal + profitAmt;
+    return {
+      ...it,
+      laborTotal,
+      costSubtotal,
+      unitTotal: qty ? costSubtotal / qty : 0,
+      profitPct: pct,
+      profitAmt,
+      quoteTotal,
+      quoteUnit: qty ? quoteTotal / qty : 0,
+    };
+  }
+  function buildCostItemFromExcelRow(row) {
+    const { material, alloy } = resolveExcelMaterialAlloy(row.matGrade, row.desc);
+    const shapeId = guessShapeFromExcelDesc(row.desc);
+    const shape = productShapes.find(s => s.id === shapeId) || productShapes[0];
+    const alloyObj = (procMaterialCatalog[material] || []).find(a => a.name === alloy);
+    const density = alloyObj ? alloyObj.density : 0;
+    const laborUnit = excelCellNum(row.unitPrice);
+    const qty = excelCellNum(row.qty) || 1;
+    return rebuildCostItemTotals({
+      partNo: excelCellStr(row.partNo),
+      desc: excelCellStr(row.desc),
+      qty,
+      material,
+      alloy,
+      shapeId: shape.id,
+      shapeName: shape.name,
+      mfgDims: {},
+      ordDims: {},
+      density,
+      unitKg: 0,
+      totalKg: 0,
+      mfgUnitKg: 0,
+      mfgTotalKg: 0,
+      pricePerKg: 0,
+      priceEurPerKg: alloyObj ? (alloyObj.priceEurPerKg || 0) : 0,
+      materialUnit: 0,
+      materialTotal: 0,
+      laborUnit,
+      heatType: '',
+      heatMode: 'kg',
+      heatEurRate: 0,
+      heat: 0,
+      coatingType: '',
+      coatingMode: 'kg',
+      coatingEurRate: 0,
+      coatingType2: '',
+      coating2Mode: 'kg',
+      coating2EurRate: 0,
+      coating2: 0,
+      coating: 0,
+      shipping: 0,
+      excelSupplier: excelCellStr(row.supplier),
+      source: 'excel',
+    }, 0);
+  }
+  function findExcelHeaderRow(matrix) {
+    for (let i = 0; i < Math.min(matrix.length, 20); i++) {
+      const row = matrix[i] || [];
+      const a = String(row[0] ?? '').toLocaleLowerCase('tr-TR');
+      const b = String(row[1] ?? '').toLocaleLowerCase('tr-TR');
+      const c = String(row[2] ?? '').toLocaleLowerCase('tr-TR');
+      if (a.includes('sıra') || a.includes('sira') || (b.includes('malzeme') && b.includes('kod')) || (c.includes('malzeme') && c.includes('ad'))) {
+        return i;
+      }
+    }
+    return 3;
+  }
+  function parseSiparisFormSheet(sheetName, ws) {
+    const matrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+    if (!matrix.length) return null;
+    const get = (r, c) => (matrix[r] && matrix[r][c] !== undefined ? matrix[r][c] : '');
+    let customer = '';
+    let maker = '';
+    let orderNo = excelCellStr(sheetName);
+    let orderDate = '';
+    let deliveryDate = '';
+    for (let r = 0; r < Math.min(matrix.length, 6); r++) {
+      for (let c = 0; c < Math.min((matrix[r] || []).length, 12); c++) {
+        const label = String(get(r, c) ?? '').toLocaleLowerCase('tr-TR');
+        const val = get(r, c + 1);
+        if (label === 'firma' || label.startsWith('firma')) customer = excelCellStr(val) || customer;
+        if (label.includes('imalat')) maker = excelCellStr(val) || maker;
+        if (label.includes('sipariş numara') || label.includes('siparis numara')) {
+          const n = excelCellStr(val);
+          if (n) orderNo = n;
+        }
+        // sometimes label in D, value elsewhere — also check I/J pair on same row
+        if (label.includes('sipariş tarihi') || label.includes('siparis tarihi')) orderDate = excelCellStr(get(r, c + 1)) || orderDate;
+        if (label.includes('teslim tarihi')) deliveryDate = excelCellStr(get(r, c + 1)) || deliveryDate;
+      }
+      // classic layout: I1 label J1 date
+      const iLab = String(get(r, 8) ?? '').toLocaleLowerCase('tr-TR');
+      if (iLab.includes('sipariş tarihi') || iLab.includes('siparis tarihi')) orderDate = excelCellStr(get(r, 9)) || orderDate;
+      if (iLab.includes('teslim')) deliveryDate = excelCellStr(get(r, 9)) || deliveryDate;
+      const dLab = String(get(r, 3) ?? '').toLocaleLowerCase('tr-TR');
+      if ((dLab.includes('sipariş numara') || dLab.includes('siparis numara')) && excelCellStr(get(r, 4))) {
+        orderNo = excelCellStr(get(r, 4));
+      }
+    }
+    const headerIdx = findExcelHeaderRow(matrix);
+    const items = [];
+    for (let r = headerIdx + 1; r < matrix.length; r++) {
+      const partNo = excelCellStr(get(r, 1));
+      const desc = excelCellStr(get(r, 2));
+      const qty = excelCellNum(get(r, 3));
+      const unitPrice = excelCellNum(get(r, 4));
+      if (!partNo && !desc) continue;
+      if (!(qty > 0) && !(unitPrice > 0)) continue;
+      items.push(buildCostItemFromExcelRow({
+        partNo,
+        desc,
+        qty: qty > 0 ? qty : 1,
+        unitPrice,
+        matGrade: excelCellStr(get(r, 6)),
+        mfgDimText: excelCellStr(get(r, 7)),
+        ordDimText: excelCellStr(get(r, 8)),
+        supplier: excelCellStr(get(r, 9)),
+      }));
+    }
+    if (!items.length) return null;
+    let leadTimeDays = 15;
+    if (orderDate && deliveryDate) {
+      const a = new Date(orderDate);
+      const b = new Date(deliveryDate);
+      if (!Number.isNaN(a.getTime()) && !Number.isNaN(b.getTime())) {
+        leadTimeDays = Math.max(1, Math.round((b - a) / 86400000));
+      }
+    }
+    const laborSum = items.reduce((s, it) => s + (Number(it.laborTotal) || 0), 0);
+    return {
+      sheetName,
+      customer: customer || 'Müşteri',
+      maker,
+      company: matchCompanyFromExcel(maker) || activeCompany,
+      orderNo,
+      orderDate: orderDate || new Date().toISOString().slice(0, 10),
+      deliveryDate,
+      leadTimeDays,
+      items,
+      laborSum,
+      selected: true,
+    };
+  }
+  function parseSiparisFormWorkbook(wb) {
+    if (!wb || !wb.SheetNames) return [];
+    return wb.SheetNames.map(name => parseSiparisFormSheet(name, wb.Sheets[name])).filter(Boolean);
+  }
+  function closeCostExcelImport() {
+    costExcelPreviewSheets = [];
+    document.getElementById('costExcelImportOverlay')?.classList.add('hidden');
+  }
+  function renderCostExcelImportPreview() {
+    const body = document.getElementById('costExcelImportBody');
+    const meta = document.getElementById('costExcelImportMeta');
+    if (!body) return;
+    const n = costExcelPreviewSheets.length;
+    const items = costExcelPreviewSheets.reduce((s, sh) => s + sh.items.length, 0);
+    if (meta) {
+      meta.innerHTML = `<strong>${n}</strong> sayfa · <strong>${items}</strong> kalem bulundu. İmalatçı eşleşmezse aktif firma (<span class="font-semibold text-navy">${activeCompany}</span>) kullanılır.`;
+    }
+    body.innerHTML = costExcelPreviewSheets.map((sh, i) => `
+      <tr class="border-t border-steel-100">
+        <td class="px-3 py-2.5"><input type="checkbox" data-ex-sel="${i}" ${sh.selected ? 'checked' : ''} class="rounded border-steel-300" /></td>
+        <td class="px-3 py-2.5"><span class="font-semibold mono text-steel-800">${sh.orderNo || sh.sheetName}</span><p class="text-[10px] text-steel-400">Sayfa: ${sh.sheetName}</p></td>
+        <td class="px-3 py-2.5">${sh.customer}</td>
+        <td class="px-3 py-2.5">${sh.maker || '—'} <span class="text-[10px] text-steel-400">→ ${sh.company}</span></td>
+        <td class="px-3 py-2.5 mono">${sh.items.length}</td>
+        <td class="px-3 py-2.5 text-right mono font-semibold">${fmtCostMoney(sh.laborSum, '₺')}</td>
+      </tr>
+    `).join('') || `<tr><td colspan="6" class="px-3 py-8 text-center text-steel-400">Uygun satır bulunamadı.</td></tr>`;
+    body.querySelectorAll('[data-ex-sel]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const idx = Number(cb.dataset.exSel);
+        if (costExcelPreviewSheets[idx]) costExcelPreviewSheets[idx].selected = cb.checked;
+      });
+    });
+  }
+  function openCostExcelImportPreview(sheets) {
+    costExcelPreviewSheets = sheets;
+    renderCostExcelImportPreview();
+    document.getElementById('costExcelImportOverlay')?.classList.remove('hidden');
+  }
+  async function handleCostExcelFile(file) {
+    if (!file) return;
+    if (typeof XLSX === 'undefined') {
+      showToast('Excel okuyucu yüklenemedi. Sayfayı yenileyip tekrar deneyin.', 'error');
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const sheets = parseSiparisFormWorkbook(wb);
+      if (!sheets.length) {
+        showToast('Excel’de sipariş formu kalemi bulunamadı. Şablon başlıklarını kontrol edin.', 'error');
+        return;
+      }
+      openCostExcelImportPreview(sheets);
+    } catch (err) {
+      console.warn('[BTD] excel import', err);
+      showToast('Excel okunamadı: ' + (err.message || 'bilinmeyen hata'), 'error');
+    }
+  }
+  function confirmCostExcelImport() {
+    const selected = costExcelPreviewSheets.filter(s => s.selected);
+    if (!selected.length) {
+      showToast('En az bir sayfa seçin.', 'error');
+      return;
+    }
+    const created = [];
+    selected.forEach(sh => {
+      if (warnMissingLaborCost(sh.items)) return;
+      const analysis = {
+        id: costId(sh.company),
+        company: sh.company,
+        customer: sh.customer,
+        contact: '',
+        currency: '₺',
+        profitPct: 0,
+        shipping: 0,
+        date: sh.orderDate || new Date().toISOString().slice(0, 10),
+        leadTimeDays: sh.leadTimeDays || 15,
+        items: sh.items.map(it => rebuildCostItemTotals({ ...it }, 0)),
+        quoteId: null,
+        source: 'excel',
+        externalRef: sh.orderNo || sh.sheetName,
+        excelSheet: sh.sheetName,
+        deliveryDate: sh.deliveryDate || '',
+      };
+      analysis.financials = computeAnalysisFinancials(analysis.items, 0, 0);
+      costAnalyses.push(analysis);
+      cloudSave('saveCostAnalysis', analysis, companies);
+      created.push(analysis);
+    });
+    closeCostExcelImport();
+    if (!created.length) return;
+    // Aktif firma farklıysa ilk analizi o firmada gösterebilmek için
+    const firstCo = created[0].company;
+    if (firstCo && firstCo !== activeCompany && typeof setActiveCompany === 'function') {
+      try { setActiveCompany(firstCo); } catch (_) { /* ignore */ }
+    }
+    renderCostingPage();
+    if (typeof renderDashboard === 'function') renderDashboard();
+    showToast(`${created.length} maliyet analizi oluşturuldu (kâr %0). İsterseniz «Kâr ekle» / Teklife Aktar kullanın.`, 'success');
+    if (created.length === 1) openEditCostAnalysis(created[0]);
+  }
+
+  document.getElementById('importCostExcelBtn')?.addEventListener('click', () => {
+    const inp = document.getElementById('costExcelFileInput');
+    if (inp) { inp.value = ''; inp.click(); }
+  });
+  document.getElementById('costExcelFileInput')?.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleCostExcelFile(f);
+  });
+  document.getElementById('costExcelImportCloseBtn')?.addEventListener('click', closeCostExcelImport);
+  document.getElementById('costExcelImportCancelBtn')?.addEventListener('click', closeCostExcelImport);
+  document.getElementById('costExcelImportConfirmBtn')?.addEventListener('click', confirmCostExcelImport);
+  document.getElementById('costExcelImportOverlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'costExcelImportOverlay') closeCostExcelImport();
+  });
+
   document.getElementById('costMaterial')?.addEventListener('change', () => {
     renderCostAlloySelect();
     syncDualCoatingVisibility({ forceDefaults: true });
