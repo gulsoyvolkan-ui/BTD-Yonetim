@@ -18,6 +18,7 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/btd-supabase.js"></script>
 <script src="js/btd-cloud.js"></script>
+<script src="js/btd-parasut.js"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -1759,6 +1760,7 @@
           <button data-settings-tab="payment" class="settings-tab-btn shrink-0 px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-steel-400 hover:text-steel-700">Ödeme Ayarları</button>
           <button data-settings-tab="fx" class="settings-tab-btn shrink-0 px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-steel-400 hover:text-steel-700">Döviz</button>
           <button data-settings-tab="shipping" class="settings-tab-btn shrink-0 px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-steel-400 hover:text-steel-700">Nakliye</button>
+          <button data-settings-tab="parasut" class="settings-tab-btn shrink-0 px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-steel-400 hover:text-steel-700">Paraşüt</button>
           <button data-settings-tab="users" id="settingsUsersTabBtn" class="settings-tab-btn hidden shrink-0 px-4 py-2.5 text-sm font-semibold border-b-2 border-transparent text-steel-400 hover:text-steel-700">Kullanıcı ve Yetki Yönetimi</button>
         </div>
 
@@ -1933,6 +1935,61 @@
                 </thead>
                 <tbody id="shipPkgTableBody"></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <div id="settingsTabParasut" class="settings-tab-panel hidden">
+          <div class="space-y-4">
+            <div class="bg-white rounded-2xl border border-steel-200 shadow-sm p-5 sm:p-6">
+              <div class="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div>
+                  <p class="text-sm font-bold text-steel-800">Paraşüt Entegrasyonu</p>
+                  <p class="text-xs text-steel-400 mt-0.5">Aktif firma: <span id="parasutSettingsCompanyLabel" class="font-semibold text-navy">Technomac</span> · pilot: Technomac · her firma ayrı company_id</p>
+                </div>
+                <span id="parasutSettingsStatusBadge" class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800">Bekliyor</span>
+              </div>
+
+              <div class="rounded-xl border border-navy/15 bg-navy/5 px-4 py-3 text-[12px] text-steel-600 leading-relaxed mb-4">
+                <p class="font-semibold text-navy mb-1">Senden gereken (şifre gibi — sohbete yapıştırma)</p>
+                <ol class="list-decimal ml-4 space-y-1">
+                  <li><strong>client_id</strong> — uygulamanın Paraşüt kimliği</li>
+                  <li><strong>client_secret</strong> — uygulama gizli anahtarı</li>
+                  <li><strong>company_id</strong> — Technomac’ın Paraşüt hesap numarası (aşağıya yazılır)</li>
+                </ol>
+                <p class="mt-2">Bunları almak için <strong>destek@parasut.com</strong>’a mail at. Hazır metin: depodaki <span class="mono text-[11px]">docs/parasut-basvuru-rehberi.md</span></p>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div class="sm:col-span-2">
+                  <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Paraşüt company_id (Technomac / aktif firma)</label>
+                  <input id="parasutCompanyIdInput" type="text" placeholder="Destekten gelen sayısal / metin kod" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm mono" />
+                  <p class="text-[10px] text-steel-400 mt-1">client_secret buraya yazılmaz. Secret’lar Supabase Edge Functions → Secrets’a konur.</p>
+                </div>
+                <div class="sm:col-span-2">
+                  <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Not (opsiyonel)</label>
+                  <input id="parasutNoteInput" type="text" placeholder="Örn. Mail 8 Ağustos’ta atıldı, cevap bekleniyor" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap gap-2 mb-4">
+                <button type="button" id="parasutCfgSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-4 py-2.5 rounded-xl">company_id Kaydet</button>
+                <button type="button" id="parasutEdgeStatusBtn" class="bg-white border border-steel-200 text-steel-700 text-sm font-semibold px-4 py-2.5 rounded-xl">Sunucu durumunu kontrol et</button>
+                <button type="button" id="parasutCopyMailBtn" class="bg-emerald-50 text-emerald-800 border border-emerald-100 text-sm font-semibold px-4 py-2.5 rounded-xl">Destek mailini panoya kopyala</button>
+              </div>
+              <p id="parasutSettingsHint" class="text-[11px] text-steel-500 leading-relaxed">—</p>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-steel-200 shadow-sm p-5 sm:p-6">
+              <p class="text-sm font-bold text-steel-800 mb-3">İlerleme kontrol listesi</p>
+              <ul class="space-y-2 text-sm text-steel-600" id="parasutChecklist">
+                <li data-ps-check="mail">☐ destek@parasut.com’a başvuru maili atıldı</li>
+                <li data-ps-check="keys">☐ client_id + client_secret alındı</li>
+                <li data-ps-check="company">☐ Technomac company_id alındı ve kaydedildi</li>
+                <li data-ps-check="secrets">☐ Supabase Secrets’a anahtarlar eklendi</li>
+                <li data-ps-check="sync">☐ Cari senkron çalıştı (sonraki adım)</li>
+              </ul>
+              <p class="text-[11px] text-steel-400 mt-3">Liste satırlarına tıklayarak işaretleyebilirsin (yalnızca bu tarayıcıda saklanır).</p>
             </div>
           </div>
         </div>
@@ -14179,11 +14236,13 @@ ${vadeLine}`;
     document.getElementById('settingsTabPayment')?.classList.toggle('hidden', tab !== 'payment');
     document.getElementById('settingsTabFx')?.classList.toggle('hidden', tab !== 'fx');
     document.getElementById('settingsTabShipping')?.classList.toggle('hidden', tab !== 'shipping');
+    document.getElementById('settingsTabParasut')?.classList.toggle('hidden', tab !== 'parasut');
     document.getElementById('settingsTabUsers')?.classList.toggle('hidden', tab !== 'users');
     if (tab === 'users') renderUsersPage();
     if (tab === 'fx' && typeof syncFxRatesInputs === 'function') syncFxRatesInputs();
     if (tab === 'shipping') renderShippingPackagesTable();
     if (tab === 'payment') syncSettingsBankModeUi();
+    if (tab === 'parasut' && typeof renderParasutSettings === 'function') renderParasutSettings();
     if (!(opts && opts.fromPop) && currentAppPage === 'settings' && prev !== tab && typeof appHistPush === 'function') {
       appHistPush({ type: 'settings', page: 'settings', tab }, false);
     }
@@ -14191,6 +14250,133 @@ ${vadeLine}`;
 
   document.querySelectorAll('.settings-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => switchSettingsTab(btn.dataset.settingsTab));
+  });
+
+  const PARASUT_SUPPORT_MAIL = `Merhaba,
+
+BTD Yönetim adlı üretim / sipariş yönetim sistemimizi Paraşüt API v4 ile entegre etmek istiyoruz.
+
+Talep:
+1) OAuth2 API uygulamasi (client_id ve client_secret)
+2) Firmamıza ait company_id bilgisi
+3) Satış faturası (sales_invoices) ve e-Fatura / e-Arşiv oluşturma yetkileri
+4) Cari (contacts) okuma/yazma yetkisi
+
+Pilot firma: Technomac (ardından Bluemac ve Devorias ayrı company_id ile bağlanacak).
+
+Uygulama tipi: sunucu taraflı entegrasyon (Supabase Edge Function).
+Redirect URI: urn:ietf:wg:oauth:2.0:oob
+
+Yetkili: [AD SOYAD]
+Telefon: [TELEFON]
+Paraşüt hesap e-posta: [PARASÜT GİRİŞ E-POSTASI]
+Vergi no (Technomac): [VKN]
+
+Teşekkürler.`;
+
+  function parasutStatusLabel(status) {
+    if (status === 'bagli') return { text: 'Bağlı', cls: 'bg-emerald-50 text-emerald-700' };
+    if (status === 'hazir') return { text: 'Hazır (company_id var)', cls: 'bg-sky-50 text-sky-700' };
+    if (status === 'hata') return { text: 'Hata', cls: 'bg-rose-50 text-rose-700' };
+    return { text: 'Bekliyor', cls: 'bg-amber-50 text-amber-800' };
+  }
+  function renderParasutSettings() {
+    const label = document.getElementById('parasutSettingsCompanyLabel');
+    if (label) label.textContent = activeCompany;
+    const cfg = window.BtdParasut?.getConfig?.(activeCompany) || {};
+    const idInp = document.getElementById('parasutCompanyIdInput');
+    const noteInp = document.getElementById('parasutNoteInput');
+    if (idInp) idInp.value = cfg.parasutCompanyId || '';
+    if (noteInp) noteInp.value = cfg.note || '';
+    const status = cfg.parasutCompanyId ? (cfg.status === 'bagli' ? 'bagli' : 'hazir') : (cfg.status || 'bekliyor');
+    const badge = document.getElementById('parasutSettingsStatusBadge');
+    if (badge) {
+      const st = parasutStatusLabel(status);
+      badge.textContent = st.text;
+      badge.className = `text-[11px] font-bold px-2.5 py-1 rounded-full ${st.cls}`;
+    }
+    const hint = document.getElementById('parasutSettingsHint');
+    if (hint) {
+      hint.textContent = cfg.lastCheckAt
+        ? `Son kontrol: ${new Date(cfg.lastCheckAt).toLocaleString('tr-TR')} · ${cfg.lastMessage || ''}`
+        : 'Destek mailini gönder → cevap gelince company_id’yi kaydet → client_id/secret’i Supabase Secrets’a ekle.';
+    }
+    try {
+      const checks = JSON.parse(localStorage.getItem('btd_parasut_checks_v1') || '{}');
+      document.querySelectorAll('#parasutChecklist [data-ps-check]').forEach((li) => {
+        const k = li.dataset.psCheck;
+        const on = !!checks[k];
+        li.classList.toggle('text-emerald-700', on);
+        li.classList.toggle('font-semibold', on);
+        li.textContent = (on ? '☑ ' : '☐ ') + li.textContent.replace(/^[☐☑]\s*/, '');
+      });
+    } catch (_) { /* ignore */ }
+  }
+  document.getElementById('parasutCfgSaveBtn')?.addEventListener('click', () => {
+    const id = document.getElementById('parasutCompanyIdInput')?.value.trim() || '';
+    const note = document.getElementById('parasutNoteInput')?.value.trim() || '';
+    if (!window.BtdParasut) {
+      showToast('Paraşüt modülü yüklenemedi.', 'error');
+      return;
+    }
+    window.BtdParasut.setConfig(activeCompany, {
+      parasutCompanyId: id,
+      note,
+      status: id ? 'hazir' : 'bekliyor',
+    });
+    if (id) {
+      try {
+        const checks = JSON.parse(localStorage.getItem('btd_parasut_checks_v1') || '{}');
+        checks.company = true;
+        localStorage.setItem('btd_parasut_checks_v1', JSON.stringify(checks));
+      } catch (_) { /* ignore */ }
+    }
+    renderParasutSettings();
+    showToast(id ? `${activeCompany} company_id kaydedildi.` : 'company_id temizlendi.', 'success');
+  });
+  document.getElementById('parasutEdgeStatusBtn')?.addEventListener('click', async () => {
+    const hint = document.getElementById('parasutSettingsHint');
+    if (hint) hint.textContent = 'Kontrol ediliyor…';
+    const res = await window.BtdParasut?.edgeStatus?.();
+    const msg = res?.message || res?.reason || JSON.stringify(res || {});
+    window.BtdParasut?.setConfig?.(activeCompany, {
+      lastCheckAt: new Date().toISOString(),
+      lastMessage: msg,
+      edgeConfigured: !!res?.configured,
+    });
+    if (res?.configured) {
+      try {
+        const checks = JSON.parse(localStorage.getItem('btd_parasut_checks_v1') || '{}');
+        checks.secrets = true;
+        localStorage.setItem('btd_parasut_checks_v1', JSON.stringify(checks));
+      } catch (_) { /* ignore */ }
+    }
+    renderParasutSettings();
+    showToast(res?.configured ? 'Sunucuda API anahtarları tanımlı.' : 'Anahtarlar henüz yok — başvuru sonrası Secrets ekleyeceğiz.', res?.configured ? 'success' : 'info');
+  });
+  document.getElementById('parasutCopyMailBtn')?.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(PARASUT_SUPPORT_MAIL);
+      try {
+        const checks = JSON.parse(localStorage.getItem('btd_parasut_checks_v1') || '{}');
+        // sadece kopyalandı; mail gönderildi işaretini kullanıcı kliklesin
+        localStorage.setItem('btd_parasut_checks_v1', JSON.stringify(checks));
+      } catch (_) { /* ignore */ }
+      showToast('Destek maili panoya kopyalandı. destek@parasut.com’a yapıştırıp [AD SOYAD] alanlarını doldur.', 'success');
+    } catch (_) {
+      showToast('Pano kopyası başarısız. docs/parasut-basvuru-rehberi.md dosyasındaki metni kullan.', 'error');
+    }
+  });
+  document.getElementById('parasutChecklist')?.addEventListener('click', (e) => {
+    const li = e.target.closest('[data-ps-check]');
+    if (!li) return;
+    const k = li.dataset.psCheck;
+    try {
+      const checks = JSON.parse(localStorage.getItem('btd_parasut_checks_v1') || '{}');
+      checks[k] = !checks[k];
+      localStorage.setItem('btd_parasut_checks_v1', JSON.stringify(checks));
+      renderParasutSettings();
+    } catch (_) { /* ignore */ }
   });
 
   function syncSettingsBankModeUi() {
