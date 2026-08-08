@@ -107,8 +107,90 @@
   .sidebar-collapsed .sidebar-label { display: none; }
   .sidebar-collapsed .sidebar-logo-text { display: none; }
   .sidebar-collapsed { width: 4.5rem !important; }
-  .sidebar-collapsed #companyBadgeBg { padding: 0.5rem 0.25rem; border-radius: 0.75rem; }
-  .sidebar-collapsed #companyBadgeLogo { width: 2.5rem; height: 2.5rem; padding: 0.35rem; }
+  .sidebar-collapsed #companyBadgeBg { padding: 0.4rem; border-radius: 0.75rem; }
+  .sidebar-collapsed #companyBadgeLogo { width: 2.75rem; height: 2.75rem; padding: 0.3rem; }
+  .sidebar-collapsed #companyBadgeRule,
+  .sidebar-collapsed #companyBadgeName,
+  .sidebar-collapsed #companyBadgeLegal { display: none !important; }
+
+  /* Sidebar firma kartı — teklif logo-hero dili */
+  #companyBadgeBg {
+    min-height: 9.5rem;
+    justify-content: center;
+  }
+  #companyBadgeLogo {
+    width: 5.5rem;
+    height: 5.5rem;
+    border-radius: 1rem;
+    padding: 0.55rem;
+  }
+  #companyBadgeImg { width: 100%; height: 100%; object-fit: contain; }
+  #companyBadgeRule {
+    width: 2.5rem;
+    height: 2px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.35);
+    margin: 0.55rem auto 0.35rem;
+  }
+
+  /* Üst bar firma geçiş menüsü — logo kartları */
+  #companyMenu .company-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 0.35rem;
+    padding: 0.85rem 0.75rem 0.9rem;
+    border-bottom: 1px solid #e9edf1;
+  }
+  #companyMenu .company-option:last-of-type { border-bottom: none; }
+  #companyMenu .company-option .co-logo-box {
+    width: 5.25rem;
+    height: 5.25rem;
+    border-radius: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+    overflow: hidden;
+  }
+  #companyMenu .company-option .co-logo-box img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  #companyMenu .company-option .co-name {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.15;
+    margin-top: 0.15rem;
+  }
+  #companyMenu .company-option .co-legal {
+    font-size: 10px;
+    color: rgba(255,255,255,0.72);
+    line-height: 1.3;
+    max-width: 16rem;
+  }
+  #companyMenu .company-option .check-icon {
+    position: absolute;
+    top: 0.65rem;
+    right: 0.65rem;
+    width: 1.15rem;
+    height: 1.15rem;
+    color: #fff;
+    background: rgba(16, 185, 129, 0.95);
+    border-radius: 999px;
+    padding: 0.15rem;
+  }
+  #companyMenu .company-option { position: relative; }
+  #companyMenu .company-option.co-bluemac { background: #0284c7; }
+  #companyMenu .company-option.co-bluemac:hover { background: #0369a1; }
+  #companyMenu .company-option.co-technomac { background: #0d47a1; }
+  #companyMenu .company-option.co-technomac:hover { background: #092e6b; }
+  #companyMenu .company-option.co-devorias { background: #d97706; }
+  #companyMenu .company-option.co-devorias:hover { background: #b45309; }
 
   /* Mobil: sidebar drawer (md altı = saha cihazı) */
   @media (max-width: 767px) {
@@ -387,47 +469,35 @@
           <span id="companyName" class="text-sm font-bold">Technomac</span>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/60 transition-transform" id="companyChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
         </button>
-        <div id="companyMenu" class="hidden absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-80 bg-white rounded-xl shadow-2xl border border-steel-200 overflow-hidden z-50">
-          <div class="px-3 py-2 flex items-center justify-between border-b border-steel-100">
+        <div id="companyMenu" class="hidden absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-[19rem] bg-white rounded-2xl shadow-2xl border border-steel-200 overflow-hidden z-50">
+          <div class="px-3 py-2 flex items-center justify-between border-b border-steel-100 bg-steel-50">
             <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Şirket Seçimi</span>
-            <span class="text-[10px] font-bold text-navy bg-navy/10 px-1.5 py-0.5 rounded-full">3 Operasyon + BTD</span>
+            <span class="text-[10px] font-bold text-navy bg-navy/10 px-1.5 py-0.5 rounded-full">3 Firma</span>
           </div>
-          <button data-company="Bluemac" class="company-option w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors">
-            <span class="w-10 h-8 rounded-lg bg-white border border-steel-200 flex items-center justify-center shrink-0 p-1">
-              <img src="assets/logos/bluemac.png" alt="Bluemac" class="max-w-full max-h-full object-contain" />
+          <button data-company="Bluemac" class="company-option co-bluemac w-full transition-colors">
+            <span class="co-logo-box bg-white">
+              <img src="assets/logos/bluemac.png" alt="Bluemac" />
             </span>
-            <span class="flex-1 min-w-0">
-              <span class="block text-sm font-semibold text-steel-800">Bluemac</span>
-              <span class="block text-[11px] text-steel-400 leading-snug">Makine Sanayi Ticaret Limited Şirketi</span>
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-500 check-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span class="co-name">Bluemac</span>
+            <span class="co-legal">Bluemac Makine Sanayi Ticaret Limited Şirketi</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="check-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
-          <button data-company="Technomac" class="company-option w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors">
-            <span class="w-10 h-8 rounded-lg bg-white border border-steel-200 flex items-center justify-center shrink-0 p-1">
-              <img src="assets/logos/technomac.png" alt="Technomac" class="max-w-full max-h-full object-contain" />
+          <button data-company="Technomac" class="company-option co-technomac w-full transition-colors">
+            <span class="co-logo-box bg-white">
+              <img src="assets/logos/technomac.png" alt="Technomac" />
             </span>
-            <span class="flex-1 min-w-0">
-              <span class="block text-sm font-semibold text-steel-800">Technomac</span>
-              <span class="block text-[11px] text-steel-400 leading-snug">Makine Sanayi Ticaret Limited Şirketi</span>
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-500 check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span class="co-name">Technomac</span>
+            <span class="co-legal">Technomac Makine Sanayi Ticaret Limited Şirketi</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
-          <button data-company="Devorias" class="company-option w-full flex items-center gap-3 px-3 py-2.5 hover:bg-steel-50 text-left transition-colors">
-            <span class="w-10 h-8 rounded-lg bg-steel-900 border border-steel-200 flex items-center justify-center shrink-0 p-1">
-              <img src="assets/logos/devorias.png" alt="Devorias" class="max-w-full max-h-full object-contain" />
+          <button data-company="Devorias" class="company-option co-devorias w-full transition-colors">
+            <span class="co-logo-box bg-steel-900">
+              <img src="assets/logos/devorias.png" alt="Devorias" />
             </span>
-            <span class="flex-1 min-w-0">
-              <span class="block text-sm font-semibold text-steel-800">Devorias</span>
-              <span class="block text-[11px] text-steel-400 leading-snug">Tasarım ve İnovasyon Sanayi Ticaret Limited Şirketi</span>
-            </span>
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-500 check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span class="co-name">Devorias</span>
+            <span class="co-legal">Devorias Tasarım ve İnovasyon Sanayi Ticaret Limited Şirketi</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
-          <div class="px-3 py-2 border-t border-steel-100">
-            <button class="w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-navy hover:text-navy-light py-1.5 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              Yeni Firma Ekle
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -526,12 +596,13 @@
     <aside id="sidebar" class="bg-white border-r border-steel-200 w-64 shrink-0 transition-all duration-300 flex flex-col relative z-30">
       <!-- Active Company Badge -->
       <div class="p-3 border-b border-steel-100">
-        <div id="companyBadgeBg" class="rounded-2xl p-3.5 flex flex-col items-center text-center gap-0.5 transition-colors duration-300 bg-navy">
-          <div id="companyBadgeLogo" class="w-12 h-12 rounded-xl bg-white shadow-md flex items-center justify-center shrink-0 overflow-hidden p-2">
-            <img id="companyBadgeImg" src="assets/logos/technomac.png" alt="Technomac" class="max-w-full max-h-full object-contain" />
+        <div id="companyBadgeBg" class="rounded-2xl px-3 pt-4 pb-3.5 flex flex-col items-center text-center transition-colors duration-300 bg-navy shadow-md shadow-navy/20">
+          <div id="companyBadgeLogo" class="rounded-2xl bg-white shadow-lg flex items-center justify-center shrink-0 overflow-hidden">
+            <img id="companyBadgeImg" src="assets/logos/technomac.png" alt="Technomac" />
           </div>
-          <p id="companyBadgeName" class="sidebar-label text-white font-bold text-sm mt-1.5 leading-tight">Technomac</p>
-          <p id="companyBadgeLegal" class="sidebar-label text-white/60 text-[10px] leading-snug px-1">Makine Sanayi Ticaret Limited Şirketi</p>
+          <div id="companyBadgeRule" aria-hidden="true"></div>
+          <p id="companyBadgeName" class="sidebar-label text-white font-extrabold text-base leading-tight tracking-tight">Technomac</p>
+          <p id="companyBadgeLegal" class="sidebar-label text-white/70 text-[10px] leading-snug px-1.5 mt-0.5">Technomac Makine Sanayi Ticaret Limited Şirketi</p>
         </div>
       </div>
       <nav class="sidebar-nav flex-1 overflow-y-auto">
