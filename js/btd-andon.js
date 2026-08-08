@@ -1,51 +1,20 @@
 /**
  * BTD Core · Andon TV (salt okunur)
- * Ortak veri + render. Her HTML sayfası window.BTD_ANDON_VIEW ile sayfa tipini verir.
+ * Düzen: localStorage btd_andon_layout_v1 (MES Andon sayfasından ayarlanır)
  */
 (function (global) {
   'use strict';
 
   const REFRESH_MS = 30000;
+  const LAYOUT_KEY = 'btd_andon_layout_v1';
 
-  /** 5 atölye ekranı + özet */
   const VIEWS = {
     overview: { id: 'overview', title: 'Genel Özet', href: 'tv-dashboard.html' },
-    cnc1: {
-      id: 'cnc1',
-      title: 'CNC Atölyesi 1',
-      subtitle: 'İşleme merkezi · EDM',
-      href: 'tv-cnc1.html',
-      accent: 'navy',
-    },
-    cnc2: {
-      id: 'cnc2',
-      title: 'CNC Atölyesi 2',
-      subtitle: 'İşleme merkezi',
-      href: 'tv-cnc2.html',
-      accent: 'navy',
-    },
-    universal: {
-      id: 'universal',
-      title: 'Universal Atölyesi',
-      subtitle: 'Torna · taşlama · freze',
-      href: 'tv-universal.html',
-      accent: 'amber',
-    },
-    kaynak: {
-      id: 'kaynak',
-      title: 'Kaynak / Montaj',
-      subtitle: 'Kaynak · kesim · montaj',
-      href: 'tv-kaynak.html',
-      accent: 'emerald',
-    },
-    print3d: {
-      id: 'print3d',
-      title: '3D Baskı Atölyesi',
-      subtitle: 'FDM yazıcılar',
-      href: 'tv-3d.html',
-      accent: 'violet',
-      isPrint: true,
-    },
+    cnc1: { id: 'cnc1', title: 'CNC Atölyesi 1', subtitle: 'İşleme merkezi · EDM', href: 'tv-cnc1.html', accent: 'navy' },
+    cnc2: { id: 'cnc2', title: 'CNC Atölyesi 2', subtitle: 'İşleme merkezi', href: 'tv-cnc2.html', accent: 'navy' },
+    universal: { id: 'universal', title: 'Universal Atölyesi', subtitle: 'Torna · taşlama · freze', href: 'tv-universal.html', accent: 'amber' },
+    kaynak: { id: 'kaynak', title: 'Kaynak / Montaj', subtitle: 'Kaynak · kesim · montaj', href: 'tv-kaynak.html', accent: 'emerald' },
+    print3d: { id: 'print3d', title: '3D Baskı Atölyesi', subtitle: 'FDM yazıcılar', href: 'tv-3d.html', accent: 'violet', isPrint: true },
   };
 
   const WORKSHOP_SEEDS = {
@@ -100,6 +69,49 @@
     return arr[rand(0, arr.length - 1)];
   }
 
+  function loadLayout() {
+    try {
+      const raw = localStorage.getItem(LAYOUT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.screens ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function machinesForScreen(wid) {
+    const layout = loadLayout();
+    const scr = layout?.screens?.[wid];
+    if (scr?.machines?.length) {
+      return scr.machines.map((m) => ({ name: m.name, sub: m.sub || '' }));
+    }
+    return (WORKSHOP_SEEDS[wid] || []).map((m) => ({ ...m }));
+  }
+
+  function screenChrome(wid) {
+    const layout = loadLayout();
+    const scr = layout?.screens?.[wid] || {};
+    return {
+      cardSize: scr.cardSize || 'm',
+      cols: Number(scr.cols) || 3,
+    };
+  }
+
+  function applyShellChrome(viewId) {
+    const shell = document.querySelector('.shell');
+    if (!shell) return;
+    if (viewId === 'overview') {
+      shell.dataset.cardSize = 'm';
+      shell.dataset.cols = '5';
+      return;
+    }
+    const chrome = screenChrome(viewId);
+    shell.dataset.cardSize = chrome.cardSize;
+    shell.dataset.cols = String(chrome.cols);
+    shell.style.setProperty('--cols', String(chrome.cols));
+  }
+
   function statusMeta(state) {
     if (state === 'busy') return { label: 'Aktif', cls: 'bg-green-50 text-green-700 border-green-200', dot: 'bg-green-500 pulse-dot' };
     if (state === 'planned') return { label: 'Beklemede', cls: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
@@ -112,14 +124,14 @@
     return h <= 0 ? `${m} dk` : `${h}s ${String(m).padStart(2, '0')}dk`;
   }
 
-  /** Simülasyon — sonra Supabase iş emri / makine parkı */
   async function fetchAndonSnapshot() {
     await new Promise((r) => setTimeout(r, 120 + Math.random() * 180));
     const usedJobs = new Set();
     const workshops = {};
 
     Object.keys(WORKSHOP_SEEDS).forEach((wid) => {
-      const machines = WORKSHOP_SEEDS[wid].map((m) => {
+      const seedList = machinesForScreen(wid);
+      const machines = seedList.map((m) => {
         const roll = Math.random();
         let state = 'idle';
         if (roll > 0.55) state = 'busy';
@@ -171,6 +183,7 @@
         machines,
         activeJobs,
         kpi: { total: machines.length, busy, planned, idle },
+        chrome: screenChrome(wid),
       };
     });
 
@@ -204,11 +217,12 @@
 
   function machineCard(m, isPrint) {
     const st = statusMeta(m.state);
+    const border = (st.cls.match(/border-\S+/) || ['border-steel-200'])[0];
     const progress = m.state === 'idle' ? '' : `
       <div class="mt-auto pt-2">
         <div class="flex items-end justify-between mb-1">
           <span class="text-xs font-semibold text-steel-400 uppercase tracking-wide">İlerleme</span>
-          <span class="mono text-2xl font-bold text-steel-800 leading-none">${m.pct}%</span>
+          <span class="mono text-2xl font-bold text-steel-800 leading-none pct-val">${m.pct}%</span>
         </div>
         <div class="h-2 rounded-full bg-steel-100 overflow-hidden">
           <div class="h-full rounded-full bg-navy transition-all" style="width:${Math.max(4, m.pct)}%"></div>
@@ -220,23 +234,23 @@
     ` : `
       <div class="mt-3 space-y-1 min-w-0">
         <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">İş Emri</p>
-        <p class="mono text-xl font-bold text-navy leading-tight">${m.wo}</p>
-        <p class="text-base font-semibold text-steel-800 truncate">${m.part}</p>
+        <p class="mono text-xl font-bold text-navy leading-tight wo-val">${m.wo}</p>
+        <p class="text-base font-semibold text-steel-800 truncate part-val">${m.part}</p>
         <p class="text-sm text-steel-500 truncate">${m.project || ''}</p>
       </div>`;
 
     const printExtra = isPrint && m.state !== 'idle' ? `
-      <div class="mt-2 flex gap-3 text-sm">
+      <div class="mt-2 flex gap-3 text-sm flex-wrap">
         <span class="font-semibold text-steel-600">Nozul <span class="mono text-navy">${m.nozzle}°</span></span>
         <span class="font-semibold text-steel-600">Yatak <span class="mono text-navy">${m.bed}°</span></span>
         <span class="font-semibold text-green-700 pulse-soft">Kalan ${formatRemain(m.remainMin)}</span>
       </div>` : '';
 
     return `
-      <article class="machine-card border ${st.cls.split(' ').filter(c => c.startsWith('border-')).join(' ') || 'border-steel-200'}">
+      <article class="machine-card border ${border}">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
-            <p class="text-lg font-bold text-steel-800 truncate leading-tight">${m.name}</p>
+            <p class="text-lg font-bold text-steel-800 truncate leading-tight name-val">${m.name}</p>
             <p class="text-sm text-steel-400">${m.sub || ''}</p>
           </div>
           <span class="shrink-0 inline-flex items-center gap-1.5 text-xs font-bold px-2 py-1 rounded-full border ${st.cls}">
@@ -287,14 +301,17 @@
     const ws = data.workshops[viewId];
     if (!ws) return `<p class="p-8 text-steel-500">Atölye verisi yok.</p>`;
     const isPrint = !!ws.meta.isPrint;
+    const cols = ws.chrome?.cols || 3;
     return `
       ${kpiStrip(ws.kpi)}
       <div class="section-head">
         <h2 class="section-title">Tezgâhlar / Makineler</h2>
-        <p class="section-sub">İş ataması ve anlık durum</p>
+        <p class="section-sub">İş ataması ve anlık durum · kart boyutu ${(ws.chrome?.cardSize || 'm').toUpperCase()}</p>
       </div>
-      <div class="machine-grid ${isPrint ? 'machine-grid-3' : ''}">
-        ${ws.machines.map((m) => machineCard(m, isPrint)).join('')}
+      <div class="machine-grid" style="--cols:${cols}">
+        ${ws.machines.length
+          ? ws.machines.map((m) => machineCard(m, isPrint)).join('')
+          : `<div class="empty-panel col-span-full">Bu ekrana henüz makine atanmadı. MES → Andon TV’den düzenleyin.</div>`}
       </div>
       <div class="section-head mt-3">
         <h2 class="section-title">İş Emirleri / Projeler</h2>
@@ -370,6 +387,7 @@
     const nav = document.getElementById('andonNav');
     if (!root) return;
 
+    applyShellChrome(viewId);
     const meta = VIEWS[viewId] || VIEWS.overview;
     if (title) title.textContent = meta.title;
     if (sub) {
@@ -405,6 +423,10 @@
     refresh();
     setInterval(refresh, REFRESH_MS);
     setInterval(updateClock, 1000);
+    // Başka sekmeden düzen kaydı gelirse yenile
+    window.addEventListener('storage', (e) => {
+      if (e.key === LAYOUT_KEY) refresh();
+    });
     document.addEventListener('dblclick', () => {
       if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
       else document.exitFullscreen?.();
@@ -421,5 +443,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  global.BtdAndon = { VIEWS, refresh };
+  global.BtdAndon = { VIEWS, refresh, loadLayout };
 })(typeof window !== 'undefined' ? window : globalThis);

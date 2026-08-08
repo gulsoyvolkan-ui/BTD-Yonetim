@@ -602,6 +602,11 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
           <span class="sidebar-label text-sm font-medium flex-1">Stok</span>
         </a>
+        <a href="#" data-page="andon" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Andon TV">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+          <span class="sidebar-label text-sm font-medium flex-1">Andon TV</span>
+          <span class="sidebar-label text-[10px] bg-navy/10 text-navy font-bold px-1.5 py-0.5 rounded-full">TV</span>
+        </a>
         <a href="#" data-page="aiqc" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group relative" title="AI Rapor">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3"></path><path d="m6.3 6.3 2.1 2.1"></path><path d="M3 12h3"></path><path d="m6.3 17.7 2.1-2.1"></path><path d="M12 18v3"></path><path d="m17.7 17.7-2.1-2.1"></path><path d="M21 12h-3"></path><path d="m17.7 6.3-2.1 2.1"></path><circle cx="12" cy="12" r="3.5"></circle></svg>
           <span class="sidebar-label text-sm font-medium flex-1">AI Rapor</span>
@@ -1773,6 +1778,74 @@
               </thead>
               <tbody id="invTableBody" class="divide-y divide-steel-100"></tbody>
             </table>
+          </div>
+        </div>
+        <div class="h-6"></div>
+      </div>
+
+      <!-- ============ PAGE: ANDON TV ============ -->
+      <div id="page-andon" class="hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <div>
+            <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Andon TV <span class="text-steel-400 font-medium">/ Atölye Ekranları</span></h1>
+            <p class="text-sm text-steel-400 mt-1">PC’den aç · TV’ye bağla · hangi tezgâhın nerede görüneceğini ayarla · <span id="companyNameAndon" class="font-semibold text-navy">Technomac</span></p>
+          </div>
+          <a href="tv-dashboard.html" target="_blank" rel="noopener" class="inline-flex items-center gap-2 bg-navy hover:bg-navy-light text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-md shadow-navy/20">
+            Özeti yeni sekmede aç
+          </a>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 mb-6" id="andonLaunchGrid"></div>
+
+        <div class="bg-white rounded-2xl border border-steel-200 shadow-sm p-4 sm:p-5 mb-6">
+          <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+            <div>
+              <h2 class="text-base font-bold text-steel-800">Ekran düzeni</h2>
+              <p class="text-xs text-steel-400 mt-1">Makine seç · sürükleyerek sırala · kart boyutu ayarla. TV ve PC aynı kaydı kullanır.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button type="button" id="andonFillFromParkBtn" class="text-xs font-semibold text-steel-600 bg-steel-100 hover:bg-steel-200 px-3 py-2 rounded-xl">Makine Parkından doldur</button>
+              <button type="button" id="andonResetLayoutBtn" class="text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl">Varsayılana dön</button>
+              <button type="button" id="andonSaveLayoutBtn" class="text-xs font-semibold text-white bg-navy hover:bg-navy-light px-3 py-2 rounded-xl">Düzeni kaydet</button>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-1.5 border-b border-steel-100 pb-3 mb-4" id="andonScreenTabs"></div>
+
+          <div class="flex flex-wrap items-center gap-4 mb-4">
+            <div>
+              <p class="text-[11px] font-semibold text-steel-400 uppercase mb-1.5">Kart boyutu</p>
+              <div class="inline-flex rounded-xl border border-steel-200 overflow-hidden" id="andonSizeGroup">
+                <button type="button" data-andon-size="s" class="andon-size-btn px-3 py-1.5 text-xs font-bold text-steel-500 hover:bg-steel-50">S</button>
+                <button type="button" data-andon-size="m" class="andon-size-btn px-3 py-1.5 text-xs font-bold text-steel-500 hover:bg-steel-50 border-l border-steel-200">M</button>
+                <button type="button" data-andon-size="l" class="andon-size-btn px-3 py-1.5 text-xs font-bold text-steel-500 hover:bg-steel-50 border-l border-steel-200">L</button>
+              </div>
+            </div>
+            <div>
+              <p class="text-[11px] font-semibold text-steel-400 uppercase mb-1.5">Sütun sayısı</p>
+              <div class="inline-flex rounded-xl border border-steel-200 overflow-hidden" id="andonColsGroup">
+                <button type="button" data-andon-cols="2" class="andon-cols-btn px-3 py-1.5 text-xs font-bold text-steel-500 hover:bg-steel-50">2</button>
+                <button type="button" data-andon-cols="3" class="andon-cols-btn px-3 py-1.5 text-xs font-bold text-steel-500 hover:bg-steel-50 border-l border-steel-200">3</button>
+                <button type="button" data-andon-cols="4" class="andon-cols-btn px-3 py-1.5 text-xs font-bold text-steel-500 hover:bg-steel-50 border-l border-steel-200">4</button>
+              </div>
+            </div>
+            <p class="text-[11px] text-steel-400 self-end pb-1" id="andonLayoutHint">Bu ekranda 0 makine</p>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="rounded-xl border border-steel-200 overflow-hidden">
+              <div class="px-3 py-2 bg-steel-50 border-b border-steel-100 flex items-center justify-between">
+                <p class="text-xs font-bold text-steel-600 uppercase tracking-wide">Havuz · Makine Parkı</p>
+                <input id="andonPoolFilter" type="search" placeholder="Ara…" class="text-xs rounded-lg border border-steel-200 px-2 py-1 w-36" />
+              </div>
+              <div id="andonPoolList" class="max-h-80 overflow-y-auto divide-y divide-steel-100 p-1"></div>
+            </div>
+            <div class="rounded-xl border border-navy/20 overflow-hidden">
+              <div class="px-3 py-2 bg-navy/5 border-b border-navy/10">
+                <p class="text-xs font-bold text-navy uppercase tracking-wide">Bu ekranda göster · sürükle bırak</p>
+              </div>
+              <div id="andonStageList" class="max-h-80 overflow-y-auto p-2 space-y-1.5 min-h-[12rem]"></div>
+            </div>
           </div>
         </div>
         <div class="h-6"></div>
@@ -7252,6 +7325,7 @@ ${vadeLine}`;
     setTxt('companyNameCosting', name);
     setTxt('companyNameHr', name);
     setTxt('companyNameStock', name);
+    setTxt('companyNameAndon', name);
     setTxt('companyNameUsers', name);
     ['Dashboard', 'Orders', 'Procurement', 'Manufacturing', 'Quality', 'Shipping', 'Invoicing', 'Aiqc'].forEach(suffix => {
       setTxt(`companyName${suffix}`, name);
@@ -7592,15 +7666,15 @@ ${vadeLine}`;
 
   const roleNavAccess = {
     'Yönetici': null,
-    'Operatör': ['dashboard', 'workorders', 'manufacturing', 'fason', 'procurement', 'costing', 'machinepark', 'hr', 'quality', 'shipping'],
-    'Kalite Kontrol': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason'],
-    'Kalite Kontrol Uzmanı': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason'],
-    'Sevkiyat': ['dashboard', 'shipping', 'orders'],
+    'Operatör': ['dashboard', 'workorders', 'manufacturing', 'fason', 'procurement', 'costing', 'machinepark', 'andon', 'hr', 'quality', 'shipping'],
+    'Kalite Kontrol': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason', 'andon', 'machinepark'],
+    'Kalite Kontrol Uzmanı': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason', 'andon', 'machinepark'],
+    'Sevkiyat': ['dashboard', 'shipping', 'orders', 'andon'],
     'Muhasebe': ['dashboard', 'invoicing', 'orders', 'quotes', 'costing', 'customers', 'hr'],
   };
   const roleLabels = { 'Yönetici': 'Sistem Yöneticisi', 'Kalite Kontrol': 'Kalite Kontrol Uzmanı', 'Sevkiyat': 'Sevkiyat Sorumlusu' };
   const NAV_REGION2_CRITICAL = ['customers', 'suppliers', 'hr', 'settings'];
-  const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'fason', 'quality', 'shipping', 'machinepark'];
+  const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'fason', 'quality', 'shipping', 'machinepark', 'andon'];
   const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders'];
 
   function isGroupAdmin(user) {
@@ -8896,6 +8970,7 @@ ${vadeLine}`;
     stock: 'page-stock',
     customers: 'page-customers',
     suppliers: 'page-suppliers',
+    andon: 'page-andon',
     aiqc: 'page-aiqc',
     settings: 'page-settings',
   };
@@ -8976,6 +9051,7 @@ ${vadeLine}`;
     if (page === 'quality') renderQualityPage();
     if (page === 'shipping') renderShippingPage();
     if (page === 'invoicing') renderInvoicingPage();
+    if (page === 'andon') renderAndonHubPage();
     if (page === 'settings') renderSettingsPage();
 
     const prevPage = currentAppPage;
@@ -9487,6 +9563,359 @@ ${vadeLine}`;
     if (e.key === 'Escape' && !document.getElementById('mpEditorOverlay')?.classList.contains('hidden')) {
       closeMpEditor();
     }
+  });
+
+  // ---------- Andon TV hub + layout builder ----------
+  const ANDON_LAYOUT_KEY = 'btd_andon_layout_v1';
+  const ANDON_SCREENS = [
+    { id: 'overview', title: 'Genel Özet', href: 'tv-dashboard.html', buildable: false },
+    { id: 'cnc1', title: 'CNC Atölyesi 1', href: 'tv-cnc1.html', buildable: true },
+    { id: 'cnc2', title: 'CNC Atölyesi 2', href: 'tv-cnc2.html', buildable: true },
+    { id: 'universal', title: 'Universal', href: 'tv-universal.html', buildable: true },
+    { id: 'kaynak', title: 'Kaynak / Montaj', href: 'tv-kaynak.html', buildable: true },
+    { id: 'print3d', title: '3D Baskı', href: 'tv-3d.html', buildable: true },
+  ];
+  const ANDON_DEFAULT_SEEDS = {
+    cnc1: [
+      { name: 'MITSUBISHI MV 2400 R', sub: 'EDM' },
+      { name: 'HERMLE 600 V', sub: 'İşleme Merkezi' },
+      { name: 'MICROCUT M1050', sub: 'Divizörlü' },
+    ],
+    cnc2: [
+      { name: 'MICROCUT M1050', sub: 'İşleme Merkezi' },
+      { name: 'MICROCUT M1200', sub: 'İşleme Merkezi' },
+      { name: 'MICROCUT M1050 B', sub: 'İşleme Merkezi' },
+    ],
+    universal: [
+      { name: 'ELB', sub: 'Satıh Taşlama' },
+      { name: 'TOS', sub: 'Universal Torna' },
+      { name: 'TOS', sub: 'Takım Bileme' },
+      { name: 'FIRST', sub: 'Kalıpçı Freze' },
+    ],
+    kaynak: [
+      { name: 'ESAB', sub: 'AC/DC TIG' },
+      { name: 'GEKA', sub: 'Gazaltı' },
+      { name: 'Oksijen Kaynak', sub: 'Kesim' },
+      { name: 'Montaj Hattı', sub: 'Montaj' },
+    ],
+    print3d: [
+      { name: 'Bambulab H2D', sub: 'FDM' },
+      { name: 'Bambulab H2S', sub: 'FDM' },
+      { name: 'Bambulab P2S', sub: 'FDM' },
+    ],
+  };
+  let andonLayout = null;
+  let andonEditScreen = 'cnc1';
+  let andonDragKey = null;
+
+  function andonMachineKey(m) {
+    return `${String(m.name || '').trim()}||${String(m.sub || '').trim()}`;
+  }
+  function defaultAndonLayout() {
+    const screens = {};
+    Object.keys(ANDON_DEFAULT_SEEDS).forEach((id) => {
+      screens[id] = {
+        cardSize: 'm',
+        cols: id === 'print3d' ? 3 : 3,
+        machines: ANDON_DEFAULT_SEEDS[id].map((m) => ({
+          key: andonMachineKey(m),
+          name: m.name,
+          sub: m.sub || '',
+        })),
+      };
+    });
+    return { version: 1, updatedAt: Date.now(), screens };
+  }
+  function loadAndonLayout() {
+    try {
+      const raw = localStorage.getItem(ANDON_LAYOUT_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.screens) {
+          andonLayout = parsed;
+          return andonLayout;
+        }
+      }
+    } catch (_) { /* ignore */ }
+    andonLayout = defaultAndonLayout();
+    return andonLayout;
+  }
+  function saveAndonLayout(silent) {
+    if (!andonLayout) andonLayout = defaultAndonLayout();
+    andonLayout.updatedAt = Date.now();
+    try {
+      localStorage.setItem(ANDON_LAYOUT_KEY, JSON.stringify(andonLayout));
+    } catch (_) { /* ignore */ }
+    if (!silent) showToast('Andon düzeni kaydedildi. TV ekranları bir sonraki yenilemede güncellenir.', 'success');
+  }
+  function ensureAndonScreen(id) {
+    if (!andonLayout) loadAndonLayout();
+    if (!andonLayout.screens[id]) {
+      andonLayout.screens[id] = { cardSize: 'm', cols: 3, machines: [] };
+    }
+    return andonLayout.screens[id];
+  }
+  function collectParkMachines() {
+    const list = [];
+    const seen = new Set();
+    (machinePark || []).forEach((ws) => {
+      (ws.machines || []).forEach((m) => {
+        const key = andonMachineKey(m);
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push({
+          key,
+          name: m.name,
+          sub: m.sub || '',
+          workshop: ws.workshop || '',
+        });
+      });
+    });
+    if (!list.length) {
+      Object.values(ANDON_DEFAULT_SEEDS).flat().forEach((m) => {
+        const key = andonMachineKey(m);
+        if (seen.has(key)) return;
+        seen.add(key);
+        list.push({ key, name: m.name, sub: m.sub || '', workshop: '' });
+      });
+    }
+    return list;
+  }
+  function fillAndonFromMachinePark() {
+    loadAndonLayout();
+    const byWs = {};
+    (machinePark || []).forEach((ws) => {
+      byWs[ws.workshop] = (ws.machines || []).map((m) => ({
+        key: andonMachineKey(m),
+        name: m.name,
+        sub: m.sub || '',
+      }));
+    });
+    const cnc = byWs['CNC İmalat Atölyesi'] || [];
+    const mid = Math.ceil(cnc.length / 2) || 0;
+    andonLayout.screens.cnc1 = { cardSize: 'm', cols: 3, machines: cnc.slice(0, mid) };
+    andonLayout.screens.cnc2 = { cardSize: 'm', cols: 3, machines: cnc.slice(mid) };
+    andonLayout.screens.universal = { cardSize: 'm', cols: 3, machines: byWs['Universal Atölyesi'] || [] };
+    andonLayout.screens.kaynak = { cardSize: 'm', cols: 3, machines: byWs['Kaynak Montaj Atölyesi'] || [] };
+    andonLayout.screens.print3d = { cardSize: 'm', cols: 3, machines: byWs['3D Baskı Atölyesi'] || [] };
+    // Park boşsa varsayılan seed
+    Object.keys(ANDON_DEFAULT_SEEDS).forEach((id) => {
+      if (!andonLayout.screens[id].machines.length) {
+        andonLayout.screens[id].machines = ANDON_DEFAULT_SEEDS[id].map((m) => ({
+          key: andonMachineKey(m), name: m.name, sub: m.sub || '',
+        }));
+      }
+    });
+    saveAndonLayout(true);
+    renderAndonHubPage();
+    showToast('Makine Parkı Andon ekranlarına aktarıldı.', 'success');
+  }
+  function renderAndonLaunchGrid() {
+    const grid = document.getElementById('andonLaunchGrid');
+    if (!grid) return;
+    loadAndonLayout();
+    grid.innerHTML = ANDON_SCREENS.map((s) => {
+      const n = s.buildable ? (andonLayout.screens[s.id]?.machines?.length || 0) : '5';
+      return `
+        <div class="bg-white rounded-2xl border border-steel-200 p-4 shadow-sm flex flex-col gap-3">
+          <div>
+            <p class="text-[11px] font-bold text-navy uppercase tracking-wider">Ekran</p>
+            <h3 class="text-lg font-bold text-steel-800">${s.title}</h3>
+            <p class="text-xs text-steel-400 mt-0.5 mono">${s.href}</p>
+            <p class="text-xs text-steel-500 mt-1">${s.buildable ? `${n} makine` : 'Tüm atölye özeti'}</p>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-auto">
+            <a href="${s.href}" target="_blank" rel="noopener" class="flex-1 text-center text-xs font-semibold bg-navy text-white rounded-xl py-2 hover:bg-navy-light">Aç</a>
+            <button type="button" data-andon-copy="${s.href}" class="text-xs font-semibold text-steel-600 border border-steel-200 rounded-xl px-3 py-2 hover:bg-steel-50">URL kopyala</button>
+          </div>
+        </div>`;
+    }).join('');
+    grid.querySelectorAll('[data-andon-copy]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const href = btn.dataset.andonCopy;
+        const url = new URL(href, window.location.href).href;
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast('Adres kopyalandı.', 'success');
+        } catch (_) {
+          showToast(url, 'info');
+        }
+      });
+    });
+  }
+  function renderAndonScreenTabs() {
+    const el = document.getElementById('andonScreenTabs');
+    if (!el) return;
+    el.innerHTML = ANDON_SCREENS.filter((s) => s.buildable).map((s) => `
+      <button type="button" data-andon-tab="${s.id}"
+        class="shrink-0 px-3 py-2 text-sm font-semibold rounded-xl border ${andonEditScreen === s.id ? 'bg-navy text-white border-navy' : 'bg-white text-steel-600 border-steel-200 hover:border-navy/30'}">
+        ${s.title}
+      </button>`).join('');
+    el.querySelectorAll('[data-andon-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        andonEditScreen = btn.dataset.andonTab;
+        renderAndonBuilder();
+      });
+    });
+  }
+  function renderAndonSizeControls() {
+    const scr = ensureAndonScreen(andonEditScreen);
+    document.querySelectorAll('.andon-size-btn').forEach((btn) => {
+      const on = btn.dataset.andonSize === (scr.cardSize || 'm');
+      btn.classList.toggle('bg-navy', on);
+      btn.classList.toggle('text-white', on);
+      btn.classList.toggle('text-steel-500', !on);
+    });
+    document.querySelectorAll('.andon-cols-btn').forEach((btn) => {
+      const on = String(scr.cols || 3) === btn.dataset.andonCols;
+      btn.classList.toggle('bg-navy', on);
+      btn.classList.toggle('text-white', on);
+      btn.classList.toggle('text-steel-500', !on);
+    });
+    const hint = document.getElementById('andonLayoutHint');
+    if (hint) hint.textContent = `Bu ekranda ${(scr.machines || []).length} makine · boyut ${(scr.cardSize || 'm').toUpperCase()} · ${scr.cols || 3} sütun`;
+  }
+  function renderAndonPoolList() {
+    const box = document.getElementById('andonPoolList');
+    if (!box) return;
+    const q = (document.getElementById('andonPoolFilter')?.value || '').trim().toLowerCase();
+    const scr = ensureAndonScreen(andonEditScreen);
+    const onScreen = new Set((scr.machines || []).map((m) => m.key));
+    const pool = collectParkMachines().filter((m) => {
+      if (!q) return true;
+      return `${m.name} ${m.sub} ${m.workshop}`.toLowerCase().includes(q);
+    });
+    if (!pool.length) {
+      box.innerHTML = `<p class="p-4 text-sm text-steel-400 text-center">Havuzda makine yok. Önce Makine Parkı’na ekleyin.</p>`;
+      return;
+    }
+    box.innerHTML = pool.map((m) => {
+      const added = onScreen.has(m.key);
+      return `
+        <div class="flex items-center gap-2 px-2 py-2 hover:bg-steel-50 rounded-lg">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-steel-800 truncate">${m.name}</p>
+            <p class="text-[11px] text-steel-400 truncate">${m.sub || '—'}${m.workshop ? ` · ${m.workshop}` : ''}</p>
+          </div>
+          <button type="button" data-andon-add="${m.key}" ${added ? 'disabled' : ''}
+            class="text-[11px] font-semibold px-2.5 py-1 rounded-lg ${added ? 'bg-steel-100 text-steel-400' : 'bg-navy/10 text-navy hover:bg-navy/20'}">
+            ${added ? 'Eklendi' : '+ Ekle'}
+          </button>
+        </div>`;
+    }).join('');
+    box.querySelectorAll('[data-andon-add]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.andonAdd;
+        const m = collectParkMachines().find((x) => x.key === key);
+        if (!m) return;
+        const s = ensureAndonScreen(andonEditScreen);
+        if (s.machines.some((x) => x.key === key)) return;
+        s.machines.push({ key: m.key, name: m.name, sub: m.sub || '' });
+        saveAndonLayout(true);
+        renderAndonBuilder();
+      });
+    });
+  }
+  function renderAndonStageList() {
+    const box = document.getElementById('andonStageList');
+    if (!box) return;
+    const scr = ensureAndonScreen(andonEditScreen);
+    const machines = scr.machines || [];
+    if (!machines.length) {
+      box.innerHTML = `<p class="p-6 text-sm text-steel-400 text-center border border-dashed border-steel-200 rounded-xl">Bu ekranda henüz makine yok. Soldan ekleyin.</p>`;
+      return;
+    }
+    box.innerHTML = machines.map((m, i) => `
+      <div class="andon-stage-row flex items-center gap-2 bg-white border border-steel-200 rounded-xl px-2.5 py-2 cursor-grab active:cursor-grabbing"
+           draggable="true" data-andon-key="${m.key}" data-andon-idx="${i}">
+        <span class="text-steel-300 text-sm select-none">⠿</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-semibold text-steel-800 truncate">${m.name}</p>
+          <p class="text-[11px] text-steel-400 truncate">${m.sub || '—'}</p>
+        </div>
+        <span class="text-[10px] font-bold text-steel-400 mono">#${i + 1}</span>
+        <button type="button" data-andon-remove="${m.key}" class="text-[11px] font-semibold text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg">Kaldır</button>
+      </div>`).join('');
+
+    box.querySelectorAll('[data-andon-remove]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const key = btn.dataset.andonRemove;
+        const s = ensureAndonScreen(andonEditScreen);
+        s.machines = s.machines.filter((x) => x.key !== key);
+        saveAndonLayout(true);
+        renderAndonBuilder();
+      });
+    });
+
+    box.querySelectorAll('.andon-stage-row').forEach((row) => {
+      row.addEventListener('dragstart', (e) => {
+        andonDragKey = row.dataset.andonKey;
+        row.classList.add('opacity-50');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      row.addEventListener('dragend', () => {
+        andonDragKey = null;
+        row.classList.remove('opacity-50');
+      });
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('ring-2', 'ring-navy/30');
+      });
+      row.addEventListener('dragleave', () => row.classList.remove('ring-2', 'ring-navy/30'));
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('ring-2', 'ring-navy/30');
+        const toKey = row.dataset.andonKey;
+        if (!andonDragKey || andonDragKey === toKey) return;
+        const s = ensureAndonScreen(andonEditScreen);
+        const from = s.machines.findIndex((x) => x.key === andonDragKey);
+        const to = s.machines.findIndex((x) => x.key === toKey);
+        if (from < 0 || to < 0) return;
+        const [item] = s.machines.splice(from, 1);
+        s.machines.splice(to, 0, item);
+        saveAndonLayout(true);
+        renderAndonBuilder();
+      });
+    });
+  }
+  function renderAndonBuilder() {
+    renderAndonScreenTabs();
+    renderAndonSizeControls();
+    renderAndonPoolList();
+    renderAndonStageList();
+  }
+  function renderAndonHubPage() {
+    loadAndonLayout();
+    if (!ANDON_SCREENS.some((s) => s.buildable && s.id === andonEditScreen)) andonEditScreen = 'cnc1';
+    renderAndonLaunchGrid();
+    renderAndonBuilder();
+  }
+
+  document.getElementById('andonSaveLayoutBtn')?.addEventListener('click', () => saveAndonLayout(false));
+  document.getElementById('andonFillFromParkBtn')?.addEventListener('click', fillAndonFromMachinePark);
+  document.getElementById('andonResetLayoutBtn')?.addEventListener('click', () => {
+    if (!confirmDelete('Andon düzeni varsayılana dönecek')) return;
+    andonLayout = defaultAndonLayout();
+    saveAndonLayout(true);
+    renderAndonHubPage();
+    showToast('Varsayılan Andon düzeni yüklendi.', 'info');
+  });
+  document.getElementById('andonPoolFilter')?.addEventListener('input', () => renderAndonPoolList());
+  document.getElementById('andonSizeGroup')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-andon-size]');
+    if (!btn) return;
+    ensureAndonScreen(andonEditScreen).cardSize = btn.dataset.andonSize;
+    saveAndonLayout(true);
+    renderAndonSizeControls();
+  });
+  document.getElementById('andonColsGroup')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-andon-cols]');
+    if (!btn) return;
+    ensureAndonScreen(andonEditScreen).cols = Number(btn.dataset.andonCols) || 3;
+    saveAndonLayout(true);
+    renderAndonSizeControls();
   });
 
   function formatTime(iso) {
