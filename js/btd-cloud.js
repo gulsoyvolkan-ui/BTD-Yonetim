@@ -804,6 +804,16 @@
 
   // ─── Cost analyses ─────────────────────────────────────────────────────────
   function costItemToRow(it, maliyetId, sira) {
+    const mfg = { ...(it.mfgDims || {}) };
+    if (it.excelAllInUnit != null || it.source || it.excelSplitNote || it.excelSupplier) {
+      mfg.__btd = {
+        excelAllInUnit: it.excelAllInUnit,
+        source: it.source || null,
+        excelSplitNote: it.excelSplitNote || null,
+        excelSupplier: it.excelSupplier || null,
+        vatExcluded: it.vatExcluded !== false,
+      };
+    }
     return {
       maliyet_id: maliyetId,
       sira,
@@ -814,30 +824,34 @@
       alacim: it.alloy || null,
       sekil_kodu: it.shapeId || null,
       sekil_adi: it.shapeName || null,
-      imalat_olculeri: it.mfgDims || {},
+      imalat_olculeri: mfg,
       siparis_olculeri: it.ordDims || {},
       ozkutle: it.density ?? null,
       birim_kg: it.unitKg ?? null,
       toplam_kg: it.totalKg ?? null,
       imalat_birim_kg: it.mfgUnitKg ?? null,
       imalat_toplam_kg: it.mfgTotalKg ?? null,
-      fiyat_eur_kg: it.pricePerKg ?? null,
-      malzeme_birim: it.matUnit ?? 0,
-      malzeme_toplam: it.matTotal ?? 0,
+      fiyat_eur_kg: it.priceEurPerKg ?? it.pricePerKg ?? null,
+      malzeme_birim: it.materialUnit ?? it.matUnit ?? 0,
+      malzeme_toplam: it.materialTotal ?? it.matTotal ?? 0,
       iscilik_birim: it.laborUnit ?? 0,
       iscilik_toplam: it.laborTotal ?? 0,
       isil_tip: it.heatType || null,
       isil_mod: it.heatMode || null,
-      isil_eur: it.heatEur ?? 0,
-      isil_tutar: it.heatAmt ?? 0,
-      kaplama_tip: it.coatType || null,
-      kaplama_mod: it.coatMode || null,
-      kaplama_eur: it.coatEur ?? 0,
-      kaplama_tutar: it.coatAmt ?? 0,
-      kaplama2_tip: it.coat2Type || null,
-      kaplama2_mod: it.coat2Mode || null,
-      kaplama2_eur: it.coat2Eur ?? 0,
-      kaplama2_tutar: it.coat2Amt ?? 0,
+      isil_eur: it.heatEurRate ?? it.heatEur ?? 0,
+      isil_tutar: it.heat ?? it.heatAmt ?? 0,
+      kaplama_tip: it.coatingType || it.coatType || null,
+      kaplama_mod: it.coatingMode || it.coatMode || null,
+      kaplama_eur: it.coatingEurRate ?? it.coatEur ?? 0,
+      kaplama_tutar: (() => {
+        const c2 = Number(it.coating2 ?? it.coat2Amt) || 0;
+        const cAll = Number(it.coating ?? it.coatAmt) || 0;
+        return Math.max(0, cAll - c2);
+      })(),
+      kaplama2_tip: it.coatingType2 || it.coat2Type || null,
+      kaplama2_mod: it.coating2Mode || it.coat2Mode || null,
+      kaplama2_eur: it.coating2EurRate ?? it.coat2Eur ?? 0,
+      kaplama2_tutar: it.coating2 ?? it.coat2Amt ?? 0,
       nakliye: it.shipping ?? 0,
       maliyet_ara: it.costSubtotal ?? 0,
       birim_toplam: it.unitTotal ?? 0,
@@ -848,6 +862,11 @@
     };
   }
   function costItemFromRow(r) {
+    const mfgRaw = { ...(r.imalat_olculeri || {}) };
+    const meta = mfgRaw.__btd || {};
+    delete mfgRaw.__btd;
+    const coat1 = Number(r.kaplama_tutar) || 0;
+    const coat2 = Number(r.kaplama2_tutar) || 0;
     return {
       partNo: r.parca_no || '',
       desc: r.aciklama || '',
@@ -856,7 +875,7 @@
       alloy: r.alacim || '',
       shapeId: r.sekil_kodu || '',
       shapeName: r.sekil_adi || '',
-      mfgDims: r.imalat_olculeri || {},
+      mfgDims: mfgRaw,
       ordDims: r.siparis_olculeri || {},
       density: Number(r.ozkutle) || 0,
       unitKg: Number(r.birim_kg) || 0,
@@ -864,22 +883,23 @@
       mfgUnitKg: Number(r.imalat_birim_kg) || 0,
       mfgTotalKg: Number(r.imalat_toplam_kg) || 0,
       pricePerKg: Number(r.fiyat_eur_kg) || 0,
-      matUnit: Number(r.malzeme_birim) || 0,
-      matTotal: Number(r.malzeme_toplam) || 0,
+      priceEurPerKg: Number(r.fiyat_eur_kg) || 0,
+      materialUnit: Number(r.malzeme_birim) || 0,
+      materialTotal: Number(r.malzeme_toplam) || 0,
       laborUnit: Number(r.iscilik_birim) || 0,
       laborTotal: Number(r.iscilik_toplam) || 0,
       heatType: r.isil_tip || '',
       heatMode: r.isil_mod || '',
-      heatEur: Number(r.isil_eur) || 0,
-      heatAmt: Number(r.isil_tutar) || 0,
-      coatType: r.kaplama_tip || '',
-      coatMode: r.kaplama_mod || '',
-      coatEur: Number(r.kaplama_eur) || 0,
-      coatAmt: Number(r.kaplama_tutar) || 0,
-      coat2Type: r.kaplama2_tip || '',
-      coat2Mode: r.kaplama2_mod || '',
-      coat2Eur: Number(r.kaplama2_eur) || 0,
-      coat2Amt: Number(r.kaplama2_tutar) || 0,
+      heatEurRate: Number(r.isil_eur) || 0,
+      heat: Number(r.isil_tutar) || 0,
+      coatingType: r.kaplama_tip || '',
+      coatingMode: r.kaplama_mod || '',
+      coatingEurRate: Number(r.kaplama_eur) || 0,
+      coatingType2: r.kaplama2_tip || '',
+      coating2Mode: r.kaplama2_mod || '',
+      coating2EurRate: Number(r.kaplama2_eur) || 0,
+      coating2: coat2,
+      coating: coat1 + coat2,
       shipping: Number(r.nakliye) || 0,
       costSubtotal: Number(r.maliyet_ara) || 0,
       unitTotal: Number(r.birim_toplam) || 0,
@@ -887,6 +907,11 @@
       profitAmt: Number(r.kar_tutari) || 0,
       quoteUnit: Number(r.teklif_birim) || 0,
       quoteTotal: Number(r.teklif_toplam) || 0,
+      excelAllInUnit: meta.excelAllInUnit != null ? Number(meta.excelAllInUnit) : null,
+      excelSplitNote: meta.excelSplitNote || '',
+      excelSupplier: meta.excelSupplier || '',
+      source: meta.source || '',
+      vatExcluded: meta.vatExcluded !== false,
     };
   }
   async function saveCostAnalysis(a, companies) {

@@ -1292,9 +1292,9 @@
                   <th class="px-5 py-3">Analiz No</th>
                   <th class="px-4 py-3">Müşteri / Ürün</th>
                   <th class="px-4 py-3">Kalem</th>
-                  <th class="px-4 py-3">Maliyet</th>
+                  <th class="px-4 py-3">Maliyet <span class="normal-case font-medium">(KDV’siz)</span></th>
                   <th class="px-4 py-3">Kar %</th>
-                  <th class="px-4 py-3">Teklif Toplamı</th>
+                  <th class="px-4 py-3">Teklif Toplamı <span class="normal-case font-medium">(KDV dahil)</span></th>
                   <th class="px-4 py-3">Durum</th>
                   <th class="px-4 py-3 text-right">İşlem</th>
                 </tr>
@@ -1334,7 +1334,7 @@
                   <th class="px-4 py-3">Müşteri</th>
                   <th class="px-4 py-3">Tarih</th>
                   <th class="px-4 py-3">Kalem</th>
-                  <th class="px-4 py-3">Genel Toplam</th>
+                  <th class="px-4 py-3">Genel Toplam <span class="normal-case font-medium">(KDV dahil)</span></th>
                   <th class="px-4 py-3">Durum</th>
                   <th class="px-4 py-3 text-right">İşlem</th>
                 </tr>
@@ -6856,7 +6856,8 @@ ${vadeLine}`;
   function findLocalUserForLogin(username, password) {
     const u = (username || '').trim().toLowerCase();
     const p = (password || '').trim();
-    const list = (typeof users !== 'undefined') ? users : [];
+    let list = [];
+    try { list = Array.isArray(users) ? users : []; } catch (_) { list = []; }
     return list.find((row) => {
       const uname = (row.username || '').trim().toLowerCase();
       const name = (row.name || '').trim().toLowerCase();
@@ -6912,7 +6913,8 @@ ${vadeLine}`;
       clearAuthSession();
       return false;
     }
-    const list = (typeof users !== 'undefined') ? users : [];
+    let list = [];
+    try { list = Array.isArray(users) ? users : []; } catch (_) { list = []; }
     let found = list.find(u => (u.username || '').toLowerCase() === String(raw.username).toLowerCase());
     if (!found) {
       found = {
@@ -15073,23 +15075,41 @@ ${vadeLine}`;
   }
   function computeAnalysisFinancials(items, shipping, profitPct) {
     const list = items || [];
-    const material = list.reduce((s, it) => s + (Number(it.materialTotal) || 0), 0);
+    const material = list.reduce((s, it) => s + (Number(it.materialTotal ?? it.matTotal) || 0), 0);
     const labor = list.reduce((s, it) => s + (Number(it.laborTotal) || 0), 0);
-    const heat = list.reduce((s, it) => s + (Number(it.heat) || 0), 0);
-    const coating = list.reduce((s, it) => s + (Number(it.coating) || 0), 0);
+    const heat = list.reduce((s, it) => s + (Number(it.heat ?? it.heatAmt) || 0), 0);
+    const coating = list.reduce((s, it) => s + (Number(it.coating ?? it.coatAmt) || 0), 0);
     const ship = Number(shipping) || 0;
     const external = heat + coating + ship;
-    const costBase = material + labor + external;
+    const sumParts = material + labor + heat + coating;
+    const sumCostSub = list.reduce((s, it) => s + (Number(it.costSubtotal) || 0), 0);
+    // Kalemlerde kayıtlı maliyet_ara daha güvenilir (bulut eşlemesi / Excel sonrası)
+    const costBase = (sumCostSub > 0 ? sumCostSub : sumParts) + ship;
     const pct = Number(profitPct) || 0;
+    const excelQuote = list.reduce((s, it) => {
+      if (Number(it.excelAllInUnit) > 0) {
+        return s + Number(it.excelAllInUnit) * (Number(it.qty) || 0);
+      }
+      return s + (Number(it.quoteTotal) || 0);
+    }, 0);
+    const quoteFromLines = list.reduce((s, it) => s + (Number(it.quoteTotal) || 0), 0);
     const profitAmt = costBase * (pct / 100);
     const tax = 0.25 * (labor + profitAmt);
     const netProfit = profitAmt - tax;
-    const totalPrice = costBase + profitAmt;
+    // Excel kaynaklı: teklif = Excel KDV’siz toplam (+ kâr); aksi halde maliyet+kâr
+    let totalPrice = costBase + profitAmt;
+    if (excelQuote > 0) {
+      totalPrice = excelQuote * (1 + pct / 100) + ship * (1 + pct / 100);
+    } else if (quoteFromLines > 0 && Math.abs(quoteFromLines - totalPrice) > 0.5) {
+      // Kayıtlı teklif satır toplamı (hydrate sonrası bileşenler eksikse)
+      totalPrice = quoteFromLines + ship * (1 + pct / 100);
+    }
     const vat = Math.round(totalPrice * (COST_VAT_RATE / 100) * 100) / 100;
     return {
       material, labor, heat, coating, shipping: ship, external, costBase,
       profitPct: pct, profitAmt, tax, netProfit, totalPrice,
-      vatRate: COST_VAT_RATE, vat, grandWithVat: totalPrice + vat,
+      vatRate: COST_VAT_RATE, vat, grandWithVat: Math.round((totalPrice + vat) * 100) / 100,
+      excelQuote,
     };
   }
   function applyHeatCatalogRate() {
@@ -15430,7 +15450,14 @@ ${vadeLine}`;
   function analysisTotals(a) {
     const shipping = a.shipping != null ? Number(a.shipping) : (a.items || []).reduce((s, it) => s + (Number(it.shipping) || 0), 0);
     const fin = computeAnalysisFinancials(a.items || [], shipping, a.profitPct);
-    return { cost: fin.costBase, quote: fin.totalPrice, financials: fin };
+    return {
+      cost: fin.costBase,
+      quote: fin.totalPrice,
+      quoteWithVat: fin.grandWithVat,
+      vat: fin.vat,
+      vatRate: fin.vatRate,
+      financials: fin,
+    };
   }
   function renderCostingPage() {
     const el = document.getElementById('companyNameCosting');
@@ -15458,9 +15485,16 @@ ${vadeLine}`;
         <td class="px-5 py-3.5 font-semibold mono text-steel-800">${a.id}${excelBadge}${a.externalRef ? `<p class="text-[10px] text-steel-400 font-normal mt-0.5">Ref: ${a.externalRef}</p>` : ''}</td>
         <td class="px-4 py-3.5"><p class="font-medium text-steel-700">${a.customer}</p><p class="text-[11px] text-steel-400">${first ? formatCostPartLabel(first) : '—'}</p></td>
         <td class="px-4 py-3.5">${a.items.length}</td>
-        <td class="px-4 py-3.5 mono">${fmtCostMoney(tot.cost, a.currency)}</td>
+        <td class="px-4 py-3.5 mono">
+          <p>${fmtCostMoney(tot.cost, a.currency)}</p>
+          <p class="text-[10px] text-steel-400 font-normal">KDV hariç · maliyet</p>
+        </td>
         <td class="px-4 py-3.5">${profitZeroHint}</td>
-        <td class="px-4 py-3.5 mono font-semibold text-navy">${fmtCostMoney(tot.quote, a.currency)}</td>
+        <td class="px-4 py-3.5 mono font-semibold text-navy">
+          <p>${fmtCostMoney(tot.quoteWithVat, a.currency)}</p>
+          <p class="text-[10px] text-steel-500 font-normal">KDV dahil (%${tot.vatRate || 20})</p>
+          <p class="text-[10px] text-steel-400 font-normal mt-0.5">KDV’siz: ${fmtCostMoney(tot.quote, a.currency)}</p>
+        </td>
         <td class="px-4 py-3.5"><span class="text-[11px] font-bold px-2 py-1 rounded-full ${a.quoteId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${a.quoteId ? 'Teklife aktarıldı' : 'Taslak'}</span>
           ${a.quoteId ? `<p class="text-[10px] text-steel-400 mono mt-0.5">${a.quoteId}</p>` : ''}</td>
         <td class="px-4 py-3.5 text-right space-x-1 whitespace-nowrap">
@@ -15531,19 +15565,24 @@ ${vadeLine}`;
     const qid = quoteId(analysis.company, seq);
     const tot = analysisTotals(analysis);
     const fin = tot.financials;
-    const quoteItems = analysis.items.map(it => ({
-      partNo: it.partNo || '',
-      desc: it.desc,
-      qty: it.qty,
-      unitPrice: Math.round(it.quoteUnit * 100) / 100,
-      material: it.material || '',
-      alloy: it.alloy || '',
-      mfgDims: it.mfgDims || null,
-      ordDims: it.ordDims || null,
-      heatType: it.heatType || '',
-      coatingType: [it.coatingType, it.coatingType2].filter(Boolean).join(' + '),
-      serial: it.partNo || '',
-    }));
+    const quoteItems = analysis.items.map(it => {
+      const unit = Number(it.excelAllInUnit) > 0
+        ? Number(it.excelAllInUnit) * (1 + (Number(analysis.profitPct) || 0) / 100)
+        : Number(it.quoteUnit) || 0;
+      return {
+        partNo: it.partNo || '',
+        desc: it.desc,
+        qty: it.qty,
+        unitPrice: Math.round(unit * 100) / 100,
+        material: it.material || '',
+        alloy: it.alloy || '',
+        mfgDims: it.mfgDims || null,
+        ordDims: it.ordDims || null,
+        heatType: it.heatType || '',
+        coatingType: [it.coatingType, it.coatingType2].filter(Boolean).join(' + '),
+        serial: it.partNo || '',
+      };
+    });
     if (fin && fin.shipping > 0) {
       const shipQuote = fin.shipping * (1 + (analysis.profitPct || 0) / 100);
       quoteItems.push({
@@ -15571,6 +15610,7 @@ ${vadeLine}`;
       paymentTerms: prefs.paymentTerms,
       manufacturingType: prefs.manufacturingType,
       items: quoteItems,
+      vatRate: 20,
       terms: prefs.terms,
       status: 'Taslak',
       costAnalysisId: analysis.id,
@@ -17461,7 +17501,16 @@ ${vadeLine}`;
     const costSubtotal = materialTotal + laborTotal + heat + coating;
     const pct = Number(profitPct) || 0;
     const profitAmt = costSubtotal * (pct / 100);
-    const quoteTotal = costSubtotal + profitAmt;
+    // Excel birim fiyatı teklif için bağlayıcı (KDV hariç)
+    let quoteUnit;
+    let quoteTotal;
+    if (Number(it.excelAllInUnit) > 0) {
+      quoteUnit = Number(it.excelAllInUnit) * (1 + pct / 100);
+      quoteTotal = quoteUnit * qty;
+    } else {
+      quoteTotal = costSubtotal + profitAmt;
+      quoteUnit = qty ? quoteTotal / qty : 0;
+    }
     return {
       ...it,
       laborTotal,
@@ -17469,8 +17518,8 @@ ${vadeLine}`;
       unitTotal: qty ? costSubtotal / qty : 0,
       profitPct: pct,
       profitAmt,
-      quoteTotal,
-      quoteUnit: qty ? quoteTotal / qty : 0,
+      quoteTotal: Math.round(quoteTotal * 100) / 100,
+      quoteUnit: Math.round(quoteUnit * 100) / 100,
     };
   }
   function buildCostItemFromExcelRow(row, currency = '₺') {
