@@ -9,8 +9,15 @@
   const CURRENCY_TO_DB = { '₺': 'TRY', '€': 'EUR', '$': 'USD', '£': 'GBP', TRY: 'TRY', EUR: 'EUR', USD: 'USD', GBP: 'GBP' };
   const CURRENCY_TO_UI = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', '₺': '₺', '€': '€', '$': '$', '£': '£' };
   const PROTECTED_USERS = new Set(['volkan', 'ahmet']);
+  const SEED_FLAG = 'btd_cloud_seeded_v1';
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+  function alreadySeeded() {
+    try { return localStorage.getItem(SEED_FLAG) === '1'; } catch (_) { return false; }
+  }
+  function markSeeded() {
+    try { localStorage.setItem(SEED_FLAG, '1'); } catch (_) { /* ignore */ }
+  }
   function currencyToDb(sym) {
     if (!sym) return 'EUR';
     return CURRENCY_TO_DB[sym] || CURRENCY_TO_DB[String(sym).toUpperCase()] || String(sym).toUpperCase();
@@ -47,6 +54,32 @@
     if (!Array.isArray(target)) return;
     target.length = 0;
     (rows || []).forEach((r) => target.push(r));
+  }
+  /** İlk seed sonrası boş tabloları tekrar demo veriyle doldurmayı engeller */
+  function blockReseed(arr) {
+    if (!alreadySeeded()) return false;
+    if (Array.isArray(arr)) replaceArray(arr, []);
+    return true;
+  }
+  async function deleteBelgeRow(table, entity, companies, label) {
+    try {
+      const client = sb();
+      if (!client || !entity) return fail('no-client', label);
+      if (entity.dbId) {
+        const { error } = await client.from(table).delete().eq('id', entity.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, entity.company);
+      if (fid && entity.id) {
+        const { error } = await client.from(table).delete().eq('firma_id', fid).eq('belge_no', entity.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', label);
+    } catch (e) {
+      return fail(e, label);
+    }
   }
   function assignObject(target, src) {
     if (!target || !src || typeof target !== 'object') return;
@@ -111,6 +144,7 @@
     return {
       firma_id: fid,
       unvan: c.name,
+      kisa_ad: c.shortName || null,
       adres: c.address || null,
       telefon: c.phone || null,
       vergi_no: c.taxNo || null,
@@ -122,6 +156,12 @@
       teklif_kosullari: c.quoteTerms || null,
       notify_whatsapp: !!(c.notifyPrefs?.whatsapp ?? true),
       notify_eposta: !!(c.notifyPrefs?.email ?? true),
+      party_key: c.partyKey || null,
+      intercompany: !!c.intercompany,
+      kaynak: c.source || null,
+      linked_tedarikci_id: c.linkedSupplierDbId || null,
+      tl_bakiye: c.tlBalance == null || c.tlBalance === '' ? null : Number(c.tlBalance),
+      cari_rol: c.cariRole || null,
     };
   }
   function customerFromRow(r, companies) {
@@ -129,6 +169,7 @@
       dbId: r.id,
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
+      shortName: r.kisa_ad || '',
       address: r.adres || '',
       phone: r.telefon || '',
       taxNo: r.vergi_no || '',
@@ -139,6 +180,12 @@
       manufacturingType: r.imalat_tipi || 'Malzemeli',
       quoteTerms: r.teklif_kosullari || '',
       notifyPrefs: { whatsapp: !!r.notify_whatsapp, email: !!r.notify_eposta },
+      partyKey: r.party_key || '',
+      intercompany: !!r.intercompany,
+      source: r.kaynak || '',
+      linkedSupplierDbId: r.linked_tedarikci_id || null,
+      tlBalance: r.tl_bakiye == null ? null : Number(r.tl_bakiye),
+      cariRole: r.cari_rol || '',
       contacts: (r.musteri_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -195,13 +242,22 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveCustomer'); }
   }
-  async function deleteCustomer(c) {
+  async function deleteCustomer(c, companies) {
     try {
       const client = sb();
-      if (!client || !c?.dbId) return fail('no-id', 'deleteCustomer');
-      const { error } = await client.from('musteriler').delete().eq('id', c.dbId);
-      if (error) throw error;
-      return ok();
+      if (!client || !c) return fail('no-client', 'deleteCustomer');
+      if (c.dbId) {
+        const { error } = await client.from('musteriler').delete().eq('id', c.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, c.company);
+      if (fid && c.name) {
+        const { error } = await client.from('musteriler').delete().eq('firma_id', fid).eq('unvan', c.name);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteCustomer');
     } catch (e) { return fail(e, 'deleteCustomer'); }
   }
   async function hydrateCustomers(ctx) {
@@ -209,6 +265,7 @@
     if (!client || !ctx.customers) return;
     const n = await countTable(client, 'musteriler');
     if (!n) {
+      if (blockReseed(ctx.customers)) return;
       if (ctx.customers.length) {
         progress(ctx, `Müşteriler seed (${ctx.customers.length})…`);
         for (const c of ctx.customers) await saveCustomer(c, ctx.companies);
@@ -225,6 +282,7 @@
     return {
       firma_id: fid,
       unvan: s.name,
+      kisa_ad: s.shortName || null,
       kategori: s.category || 'Hammadde',
       iletisim: s.contact || null,
       telefon: s.phone || null,
@@ -233,6 +291,14 @@
       adres: s.address || null,
       banka: s.bank || null,
       iban: s.iban || null,
+      vergi_no: s.taxNo || null,
+      vergi_dairesi: s.taxOffice || null,
+      party_key: s.partyKey || null,
+      intercompany: !!s.intercompany,
+      kaynak: s.source || null,
+      linked_musteri_id: s.linkedCustomerDbId || null,
+      tl_bakiye: s.tlBalance == null || s.tlBalance === '' ? null : Number(s.tlBalance),
+      cari_rol: s.cariRole || null,
     };
   }
   function supplierFromRow(r, companies) {
@@ -240,6 +306,7 @@
       dbId: r.id,
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
+      shortName: r.kisa_ad || '',
       category: r.kategori || 'Hammadde',
       contact: r.iletisim || '',
       phone: r.telefon || '',
@@ -248,10 +315,25 @@
       address: r.adres || '',
       bank: r.banka || '',
       iban: r.iban || '',
+      taxNo: r.vergi_no || '',
+      taxOffice: r.vergi_dairesi || '',
+      partyKey: r.party_key || '',
+      intercompany: !!r.intercompany,
+      source: r.kaynak || '',
+      linkedCustomerDbId: r.linked_musteri_id || null,
+      tlBalance: r.tl_bakiye == null ? null : Number(r.tl_bakiye),
+      cariRole: r.cari_rol || '',
       materialGroups: (r.tedarikci_malzeme_gruplari || [])
         .map((x) => x.malzeme_gruplari?.ad)
         .filter(Boolean),
-      fasonServices: (r.tedarikci_fason_hizmetleri || []).map((x) => x.hizmet_adi).filter(Boolean),
+      fasonServices: (r.tedarikci_fason_hizmetleri || [])
+        .filter((x) => (x.hizmet_tipi || 'dis') !== 'imalat')
+        .map((x) => x.hizmet_adi)
+        .filter(Boolean),
+      fasonMfgServices: (r.tedarikci_fason_hizmetleri || [])
+        .filter((x) => x.hizmet_tipi === 'imalat')
+        .map((x) => x.hizmet_adi)
+        .filter(Boolean),
       contacts: (r.tedarikci_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -315,23 +397,33 @@
         );
         if (error) throw error;
       }
-      const services = (s.fasonServices || []).filter(Boolean);
+      const services = [
+        ...(s.fasonServices || []).filter(Boolean).map((h) => ({ tedarikci_id: dbId, hizmet_adi: h, hizmet_tipi: 'dis' })),
+        ...(s.fasonMfgServices || []).filter(Boolean).map((h) => ({ tedarikci_id: dbId, hizmet_adi: h, hizmet_tipi: 'imalat' })),
+      ];
       if (services.length) {
-        const { error } = await client.from('tedarikci_fason_hizmetleri').insert(
-          services.map((h) => ({ tedarikci_id: dbId, hizmet_adi: h }))
-        );
+        const { error } = await client.from('tedarikci_fason_hizmetleri').insert(services);
         if (error) throw error;
       }
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveSupplier'); }
   }
-  async function deleteSupplier(s) {
+  async function deleteSupplier(s, companies) {
     try {
       const client = sb();
-      if (!client || !s?.dbId) return fail('no-id', 'deleteSupplier');
-      const { error } = await client.from('tedarikciler').delete().eq('id', s.dbId);
-      if (error) throw error;
-      return ok();
+      if (!client || !s) return fail('no-client', 'deleteSupplier');
+      if (s.dbId) {
+        const { error } = await client.from('tedarikciler').delete().eq('id', s.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, s.company);
+      if (fid && s.name) {
+        const { error } = await client.from('tedarikciler').delete().eq('firma_id', fid).eq('unvan', s.name);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteSupplier');
     } catch (e) { return fail(e, 'deleteSupplier'); }
   }
   async function hydrateSuppliers(ctx) {
@@ -340,6 +432,7 @@
     await ensureMaterialGroups(client, []);
     const n = await countTable(client, 'tedarikciler');
     if (!n) {
+      if (blockReseed(ctx.suppliers)) return;
       if (ctx.suppliers.length) {
         progress(ctx, `Tedarikçiler seed (${ctx.suppliers.length})…`);
         for (const s of ctx.suppliers) await saveSupplier(s, ctx.companies);
@@ -467,11 +560,30 @@
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'savePersonnel'); }
   }
+  async function deletePersonnel(p, companies) {
+    try {
+      const client = sb();
+      if (!client || !p) return fail('no-client', 'deletePersonnel');
+      if (p.dbId) {
+        const { error } = await client.from('personel').delete().eq('id', p.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, p.company);
+      if (fid && p.id) {
+        const { error } = await client.from('personel').delete().eq('firma_id', fid).eq('personel_kodu', p.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deletePersonnel');
+    } catch (e) { return fail(e, 'deletePersonnel'); }
+  }
   async function hydratePersonnel(ctx) {
     const client = sb();
     if (!client || !ctx.personnel) return;
     const n = await countTable(client, 'personel');
     if (!n) {
+      if (blockReseed(ctx.personnel)) return;
       if (ctx.personnel.length) {
         progress(ctx, `Personel seed (${ctx.personnel.length})…`);
         for (const p of ctx.personnel) await savePersonnel(p, ctx.companies);
@@ -637,11 +749,31 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveUser'); }
   }
+  async function deleteUser(u) {
+    try {
+      const client = sb();
+      if (!client || !u) return fail('no-client', 'deleteUser');
+      const uname = (u.username || '').toLowerCase();
+      if (PROTECTED_USERS.has(uname)) return fail('Korumalı kullanıcı silinemez', 'deleteUser');
+      if (u.dbId) {
+        const { error } = await client.from('kullanicilar').delete().eq('id', u.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      if (uname) {
+        const { error } = await client.from('kullanicilar').delete().eq('kullanici_adi', uname);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteUser');
+    } catch (e) { return fail(e, 'deleteUser'); }
+  }
   async function hydrateUsers(ctx) {
     const client = sb();
     if (!client || !ctx.users) return;
     const n = await countTable(client, 'kullanicilar');
     if (!n) {
+      if (blockReseed(ctx.users)) return;
       if (ctx.users.length) {
         progress(ctx, `Kullanıcılar seed (${ctx.users.length})…`);
         for (const u of ctx.users) await saveUser(u, ctx.companies);
@@ -708,6 +840,16 @@
 
   // ─── Cost analyses ─────────────────────────────────────────────────────────
   function costItemToRow(it, maliyetId, sira) {
+    const mfg = { ...(it.mfgDims || {}) };
+    if (it.excelAllInUnit != null || it.source || it.excelSplitNote || it.excelSupplier) {
+      mfg.__btd = {
+        excelAllInUnit: it.excelAllInUnit,
+        source: it.source || null,
+        excelSplitNote: it.excelSplitNote || null,
+        excelSupplier: it.excelSupplier || null,
+        vatExcluded: it.vatExcluded !== false,
+      };
+    }
     return {
       maliyet_id: maliyetId,
       sira,
@@ -718,30 +860,34 @@
       alacim: it.alloy || null,
       sekil_kodu: it.shapeId || null,
       sekil_adi: it.shapeName || null,
-      imalat_olculeri: it.mfgDims || {},
+      imalat_olculeri: mfg,
       siparis_olculeri: it.ordDims || {},
       ozkutle: it.density ?? null,
       birim_kg: it.unitKg ?? null,
       toplam_kg: it.totalKg ?? null,
       imalat_birim_kg: it.mfgUnitKg ?? null,
       imalat_toplam_kg: it.mfgTotalKg ?? null,
-      fiyat_eur_kg: it.pricePerKg ?? null,
-      malzeme_birim: it.matUnit ?? 0,
-      malzeme_toplam: it.matTotal ?? 0,
+      fiyat_eur_kg: it.priceEurPerKg ?? it.pricePerKg ?? null,
+      malzeme_birim: it.materialUnit ?? it.matUnit ?? 0,
+      malzeme_toplam: it.materialTotal ?? it.matTotal ?? 0,
       iscilik_birim: it.laborUnit ?? 0,
       iscilik_toplam: it.laborTotal ?? 0,
       isil_tip: it.heatType || null,
       isil_mod: it.heatMode || null,
-      isil_eur: it.heatEur ?? 0,
-      isil_tutar: it.heatAmt ?? 0,
-      kaplama_tip: it.coatType || null,
-      kaplama_mod: it.coatMode || null,
-      kaplama_eur: it.coatEur ?? 0,
-      kaplama_tutar: it.coatAmt ?? 0,
-      kaplama2_tip: it.coat2Type || null,
-      kaplama2_mod: it.coat2Mode || null,
-      kaplama2_eur: it.coat2Eur ?? 0,
-      kaplama2_tutar: it.coat2Amt ?? 0,
+      isil_eur: it.heatEurRate ?? it.heatEur ?? 0,
+      isil_tutar: it.heat ?? it.heatAmt ?? 0,
+      kaplama_tip: it.coatingType || it.coatType || null,
+      kaplama_mod: it.coatingMode || it.coatMode || null,
+      kaplama_eur: it.coatingEurRate ?? it.coatEur ?? 0,
+      kaplama_tutar: (() => {
+        const c2 = Number(it.coating2 ?? it.coat2Amt) || 0;
+        const cAll = Number(it.coating ?? it.coatAmt) || 0;
+        return Math.max(0, cAll - c2);
+      })(),
+      kaplama2_tip: it.coatingType2 || it.coat2Type || null,
+      kaplama2_mod: it.coating2Mode || it.coat2Mode || null,
+      kaplama2_eur: it.coating2EurRate ?? it.coat2Eur ?? 0,
+      kaplama2_tutar: it.coating2 ?? it.coat2Amt ?? 0,
       nakliye: it.shipping ?? 0,
       maliyet_ara: it.costSubtotal ?? 0,
       birim_toplam: it.unitTotal ?? 0,
@@ -752,6 +898,11 @@
     };
   }
   function costItemFromRow(r) {
+    const mfgRaw = { ...(r.imalat_olculeri || {}) };
+    const meta = mfgRaw.__btd || {};
+    delete mfgRaw.__btd;
+    const coat1 = Number(r.kaplama_tutar) || 0;
+    const coat2 = Number(r.kaplama2_tutar) || 0;
     return {
       partNo: r.parca_no || '',
       desc: r.aciklama || '',
@@ -760,7 +911,7 @@
       alloy: r.alacim || '',
       shapeId: r.sekil_kodu || '',
       shapeName: r.sekil_adi || '',
-      mfgDims: r.imalat_olculeri || {},
+      mfgDims: mfgRaw,
       ordDims: r.siparis_olculeri || {},
       density: Number(r.ozkutle) || 0,
       unitKg: Number(r.birim_kg) || 0,
@@ -768,22 +919,23 @@
       mfgUnitKg: Number(r.imalat_birim_kg) || 0,
       mfgTotalKg: Number(r.imalat_toplam_kg) || 0,
       pricePerKg: Number(r.fiyat_eur_kg) || 0,
-      matUnit: Number(r.malzeme_birim) || 0,
-      matTotal: Number(r.malzeme_toplam) || 0,
+      priceEurPerKg: Number(r.fiyat_eur_kg) || 0,
+      materialUnit: Number(r.malzeme_birim) || 0,
+      materialTotal: Number(r.malzeme_toplam) || 0,
       laborUnit: Number(r.iscilik_birim) || 0,
       laborTotal: Number(r.iscilik_toplam) || 0,
       heatType: r.isil_tip || '',
       heatMode: r.isil_mod || '',
-      heatEur: Number(r.isil_eur) || 0,
-      heatAmt: Number(r.isil_tutar) || 0,
-      coatType: r.kaplama_tip || '',
-      coatMode: r.kaplama_mod || '',
-      coatEur: Number(r.kaplama_eur) || 0,
-      coatAmt: Number(r.kaplama_tutar) || 0,
-      coat2Type: r.kaplama2_tip || '',
-      coat2Mode: r.kaplama2_mod || '',
-      coat2Eur: Number(r.kaplama2_eur) || 0,
-      coat2Amt: Number(r.kaplama2_tutar) || 0,
+      heatEurRate: Number(r.isil_eur) || 0,
+      heat: Number(r.isil_tutar) || 0,
+      coatingType: r.kaplama_tip || '',
+      coatingMode: r.kaplama_mod || '',
+      coatingEurRate: Number(r.kaplama_eur) || 0,
+      coatingType2: r.kaplama2_tip || '',
+      coating2Mode: r.kaplama2_mod || '',
+      coating2EurRate: Number(r.kaplama2_eur) || 0,
+      coating2: coat2,
+      coating: coat1 + coat2,
       shipping: Number(r.nakliye) || 0,
       costSubtotal: Number(r.maliyet_ara) || 0,
       unitTotal: Number(r.birim_toplam) || 0,
@@ -791,6 +943,11 @@
       profitAmt: Number(r.kar_tutari) || 0,
       quoteUnit: Number(r.teklif_birim) || 0,
       quoteTotal: Number(r.teklif_toplam) || 0,
+      excelAllInUnit: meta.excelAllInUnit != null ? Number(meta.excelAllInUnit) : null,
+      excelSplitNote: meta.excelSplitNote || '',
+      excelSupplier: meta.excelSupplier || '',
+      source: meta.source || '',
+      vatExcluded: meta.vatExcluded !== false,
     };
   }
   async function saveCostAnalysis(a, companies) {
@@ -834,11 +991,30 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveCostAnalysis'); }
   }
+  async function deleteCostAnalysis(a, companies) {
+    try {
+      const client = sb();
+      if (!client || !a) return fail('no-client', 'deleteCostAnalysis');
+      if (a.dbId) {
+        const { error } = await client.from('maliyet_analizleri').delete().eq('id', a.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, a.company);
+      if (fid && a.id) {
+        const { error } = await client.from('maliyet_analizleri').delete().eq('firma_id', fid).eq('belge_no', a.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteCostAnalysis');
+    } catch (e) { return fail(e, 'deleteCostAnalysis'); }
+  }
   async function hydrateCostAnalyses(ctx) {
     const client = sb();
     if (!client || !ctx.costAnalyses) return;
     const n = await countTable(client, 'maliyet_analizleri');
     if (!n) {
+      if (blockReseed(ctx.costAnalyses)) return;
       if (ctx.costAnalyses.length) {
         progress(ctx, `Maliyet seed (${ctx.costAnalyses.length})…`);
         for (const a of ctx.costAnalyses) await saveCostAnalysis(a, ctx.companies);
@@ -940,13 +1116,22 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveQuote'); }
   }
-  async function deleteQuote(q) {
+  async function deleteQuote(q, companies) {
     try {
       const client = sb();
-      if (!client || !q?.dbId) return fail('no-id', 'deleteQuote');
-      const { error } = await client.from('teklifler').delete().eq('id', q.dbId);
-      if (error) throw error;
-      return ok();
+      if (!client || !q) return fail('no-client', 'deleteQuote');
+      if (q.dbId) {
+        const { error } = await client.from('teklifler').delete().eq('id', q.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, q.company);
+      if (fid && q.id) {
+        const { error } = await client.from('teklifler').delete().eq('firma_id', fid).eq('belge_no', q.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteQuote');
     } catch (e) { return fail(e, 'deleteQuote'); }
   }
   async function hydrateQuotes(ctx) {
@@ -954,6 +1139,7 @@
     if (!client || !ctx.quotes) return;
     const n = await countTable(client, 'teklifler');
     if (!n) {
+      if (blockReseed(ctx.quotes)) return;
       if (ctx.quotes.length) {
         progress(ctx, `Teklifler seed (${ctx.quotes.length})…`);
         for (const q of ctx.quotes) await saveQuote(q, ctx.companies);
@@ -1080,11 +1266,15 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveOrder'); }
   }
+  async function deleteOrder(o, companies) {
+    return deleteBelgeRow('siparisler', o, companies, 'deleteOrder');
+  }
   async function hydrateOrders(ctx) {
     const client = sb();
     if (!client || !ctx.orders) return;
     const n = await countTable(client, 'siparisler');
     if (!n) {
+      if (blockReseed(ctx.orders)) return;
       if (ctx.orders.length) {
         progress(ctx, `Siparişler seed (${ctx.orders.length})…`);
         for (const o of ctx.orders) await saveOrder(o, ctx.companies);
@@ -1224,11 +1414,15 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveWorkOrder'); }
   }
+  async function deleteWorkOrder(wo, companies) {
+    return deleteBelgeRow('is_emirleri', wo, companies, 'deleteWorkOrder');
+  }
   async function hydrateWorkOrders(ctx) {
     const client = sb();
     if (!client || !ctx.workOrders) return;
     const n = await countTable(client, 'is_emirleri');
     if (!n) {
+      if (blockReseed(ctx.workOrders)) return;
       if (ctx.workOrders.length) {
         progress(ctx, `İş emirleri seed (${ctx.workOrders.length})…`);
         for (const wo of ctx.workOrders) await saveWorkOrder(wo, ctx.companies);
@@ -1342,11 +1536,15 @@
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveProcurementItem'); }
   }
+  async function deleteProcurementItem(item, companies) {
+    return deleteBelgeRow('tedarik_kalemleri', item, companies, 'deleteProcurementItem');
+  }
   async function hydrateProcurement(ctx) {
     const client = sb();
     if (!client || !ctx.procurementItems) return;
     const n = await countTable(client, 'tedarik_kalemleri');
     if (!n) {
+      if (blockReseed(ctx.procurementItems)) return;
       if (ctx.procurementItems.length) {
         progress(ctx, `Tedarik seed (${ctx.procurementItems.length})…`);
         for (const it of ctx.procurementItems) await saveProcurementItem(it, ctx.companies);
@@ -1688,6 +1886,9 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveFason'); }
   }
+  async function deleteFason(f, companies) {
+    return deleteBelgeRow('fason_isler', f, companies, 'deleteFason');
+  }
   async function saveQc(r, companies) {
     try {
       const client = sb();
@@ -1717,6 +1918,9 @@
       r.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveQc'); }
+  }
+  async function deleteQc(r, companies) {
+    return deleteBelgeRow('kalite_kayitlari', r, companies, 'deleteQc');
   }
   async function saveShipment(s, companies) {
     try {
@@ -1750,6 +1954,9 @@
       s.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveShipment'); }
+  }
+  async function deleteShipment(s, companies) {
+    return deleteBelgeRow('sevkiyatlar', s, companies, 'deleteShipment');
   }
   async function saveInvoice(inv, companies) {
     try {
@@ -1799,6 +2006,9 @@
       inv.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveInvoice'); }
+  }
+  async function deleteInvoice(inv, companies) {
+    return deleteBelgeRow('faturalar', inv, companies, 'deleteInvoice');
   }
   async function saveStockItem(item, companies) {
     try {
@@ -1867,9 +2077,11 @@
 
     if (ctx.fasonJobs) {
       const n = await countTable(client, 'fason_isler');
-      if (!n && ctx.fasonJobs.length) {
-        progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
-        for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.fasonJobs) && ctx.fasonJobs.length) {
+          progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
+          for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
+        }
       } else if (n) {
         progress(ctx, 'Fason hydrate…');
         const rows = await selectAll(client, 'fason_isler', '*, fason_log(*)');
@@ -1898,8 +2110,10 @@
 
     if (ctx.qcRecords) {
       const n = await countTable(client, 'kalite_kayitlari');
-      if (!n && ctx.qcRecords.length) {
-        for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.qcRecords) && ctx.qcRecords.length) {
+          for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
+        }
       } else if (n) {
         const rows = await selectAll(client, 'kalite_kayitlari', '*');
         replaceArray(ctx.qcRecords, rows.map((r) => ({
@@ -1917,8 +2131,10 @@
 
     if (ctx.shipments) {
       const { count } = await client.from('sevkiyatlar').select('id', { count: 'exact', head: true });
-      if (!count && ctx.shipments.length) {
-        for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
+      if (!count) {
+        if (!blockReseed(ctx.shipments) && ctx.shipments.length) {
+          for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
+        }
       } else if (count) {
         const rows = await selectAll(client, 'sevkiyatlar', '*, siparisler(belge_no)');
         replaceArray(ctx.shipments, rows.map((r) => ({
@@ -1940,8 +2156,10 @@
 
     if (ctx.invoices) {
       const n = await countTable(client, 'faturalar');
-      if (!n && ctx.invoices.length) {
-        for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.invoices) && ctx.invoices.length) {
+          for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
+        }
       } else if (n) {
         const rows = await selectAll(client, 'faturalar', '*, siparisler(belge_no), maliyet_analizleri(belge_no)');
         replaceArray(ctx.invoices, rows.map((r) => ({
@@ -1968,9 +2186,11 @@
 
     if (ctx.stockItems) {
       const n = await countTable(client, 'stok_kartlari');
-      if (!n && ctx.stockItems.length) {
-        progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
-        for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.stockItems) && ctx.stockItems.length) {
+          progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
+          for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
+        }
       } else if (n) {
         progress(ctx, 'Stok hydrate…');
         const rows = await selectAll(client, 'stok_kartlari', '*');
@@ -2016,6 +2236,243 @@
     }
   }
 
+  // ─── Catalogs (persist) ────────────────────────────────────────────────────
+  /** Materyal kataloğunu Supabase'e yazar (grup + alaşım ekle/güncelle/sil). */
+  async function saveMaterialCatalog(catalog) {
+    try {
+      const client = sb();
+      if (!client || !catalog || typeof catalog !== 'object') return fail('no-client', 'saveMaterialCatalog');
+      const groupNames = Object.keys(catalog);
+      const groups = await ensureMaterialGroups(client, groupNames);
+      const existing = await selectAll(client, 'malzemeler', 'id');
+      const keepIds = new Set();
+
+      for (const [gName, alloys] of Object.entries(catalog)) {
+        const gid = groups[gName];
+        if (!gid) continue;
+        for (const a of alloys || []) {
+          if (!a?.name) continue;
+          const row = {
+            malzeme_grup_id: gid,
+            ad: a.name,
+            ozkutle: a.density ?? 0,
+            fiyat_eur_kg: a.priceEurPerKg ?? 0,
+            aktif: true,
+          };
+          if (a.dbId) {
+            const { error } = await client.from('malzemeler').update(row).eq('id', a.dbId);
+            if (error) throw error;
+            keepIds.add(a.dbId);
+          } else {
+            const { data, error } = await client
+              .from('malzemeler')
+              .upsert(row, { onConflict: 'malzeme_grup_id,ad' })
+              .select('id')
+              .single();
+            if (error) throw error;
+            a.dbId = data.id;
+            keepIds.add(data.id);
+          }
+        }
+      }
+
+      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+      if (toDelete.length) {
+        const { error } = await client.from('malzemeler').delete().in('id', toDelete);
+        if (error) throw error;
+      }
+      return ok({ saved: keepIds.size, deleted: toDelete.length });
+    } catch (e) {
+      return fail(e, 'saveMaterialCatalog');
+    }
+  }
+
+  async function saveNamedPriceCatalog(table, arr, label) {
+    try {
+      const client = sb();
+      if (!client || !Array.isArray(arr)) return fail('no-client', label);
+      const existing = await selectAll(client, table, 'id');
+      const keepIds = new Set();
+      for (const h of arr) {
+        if (!h?.name) continue;
+        const row = {
+          ad: h.name,
+          fiyat_eur_kg: h.priceEurPerKg || 0,
+          fiyat_eur_adet: h.priceEurPerPcs || 0,
+          aktif: true,
+        };
+        if (h.dbId) {
+          const { error } = await client.from(table).update(row).eq('id', h.dbId);
+          if (error) throw error;
+          keepIds.add(h.dbId);
+        } else {
+          const { data, error } = await client
+            .from(table)
+            .upsert(row, { onConflict: 'ad' })
+            .select('id')
+            .single();
+          if (error) throw error;
+          h.dbId = data.id;
+          keepIds.add(data.id);
+        }
+      }
+      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+      if (toDelete.length) {
+        const { error } = await client.from(table).delete().in('id', toDelete);
+        if (error) throw error;
+      }
+      return ok({ saved: keepIds.size, deleted: toDelete.length });
+    } catch (e) {
+      return fail(e, label);
+    }
+  }
+
+  async function saveHeatTreatmentCatalog(arr) {
+    return saveNamedPriceCatalog('isil_islem_katalogu', arr, 'saveHeatTreatmentCatalog');
+  }
+  async function saveCoatingCatalog(arr) {
+    return saveNamedPriceCatalog('kaplama_katalogu', arr, 'saveCoatingCatalog');
+  }
+  async function saveFasonMfgCatalog(arr) {
+    try {
+      const client = sb();
+      const label = 'saveFasonMfgCatalog';
+      if (!client || !Array.isArray(arr)) return fail('no-client', label);
+      let existing = [];
+      try {
+        existing = await selectAll(client, 'fason_imalat_katalogu', 'id');
+      } catch (e) {
+        return fail(e?.message || e || 'fason_imalat_katalogu tablosu yok — SQL 016 çalıştırın', label);
+      }
+      const keepIds = new Set();
+      for (const h of arr) {
+        if (!h?.name) continue;
+        const row = {
+          ad: h.name,
+          fiyat_eur_saat: h.priceEurPerHour || 0,
+          fiyat_eur_adet: h.priceEurPerPcs || 0,
+          aktif: true,
+        };
+        if (h.dbId) {
+          const { error } = await client.from('fason_imalat_katalogu').update(row).eq('id', h.dbId);
+          if (error) throw error;
+          keepIds.add(h.dbId);
+        } else {
+          const { data, error } = await client
+            .from('fason_imalat_katalogu')
+            .upsert(row, { onConflict: 'ad' })
+            .select('id')
+            .single();
+          if (error) throw error;
+          h.dbId = data.id;
+          keepIds.add(data.id);
+        }
+      }
+      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+      if (toDelete.length) {
+        const { error } = await client.from('fason_imalat_katalogu').delete().in('id', toDelete);
+        if (error) throw error;
+      }
+      return ok({ saved: keepIds.size, deleted: toDelete.length });
+    } catch (e) {
+      return fail(e, 'saveFasonMfgCatalog');
+    }
+  }
+
+  async function upsertMachineRow(client, row, dbId) {
+    const withFns = { ...row };
+    if (dbId) {
+      let { error } = await client.from('makineler').update(withFns).eq('id', dbId);
+      if (error && /fonksiyonlar/i.test(error.message || '')) {
+        delete withFns.fonksiyonlar;
+        ({ error } = await client.from('makineler').update(withFns).eq('id', dbId));
+      }
+      if (error) throw error;
+      return dbId;
+    }
+    let { data, error } = await client.from('makineler').insert(withFns).select('id').single();
+    if (error && /fonksiyonlar/i.test(error.message || '')) {
+      delete withFns.fonksiyonlar;
+      ({ data, error } = await client.from('makineler').insert(withFns).select('id').single());
+    }
+    if (error) throw error;
+    return data.id;
+  }
+
+  /** Makine parkı tam senkron: atölye + firma paylaşımı + makineler */
+  async function saveMachinePark(park, companies) {
+    try {
+      const client = sb();
+      if (!client || !Array.isArray(park)) return fail('no-client', 'saveMachinePark');
+      const existingWs = await selectAll(client, 'atolyeler', 'id');
+      const keepWsIds = new Set();
+
+      for (const ws of park) {
+        if (!ws?.workshop) continue;
+        let atId = ws.dbId || null;
+        if (atId) {
+          const { error } = await client.from('atolyeler').update({ ad: ws.workshop }).eq('id', atId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await client
+            .from('atolyeler')
+            .upsert({ ad: ws.workshop }, { onConflict: 'ad' })
+            .select('id')
+            .single();
+          if (error) throw error;
+          atId = data.id;
+          ws.dbId = atId;
+        }
+        keepWsIds.add(atId);
+
+        await client.from('atolye_firmalar').delete().eq('atolye_id', atId);
+        const links = (ws.companies || [])
+          .map((n) => firmaId(companies, n))
+          .filter(Boolean)
+          .map((fid) => ({ atolye_id: atId, firma_id: fid }));
+        if (links.length) {
+          const { error } = await client.from('atolye_firmalar').upsert(links);
+          if (error) throw error;
+        }
+
+        const { data: exM, error: exErr } = await client
+          .from('makineler')
+          .select('id')
+          .eq('atolye_id', atId);
+        if (exErr) throw exErr;
+        const keepM = new Set();
+        for (const m of (ws.machines || [])) {
+          if (!m?.name) continue;
+          const row = {
+            atolye_id: atId,
+            ad: m.name,
+            alt_bilgi: m.sub || null,
+            ikon: m.icon || 'mill',
+            aktif: true,
+            fonksiyonlar: Array.isArray(m.functions) ? m.functions : [],
+          };
+          const id = await upsertMachineRow(client, row, m.dbId || null);
+          m.dbId = id;
+          keepM.add(id);
+        }
+        const toDelM = (exM || []).map((r) => r.id).filter((id) => !keepM.has(id));
+        if (toDelM.length) {
+          const { error } = await client.from('makineler').delete().in('id', toDelM);
+          if (error) throw error;
+        }
+      }
+
+      const toDelWs = (existingWs || []).map((r) => r.id).filter((id) => !keepWsIds.has(id));
+      if (toDelWs.length) {
+        const { error } = await client.from('atolyeler').delete().in('id', toDelWs);
+        if (error) throw error;
+      }
+      return ok({ workshops: keepWsIds.size, deletedWorkshops: toDelWs.length });
+    } catch (e) {
+      return fail(e, 'saveMachinePark');
+    }
+  }
+
   // ─── Catalogs ──────────────────────────────────────────────────────────────
   async function hydrateCatalogs(ctx) {
     const client = sb();
@@ -2025,6 +2482,9 @@
     if (ctx.procMaterialCatalog) {
       const n = await countTable(client, 'malzemeler');
       if (!n) {
+        if (alreadySeeded()) {
+          assignObject(ctx.procMaterialCatalog, {});
+        } else {
         progress(ctx, 'Malzeme katalogu seed…');
         const groups = await ensureMaterialGroups(client, Object.keys(ctx.procMaterialCatalog));
         const rows = [];
@@ -2041,6 +2501,7 @@
           });
         });
         if (rows.length) await client.from('malzemeler').upsert(rows, { onConflict: 'malzeme_grup_id,ad' });
+        }
       } else {
         progress(ctx, 'Malzeme katalogu hydrate…');
         await ensureMaterialGroups(client, []);
@@ -2076,10 +2537,11 @@
         const byKod = Object.fromEntries(ctx.productShapes.map((s) => [s.id, s]));
         const merged = rows.map((r) => {
           const prev = byKod[r.kod];
+          // Alan adları ve hacim formülü istemcide kaynak: eski DB alanlar[] uyumsuz kalırsa kg=0 olmasın
           return {
             id: r.kod,
-            name: r.ad,
-            fields: r.alanlar || [],
+            name: prev?.name || r.ad,
+            fields: (prev?.fields && prev.fields.length) ? prev.fields : (r.alanlar || []),
             dbId: r.id,
             volumeMm3: prev?.volumeMm3 || (() => 0),
           };
@@ -2092,17 +2554,33 @@
       }
     }
 
-    // Isıl / kaplama
+    // Isıl / kaplama / fason imalat
+    // NOT: alreadySeeded + boş tablo → diziyi silme (yeni eklenen tablolarda veri kaybı yapıyordu).
+    // Boşsa mevcut yerel diziyi seed et; tablo yoksa yerel dizi korunur.
     async function syncNamedCatalog(table, arr, mapTo, mapFrom) {
       if (!arr) return;
-      const n = await countTable(client, table);
-      if (!n && arr.length) {
-        const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
-        if (error) throw error;
-      } else if (n) {
-        const rows = await selectAll(client, table, '*');
-        replaceArray(arr, rows.map(mapFrom));
+      let n = 0;
+      try {
+        n = await countTable(client, table);
+      } catch (e) {
+        console.warn(`[BtdCloud] katalog okunamadı (${table}) — yerel dizi korunuyor:`, e?.message || e);
+        return;
       }
+      if (!n) {
+        if (!arr.length) return;
+        const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
+        if (error) {
+          console.warn(`[BtdCloud] katalog seed başarısız (${table}):`, error.message || error);
+          return;
+        }
+        try {
+          const rows = await selectAll(client, table, '*');
+          if (rows.length) replaceArray(arr, rows.map(mapFrom));
+        } catch (_) { /* ids sonra save ile gelir */ }
+        return;
+      }
+      const rows = await selectAll(client, table, '*');
+      replaceArray(arr, rows.map(mapFrom));
     }
     await syncNamedCatalog(
       'isil_islem_katalogu',
@@ -2115,6 +2593,12 @@
       ctx.coatingCatalog,
       (h) => ({ ad: h.name, fiyat_eur_kg: h.priceEurPerKg || 0, fiyat_eur_adet: h.priceEurPerPcs || 0 }),
       (r) => ({ dbId: r.id, name: r.ad, priceEurPerKg: Number(r.fiyat_eur_kg) || 0, priceEurPerPcs: Number(r.fiyat_eur_adet) || 0 })
+    );
+    await syncNamedCatalog(
+      'fason_imalat_katalogu',
+      ctx.fasonMfgCatalog,
+      (h) => ({ ad: h.name, fiyat_eur_saat: h.priceEurPerHour || 0, fiyat_eur_adet: h.priceEurPerPcs || 0 }),
+      (r) => ({ dbId: r.id, name: r.ad, priceEurPerHour: Number(r.fiyat_eur_saat) || 0, priceEurPerPcs: Number(r.fiyat_eur_adet) || 0 })
     );
 
     // Operasyon katalogu
@@ -2171,6 +2655,7 @@
             ad: m.name,
             alt_bilgi: m.sub || null,
             ikon: m.icon || null,
+            fonksiyonlar: Array.isArray(m.functions) ? m.functions : [],
           }));
           if (machines.length) await client.from('makineler').insert(machines);
         }
@@ -2185,12 +2670,15 @@
           dbId: r.id,
           workshop: r.ad,
           companies: (r.atolye_firmalar || []).map((af) => af.firmalar?.ad).filter(Boolean),
-          machines: (r.makineler || []).map((m) => ({
-            dbId: m.id,
-            name: m.ad,
-            sub: m.alt_bilgi || '',
-            icon: m.ikon || 'mill',
-          })),
+          machines: (r.makineler || [])
+            .filter((m) => m.aktif !== false)
+            .map((m) => ({
+              dbId: m.id,
+              name: m.ad,
+              sub: m.alt_bilgi || '',
+              icon: m.ikon || 'mill',
+              functions: Array.isArray(m.fonksiyonlar) ? m.fonksiyonlar : [],
+            })),
         })));
       }
     }
@@ -2287,6 +2775,7 @@
       }
     }
     progress(ctx, 'Bulut senkron tamamlandı');
+    markSeeded();
     return ok({ results });
   }
 
@@ -2302,22 +2791,37 @@
     saveSupplier,
     deleteSupplier,
     savePersonnel,
+    deletePersonnel,
     saveUser,
+    deleteUser,
     saveCostAnalysis,
+    deleteCostAnalysis,
     saveQuote,
     deleteQuote,
     saveOrder,
+    deleteOrder,
     saveWorkOrder,
+    deleteWorkOrder,
     saveProcurementItem,
+    deleteProcurementItem,
     saveMaterialRfq,
     saveReproc,
     saveUnforeseen,
     saveFason,
+    deleteFason,
     saveQc,
+    deleteQc,
     saveShipment,
+    deleteShipment,
     saveInvoice,
+    deleteInvoice,
     saveStockItem,
     saveStockMove,
     saveSupplierGroupPriorities,
+    saveMaterialCatalog,
+    saveHeatTreatmentCatalog,
+    saveCoatingCatalog,
+    saveFasonMfgCatalog,
+    saveMachinePark,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
