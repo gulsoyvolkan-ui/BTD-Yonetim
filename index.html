@@ -110,27 +110,26 @@
   .sidebar-collapsed #companyBadgeBg { padding: 0.4rem; border-radius: 0.75rem; }
   .sidebar-collapsed #companyBadgeLogo { width: 2.75rem; height: 2.75rem; padding: 0.3rem; }
   .sidebar-collapsed #companyBadgeRule,
-  .sidebar-collapsed #companyBadgeName,
   .sidebar-collapsed #companyBadgeLegal { display: none !important; }
 
   /* Sidebar firma kartı — teklif logo-hero dili */
   #companyBadgeBg {
-    min-height: 9.5rem;
+    min-height: 8.75rem;
     justify-content: center;
   }
   #companyBadgeLogo {
-    width: 5.5rem;
-    height: 5.5rem;
+    width: 7rem;
+    height: 7rem;
     border-radius: 1rem;
-    padding: 0.55rem;
+    padding: 0.65rem;
   }
   #companyBadgeImg { width: 100%; height: 100%; object-fit: contain; }
   #companyBadgeRule {
-    width: 2.5rem;
+    width: 2.25rem;
     height: 2px;
     border-radius: 999px;
     background: rgba(255,255,255,0.35);
-    margin: 0.55rem auto 0.35rem;
+    margin: 0.65rem auto 0.4rem;
   }
 
   /* Üst bar firma geçiş menüsü — logo kartları */
@@ -145,13 +144,13 @@
   }
   #companyMenu .company-option:last-of-type { border-bottom: none; }
   #companyMenu .company-option .co-logo-box {
-    width: 5.25rem;
-    height: 5.25rem;
+    width: 6.25rem;
+    height: 6.25rem;
     border-radius: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0.55rem;
+    padding: 0.65rem;
     box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
     overflow: hidden;
   }
@@ -159,13 +158,6 @@
     max-width: 100%;
     max-height: 100%;
     object-fit: contain;
-  }
-  #companyMenu .company-option .co-name {
-    font-size: 0.95rem;
-    font-weight: 800;
-    color: #fff;
-    line-height: 1.15;
-    margin-top: 0.15rem;
   }
   #companyMenu .company-option .co-legal {
     font-size: 10px;
@@ -478,7 +470,6 @@
             <span class="co-logo-box bg-white">
               <img src="assets/logos/bluemac.png" alt="Bluemac" />
             </span>
-            <span class="co-name">Bluemac</span>
             <span class="co-legal">Bluemac Makine Sanayi Ticaret Limited Şirketi</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="check-icon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
@@ -486,7 +477,6 @@
             <span class="co-logo-box bg-white">
               <img src="assets/logos/technomac.png" alt="Technomac" />
             </span>
-            <span class="co-name">Technomac</span>
             <span class="co-legal">Technomac Makine Sanayi Ticaret Limited Şirketi</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
@@ -494,7 +484,6 @@
             <span class="co-logo-box bg-steel-900">
               <img src="assets/logos/devorias.png" alt="Devorias" />
             </span>
-            <span class="co-name">Devorias</span>
             <span class="co-legal">Devorias Tasarım ve İnovasyon Sanayi Ticaret Limited Şirketi</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
@@ -601,8 +590,7 @@
             <img id="companyBadgeImg" src="assets/logos/technomac.png" alt="Technomac" />
           </div>
           <div id="companyBadgeRule" aria-hidden="true"></div>
-          <p id="companyBadgeName" class="sidebar-label text-white font-extrabold text-base leading-tight tracking-tight">Technomac</p>
-          <p id="companyBadgeLegal" class="sidebar-label text-white/70 text-[10px] leading-snug px-1.5 mt-0.5">Technomac Makine Sanayi Ticaret Limited Şirketi</p>
+          <p id="companyBadgeLegal" class="sidebar-label text-white/70 text-[10px] leading-snug px-1.5">Technomac Makine Sanayi Ticaret Limited Şirketi</p>
         </div>
       </div>
       <nav class="sidebar-nav flex-1 overflow-y-auto">
@@ -7426,7 +7414,6 @@ ${vadeLine}`;
       if (info.logo) badgeImg.src = info.logo;
       badgeImg.alt = name;
     }
-    setTxt('companyBadgeName', name);
     setTxt('companyBadgeLegal', info.legal || name);
 
     const safeRender = (fn) => {
