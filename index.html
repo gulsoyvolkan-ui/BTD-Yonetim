@@ -14574,6 +14574,7 @@ ${vadeLine}`;
         document.getElementById('matCatSaveBtn').textContent = 'Malzeme Kaydet';
         renderMatCatalogTable();
         refreshMaterialSelectsEverywhere();
+        cloudSave('saveMaterialCatalog', procMaterialCatalog);
         showToast('Malzeme silindi.', 'success');
       });
     });
@@ -14591,12 +14592,16 @@ ${vadeLine}`;
     if (!procMaterialCatalog[group]) procMaterialCatalog[group] = [];
     const entry = { name, density, priceEurPerKg };
     if (matCatEditIndex != null && procMaterialCatalog[group][matCatEditIndex]) {
+      const prev = procMaterialCatalog[group][matCatEditIndex];
+      if (prev.dbId) entry.dbId = prev.dbId;
       procMaterialCatalog[group][matCatEditIndex] = entry;
       showToast('Malzeme güncellendi.', 'success');
     } else {
       const dup = procMaterialCatalog[group].findIndex(m => m.name.toLowerCase() === name.toLowerCase());
-      if (dup >= 0) procMaterialCatalog[group][dup] = entry;
-      else procMaterialCatalog[group].push(entry);
+      if (dup >= 0) {
+        if (procMaterialCatalog[group][dup].dbId) entry.dbId = procMaterialCatalog[group][dup].dbId;
+        procMaterialCatalog[group][dup] = entry;
+      } else procMaterialCatalog[group].push(entry);
       showToast('Malzeme eklendi.', 'success');
     }
     matCatEditIndex = null;
@@ -14606,6 +14611,7 @@ ${vadeLine}`;
     document.getElementById('matCatSaveBtn').textContent = 'Malzeme Kaydet';
     renderMatCatalogTable();
     refreshMaterialSelectsEverywhere();
+    cloudSave('saveMaterialCatalog', procMaterialCatalog);
   }
 
   function addMatCatalogGroup() {
@@ -14618,6 +14624,7 @@ ${vadeLine}`;
     document.getElementById('matCatGroup').value = name;
     renderMatCatalogTable();
     refreshMaterialSelectsEverywhere();
+    cloudSave('saveMaterialCatalog', procMaterialCatalog);
     showToast(`Grup eklendi: ${name}`, 'success');
   }
 
@@ -14675,6 +14682,7 @@ ${vadeLine}`;
         else { coatCatEditIndex = null; document.getElementById('coatCatSaveBtn').textContent = 'Kaydet'; }
         renderServiceCatalogTable(kind);
         renderCostServiceSelects();
+        cloudSave(isHeat ? 'saveHeatTreatmentCatalog' : 'saveCoatingCatalog', catalog);
         showToast('Kayıt silindi.', 'success');
       });
     });
@@ -14689,12 +14697,15 @@ ${vadeLine}`;
     const entry = { name, priceEurPerKg, priceEurPerPcs };
     const editIdx = isHeat ? heatCatEditIndex : coatCatEditIndex;
     if (editIdx != null && catalog[editIdx]) {
+      if (catalog[editIdx].dbId) entry.dbId = catalog[editIdx].dbId;
       catalog[editIdx] = entry;
       showToast('Güncellendi.', 'success');
     } else {
       const dup = catalog.findIndex(m => m.name.toLowerCase() === name.toLowerCase());
-      if (dup >= 0) catalog[dup] = entry;
-      else catalog.push(entry);
+      if (dup >= 0) {
+        if (catalog[dup].dbId) entry.dbId = catalog[dup].dbId;
+        catalog[dup] = entry;
+      } else catalog.push(entry);
       showToast('Eklendi.', 'success');
     }
     if (isHeat) {
@@ -14712,6 +14723,7 @@ ${vadeLine}`;
     }
     renderServiceCatalogTable(kind);
     renderCostServiceSelects();
+    cloudSave(isHeat ? 'saveHeatTreatmentCatalog' : 'saveCoatingCatalog', catalog);
   }
 
   function costId(company) {
@@ -18854,6 +18866,16 @@ ${vadeLine}`;
       });
       console.info('[BTD] Cloud boot', bootRes);
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
+      // Hidrate sonrası katalog UI (select/liste) yenile
+      try {
+        if (typeof renderCostMaterialSelects === 'function') renderCostMaterialSelects();
+        if (typeof renderMatCatalogGroupSelect === 'function') renderMatCatalogGroupSelect();
+        if (typeof renderServiceCatalogTable === 'function') {
+          renderServiceCatalogTable('heat');
+          renderServiceCatalogTable('coat');
+        }
+        if (typeof renderCostServiceSelects === 'function') renderCostServiceSelects();
+      } catch (_) { /* ignore */ }
       // Hydrate sonrası kullanıcı bayraklarını düzelterek oturumu taze tut
       if (currentUser && typeof applyDemoLoginOverrides === 'function') {
         const live = (users || []).find(u => (u.username || '').toLowerCase() === (currentUser.username || '').toLowerCase());

@@ -2020,6 +2020,104 @@
     }
   }
 
+  // ─── Catalogs (persist) ────────────────────────────────────────────────────
+  /** Materyal kataloğunu Supabase'e yazar (grup + alaşım ekle/güncelle/sil). */
+  async function saveMaterialCatalog(catalog) {
+    try {
+      const client = sb();
+      if (!client || !catalog || typeof catalog !== 'object') return fail('no-client', 'saveMaterialCatalog');
+      const groupNames = Object.keys(catalog);
+      const groups = await ensureMaterialGroups(client, groupNames);
+      const existing = await selectAll(client, 'malzemeler', 'id');
+      const keepIds = new Set();
+
+      for (const [gName, alloys] of Object.entries(catalog)) {
+        const gid = groups[gName];
+        if (!gid) continue;
+        for (const a of alloys || []) {
+          if (!a?.name) continue;
+          const row = {
+            malzeme_grup_id: gid,
+            ad: a.name,
+            ozkutle: a.density ?? 0,
+            fiyat_eur_kg: a.priceEurPerKg ?? 0,
+            aktif: true,
+          };
+          if (a.dbId) {
+            const { error } = await client.from('malzemeler').update(row).eq('id', a.dbId);
+            if (error) throw error;
+            keepIds.add(a.dbId);
+          } else {
+            const { data, error } = await client
+              .from('malzemeler')
+              .upsert(row, { onConflict: 'malzeme_grup_id,ad' })
+              .select('id')
+              .single();
+            if (error) throw error;
+            a.dbId = data.id;
+            keepIds.add(data.id);
+          }
+        }
+      }
+
+      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+      if (toDelete.length) {
+        const { error } = await client.from('malzemeler').delete().in('id', toDelete);
+        if (error) throw error;
+      }
+      return ok({ saved: keepIds.size, deleted: toDelete.length });
+    } catch (e) {
+      return fail(e, 'saveMaterialCatalog');
+    }
+  }
+
+  async function saveNamedPriceCatalog(table, arr, label) {
+    try {
+      const client = sb();
+      if (!client || !Array.isArray(arr)) return fail('no-client', label);
+      const existing = await selectAll(client, table, 'id');
+      const keepIds = new Set();
+      for (const h of arr) {
+        if (!h?.name) continue;
+        const row = {
+          ad: h.name,
+          fiyat_eur_kg: h.priceEurPerKg || 0,
+          fiyat_eur_adet: h.priceEurPerPcs || 0,
+          aktif: true,
+        };
+        if (h.dbId) {
+          const { error } = await client.from(table).update(row).eq('id', h.dbId);
+          if (error) throw error;
+          keepIds.add(h.dbId);
+        } else {
+          const { data, error } = await client
+            .from(table)
+            .upsert(row, { onConflict: 'ad' })
+            .select('id')
+            .single();
+          if (error) throw error;
+          h.dbId = data.id;
+          keepIds.add(data.id);
+        }
+      }
+      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
+      if (toDelete.length) {
+        const { error } = await client.from(table).delete().in('id', toDelete);
+        if (error) throw error;
+      }
+      return ok({ saved: keepIds.size, deleted: toDelete.length });
+    } catch (e) {
+      return fail(e, label);
+    }
+  }
+
+  async function saveHeatTreatmentCatalog(arr) {
+    return saveNamedPriceCatalog('isil_islem_katalogu', arr, 'saveHeatTreatmentCatalog');
+  }
+  async function saveCoatingCatalog(arr) {
+    return saveNamedPriceCatalog('kaplama_katalogu', arr, 'saveCoatingCatalog');
+  }
+
   // ─── Catalogs ──────────────────────────────────────────────────────────────
   async function hydrateCatalogs(ctx) {
     const client = sb();
@@ -2323,5 +2421,8 @@
     saveStockItem,
     saveStockMove,
     saveSupplierGroupPriorities,
+    saveMaterialCatalog,
+    saveHeatTreatmentCatalog,
+    saveCoatingCatalog,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
