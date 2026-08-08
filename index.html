@@ -8266,6 +8266,38 @@ ${vadeLine}`;
     settings: 'page-settings',
   };
   const navLinks = document.querySelectorAll('.sidebar-item[data-page]');
+  let currentAppPage = 'dashboard';
+  let appHistLock = false;
+
+  function appHistUrl(state) {
+    if (state?.type === 'modal') return `#/${state.page || currentAppPage}/m/${encodeURIComponent(state.id || '')}`;
+    if (state?.type === 'settings') return `#/settings/${state.tab || 'company'}`;
+    return `#/${state?.page || 'dashboard'}`;
+  }
+  function appHistPush(state, replace) {
+    if (appHistLock) return;
+    try {
+      history[replace ? 'replaceState' : 'pushState']({ btd: 1, ...state }, '', appHistUrl(state));
+    } catch (_) { /* ignore */ }
+  }
+  function listAppOverlays() {
+    return Array.from(document.querySelectorAll('[id$="Overlay"]'));
+  }
+  function closeAppOverlaysSilent() {
+    appHistLock = true;
+    try {
+      listAppOverlays().forEach((el) => el.classList.add('hidden'));
+      document.getElementById('drawer')?.classList.add('hidden');
+      document.getElementById('orderDrawer')?.classList.add('hidden');
+    } finally {
+      appHistLock = false;
+    }
+  }
+  function currentPageHistState() {
+    const tab = (typeof activeSettingsTab !== 'undefined') ? activeSettingsTab : 'company';
+    if (currentAppPage === 'settings') return { type: 'settings', page: 'settings', tab };
+    return { type: 'page', page: currentAppPage };
+  }
 
   function setActiveNav(page) {
     navLinks.forEach(link => {
@@ -8279,12 +8311,14 @@ ${vadeLine}`;
     });
   }
 
-  function showPage(page) {
+  function showPage(page, opts = {}) {
     if (page === 'settings' && !currentUser) return;
     if (currentUser && !userCanAccessPage(currentUser, page)) {
       showToast('Bu bölüme erişim yetkiniz yok.', 'error');
       return;
     }
+    const fromPop = !!(opts && opts.fromPop);
+    const replace = !!(opts && opts.replace);
     Object.entries(pageMap).forEach(([key, id]) => {
       const el = document.getElementById(id);
       if (el) el.classList.toggle('hidden', key !== page);
@@ -8308,6 +8342,19 @@ ${vadeLine}`;
     if (page === 'shipping') renderShippingPage();
     if (page === 'invoicing') renderInvoicingPage();
     if (page === 'settings') renderSettingsPage();
+
+    const prevPage = currentAppPage;
+    currentAppPage = page;
+    if (!fromPop) {
+      if (!(opts && opts.keepOverlays)) closeAppOverlaysSilent();
+      const tab = (typeof activeSettingsTab !== 'undefined') ? activeSettingsTab : 'company';
+      const nextState = page === 'settings'
+        ? { type: 'settings', page: 'settings', tab }
+        : { type: 'page', page };
+      const topIsModal = history.state && history.state.btd && history.state.type === 'modal';
+      if (replace || prevPage === page || topIsModal) appHistPush(nextState, true);
+      else appHistPush(nextState, false);
+    }
   }
 
   navLinks.forEach(link => {
@@ -8322,7 +8369,66 @@ ${vadeLine}`;
     });
   });
 
-  showPage('dashboard');
+  showPage('dashboard', { replace: true });
+
+  // Modal / overlay aç-kapa → tarayıcı geri tuşu yığını
+  listAppOverlays().forEach((el) => {
+    const obs = new MutationObserver(() => {
+      if (appHistLock) return;
+      const open = !el.classList.contains('hidden');
+      const st = history.state;
+      if (open) {
+        if (st && st.btd && st.type === 'modal' && st.id === el.id) return;
+        appHistPush({ type: 'modal', id: el.id, page: currentAppPage });
+      } else if (st && st.btd && st.type === 'modal' && st.id === el.id) {
+        // X / iptal ile kapandı → modal kaydını sayfa kaydıyla değiştir (stack bozulmasın)
+        appHistPush(currentPageHistState(), true);
+      }
+    });
+    obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+
+  window.addEventListener('popstate', (e) => {
+    const st = e.state && e.state.btd ? e.state : null;
+    appHistLock = true;
+    try {
+      const wantModal = st && st.type === 'modal' ? st.id : null;
+      listAppOverlays().forEach((el) => {
+        const isOpen = !el.classList.contains('hidden');
+        if (wantModal === el.id) {
+          if (!isOpen) el.classList.remove('hidden');
+        } else if (isOpen) {
+          el.classList.add('hidden');
+        }
+      });
+      if (!wantModal) {
+        document.getElementById('drawer')?.classList.add('hidden');
+        document.getElementById('orderDrawer')?.classList.add('hidden');
+      }
+
+      if (!st) {
+        // Uygulama geçmişinin dışına çıkıldı — sitede kal, dashboard'a dön
+        showPage('dashboard', { fromPop: true, keepOverlays: true });
+        appHistLock = false;
+        appHistPush({ type: 'page', page: 'dashboard' }, true);
+        return;
+      }
+      if (st.type === 'page') {
+        showPage(st.page || 'dashboard', { fromPop: true, keepOverlays: true });
+      } else if (st.type === 'settings') {
+        showPage('settings', { fromPop: true, keepOverlays: true });
+        if (typeof switchSettingsTab === 'function') {
+          switchSettingsTab(st.tab || 'company', { fromPop: true });
+        }
+      } else if (st.type === 'modal') {
+        if (st.page && pageMap[st.page] && st.page !== currentAppPage) {
+          showPage(st.page, { fromPop: true, keepOverlays: true });
+        }
+      }
+    } finally {
+      appHistLock = false;
+    }
+  });
 
   // ---------- Makine Parkı: render & assignment ----------
   function flattenMachines(company) {
@@ -13600,7 +13706,8 @@ ${vadeLine}`;
 
   // ---------- Ayarlar sayfası (Firma / Döviz / Nakliye / Kullanıcı) ----------
   let activeSettingsTab = 'company';
-  function switchSettingsTab(tab) {
+  function switchSettingsTab(tab, opts = {}) {
+    const prev = activeSettingsTab;
     activeSettingsTab = tab;
     document.querySelectorAll('.settings-tab-btn').forEach(btn => {
       const active = btn.dataset.settingsTab === tab;
@@ -13618,6 +13725,9 @@ ${vadeLine}`;
     if (tab === 'fx' && typeof syncFxRatesInputs === 'function') syncFxRatesInputs();
     if (tab === 'shipping') renderShippingPackagesTable();
     if (tab === 'payment') syncSettingsBankModeUi();
+    if (!(opts && opts.fromPop) && currentAppPage === 'settings' && prev !== tab && typeof appHistPush === 'function') {
+      appHistPush({ type: 'settings', page: 'settings', tab }, false);
+    }
   }
 
   document.querySelectorAll('.settings-tab-btn').forEach(btn => {
