@@ -3293,13 +3293,19 @@
         </div>
       </div>
 
-      <p class="text-xs text-steel-500">Aynı formda 1→2→3 adımlarını doldurun · birden fazla ürün ekleyin · en sonda <strong>Analizi Kaydet</strong>.</p>
-      <div class="flex flex-wrap gap-2 border-b border-steel-200 pb-2">
-        <button type="button" data-cost-jump="product" tabindex="-1" class="cost-jump-btn px-3 py-1.5 text-xs font-semibold rounded-lg bg-navy text-white">1 · Ürün &amp; Malzeme</button>
-        <button type="button" data-cost-jump="pricing" tabindex="-1" class="cost-jump-btn px-3 py-1.5 text-xs font-semibold rounded-lg bg-steel-100 text-steel-600 hover:bg-steel-200">2 · Kg Fiyat &amp; İşçilik</button>
-        <button type="button" data-cost-jump="extras" tabindex="-1" class="cost-jump-btn px-3 py-1.5 text-xs font-semibold rounded-lg bg-steel-100 text-steel-600 hover:bg-steel-200">3 · Ek Giderler &amp; Toplam</button>
+      <p class="text-xs text-steel-500">Excel fiyatı <strong>KDV’siz · malzeme+işçilik (+kaplama/ısıl yoksa 0)</strong> kabul edilir. Ölçülerden malzeme hesaplanır; kalan işçiliğe yazılır.</p>
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-steel-200 pb-2">
+        <div class="flex flex-wrap gap-2">
+          <button type="button" data-cost-jump="product" tabindex="-1" class="cost-jump-btn px-3 py-1.5 text-xs font-semibold rounded-lg bg-navy text-white">1 · Ürün &amp; Malzeme</button>
+          <button type="button" data-cost-jump="pricing" tabindex="-1" class="cost-jump-btn px-3 py-1.5 text-xs font-semibold rounded-lg bg-steel-100 text-steel-600 hover:bg-steel-200">2 · Kg Fiyat &amp; İşçilik</button>
+          <button type="button" data-cost-jump="extras" tabindex="-1" class="cost-jump-btn px-3 py-1.5 text-xs font-semibold rounded-lg bg-steel-100 text-steel-600 hover:bg-steel-200">3 · Ek Giderler &amp; Toplam</button>
+        </div>
+        <button type="button" id="costEditorToggleBtn" class="text-xs font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-3 py-1.5 rounded-lg">
+          Kalem formunu daralt
+        </button>
       </div>
 
+      <div id="costEditorBody">
       <div id="costTabProduct" class="cost-tab-panel space-y-4 scroll-mt-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -3508,6 +3514,7 @@
         </div>
         <button type="button" id="costAddItemBtn" class="w-full sm:w-auto bg-steel-800 hover:bg-steel-900 text-white text-sm font-semibold px-4 py-2.5 rounded-xl">Ürün Ekle</button>
       </div>
+      </div><!-- /#costEditorBody -->
 
       <div class="overflow-x-auto border border-steel-200 rounded-xl">
         <table class="w-full text-sm">
@@ -3572,8 +3579,9 @@
     </div>
     <div class="p-4 sm:p-5 overflow-y-auto space-y-4">
       <div class="rounded-xl bg-emerald-50 border border-emerald-100 px-3 py-2.5 text-xs text-emerald-900 leading-relaxed">
-        <strong>Eşleme:</strong> E sütunu → <em>birim işçilik</em> · kâr varsayılan <strong>%0</strong> (fiyat kârlı kabul) · her sayfa ayrı analiz · G sütunu malzeme cinsi.
-        İsterseniz kayıt sonrası «Kâr ekle» ile oran girebilirsiniz.
+        <strong>Eşleme:</strong> Excel birim fiyat = <em>KDV’siz · malzeme+işçilik (kaplama/ısıl yoksa 0)</em>.
+        Ölçüler (H/I veya parça adından) → imalat/sipariş ebatı → kg × katalog €/kg = malzeme.
+        <strong>İşçilik = Excel fiyat − malzeme birim.</strong> Kâr varsayılan %0 · her sayfa ayrı analiz.
       </div>
       <div id="costExcelImportMeta" class="text-sm text-steel-600"></div>
       <div class="overflow-x-auto border border-steel-200 rounded-xl">
@@ -3585,6 +3593,8 @@
               <th class="px-3 py-2">Müşteri</th>
               <th class="px-3 py-2">İmalatçı</th>
               <th class="px-3 py-2">Kalem</th>
+              <th class="px-3 py-2 text-right">Excel ∑</th>
+              <th class="px-3 py-2 text-right">Malzeme ∑</th>
               <th class="px-3 py-2 text-right">İşçilik ∑</th>
             </tr>
           </thead>
@@ -14468,6 +14478,8 @@ ${vadeLine}`;
 
   // ========== MALİYET ANALİZİ ==========
   let costItemsDraft = [];
+  let costItemEditIndex = null;
+  let costEditorCollapsed = false;
   let costDimLocked = {};
   let costCoatingManual = false;
   let costCoating2Manual = false;
@@ -15056,6 +15068,7 @@ ${vadeLine}`;
     set('gtTotal', fin.totalPrice);
   }
   function resetCostItemFormFields() {
+    costItemEditIndex = null;
     costCoatingManual = false;
     costCoating2Manual = false;
     costHeatManual = false;
@@ -15075,6 +15088,8 @@ ${vadeLine}`;
     document.getElementById('costCoatingTotal').value = 0;
     if (document.getElementById('costCoating2')) document.getElementById('costCoating2').value = 0;
     if (document.getElementById('costCoating2Total')) document.getElementById('costCoating2Total').value = 0;
+    const addBtn = document.getElementById('costAddItemBtn');
+    if (addBtn) addBtn.textContent = 'Ürün Ekle';
     syncDualCoatingVisibility({ forceDefaults: true });
     renderCostDimRows();
     updateCostDensityHint();
@@ -15091,13 +15106,72 @@ ${vadeLine}`;
     return it;
   }
   function costItemsMissingLabor(items) {
-    return (items || []).filter(it => !(Number(it.laborUnit) > 0));
+    return (items || []).filter((it) => {
+      if (Number(it.laborUnit) > 0) return false;
+      // Excel: ölçü yoksa fiyat işçiliğe yazılır; malzeme Excel’i aştıysa 0 olabilir
+      if (it.source === 'excel' && Number(it.excelAllInUnit) > 0) return false;
+      return true;
+    });
   }
   function warnMissingLaborCost(items) {
     const missing = costItemsMissingLabor(items);
     if (!missing.length) return false;
     showToast('İşçilik fiyatı girilmemesi maliyet hatasına sebebiyet verecektir.', 'error');
     return true;
+  }
+  function setCostEditorCollapsed(collapsed) {
+    costEditorCollapsed = !!collapsed;
+    const body = document.getElementById('costEditorBody');
+    const btn = document.getElementById('costEditorToggleBtn');
+    if (body) body.classList.toggle('hidden', costEditorCollapsed);
+    if (btn) btn.textContent = costEditorCollapsed ? 'Kalem formunu genişlet' : 'Kalem formunu daralt';
+  }
+  function loadCostItemIntoForm(it) {
+    if (!it) return;
+    setCostEditorCollapsed(false);
+    document.getElementById('costItemPartNo').value = it.partNo || '';
+    document.getElementById('costItemDesc').value = it.desc || '';
+    document.getElementById('costQty').value = it.qty || 1;
+    renderCostMaterialSelects();
+    const matSel = document.getElementById('costMaterial');
+    if (matSel && it.material && [...matSel.options].some(o => o.value === it.material)) matSel.value = it.material;
+    renderCostAlloySelect();
+    const alloySel = document.getElementById('costAlloy');
+    if (alloySel && it.alloy && [...alloySel.options].some(o => o.value === it.alloy)) alloySel.value = it.alloy;
+    const shapeSel = document.getElementById('costShape');
+    if (shapeSel && it.shapeId && [...shapeSel.options].some(o => o.value === it.shapeId)) shapeSel.value = it.shapeId;
+    renderCostDimRows();
+    const mfg = it.mfgDims || {};
+    const ord = it.ordDims || {};
+    document.querySelectorAll('#costDimsBody [data-cost-mfg]').forEach((inp) => {
+      const f = inp.dataset.costMfg;
+      inp.value = mfg[f] != null && mfg[f] !== '' ? mfg[f] : '';
+    });
+    document.querySelectorAll('#costDimsBody [data-cost-ord]').forEach((inp) => {
+      const f = inp.dataset.costOrd;
+      costDimLocked[f] = true;
+      inp.value = ord[f] != null && ord[f] !== '' ? ord[f] : '';
+    });
+    document.getElementById('costPricePerKg').value = Number(it.priceEurPerKg) || 0;
+    document.getElementById('costLaborUnit').value = Number(it.laborUnit) || 0;
+    if (document.getElementById('costHeatType')) document.getElementById('costHeatType').value = it.heatType || '';
+    if (document.getElementById('costCoatingType')) document.getElementById('costCoatingType').value = it.coatingType || '';
+    if (document.getElementById('costCoating2Type')) document.getElementById('costCoating2Type').value = it.coatingType2 || '';
+    if (document.getElementById('costHeatMode')) document.getElementById('costHeatMode').value = it.heatMode || 'kg';
+    if (document.getElementById('costCoatingMode')) document.getElementById('costCoatingMode').value = it.coatingMode || 'kg';
+    document.getElementById('costHeat').value = Number(it.heatEurRate) || 0;
+    document.getElementById('costCoating').value = Number(it.coatingEurRate) || 0;
+    document.getElementById('costHeatTotal').value = Number(it.heat) || 0;
+    document.getElementById('costCoatingTotal').value = Number(it.coating) - Number(it.coating2 || 0) || 0;
+    if (document.getElementById('costCoating2Total')) document.getElementById('costCoating2Total').value = Number(it.coating2) || 0;
+    costHeatManual = Number(it.heat) > 0;
+    costCoatingManual = Number(it.coating) > 0;
+    updateCostDensityHint();
+    syncDualCoatingVisibility({ forceDefaults: false });
+    recalcCostItemPreview();
+    switchCostTab('product');
+    const addBtn = document.getElementById('costAddItemBtn');
+    if (addBtn) addBtn.textContent = 'Kalemi Güncelle';
   }
   function renderCostItemsDraft() {
     const tbody = document.getElementById('costItemsBody');
@@ -15110,10 +15184,16 @@ ${vadeLine}`;
         const extras = costItemExtras(it);
         const profitAmt = it.costSubtotal * (pct / 100);
         const genelToplam = it.costSubtotal + profitAmt;
-        const laborMissing = !(Number(it.laborUnit) > 0);
+        const laborMissing = !(Number(it.laborUnit) > 0) && !(it.source === 'excel' && Number(it.excelAllInUnit) > 0);
+        const editing = costItemEditIndex === i;
         return `
-        <tr class="${laborMissing ? 'bg-red-50/40' : ''}">
-          <td class="px-2 py-2 min-w-[8rem]"><p class="font-medium text-steel-800 text-[13px]">${formatCostPartLabel(it)}</p><p class="text-[10px] text-steel-400">${it.material} · ${it.alloy} · ${it.shapeName}</p></td>
+        <tr class="${editing ? 'bg-navy/5 ring-1 ring-inset ring-navy/20' : (laborMissing ? 'bg-red-50/40' : 'hover:bg-steel-50/80')} cursor-pointer" data-cost-item-row="${i}" title="Düzenlemek için tıklayın">
+          <td class="px-2 py-2 min-w-[8rem]">
+            <p class="font-medium text-steel-800 text-[13px]">${formatCostPartLabel(it)}</p>
+            <p class="text-[10px] text-steel-400">${it.material} · ${it.alloy} · ${it.shapeName}</p>
+            ${it.excelAllInUnit != null ? `<p class="text-[10px] text-emerald-700 mt-0.5">Excel birim: ${fmtCostMoney(it.excelAllInUnit, cur)} · Malz: ${fmtCostMoney(it.materialUnit, cur)}</p>` : ''}
+            ${it.excelSplitNote ? `<p class="text-[9px] text-amber-600 mt-0.5">${it.excelSplitNote}</p>` : ''}
+          </td>
           <td class="px-2 py-2 mono">${it.qty}</td>
           <td class="px-2 py-2 mono">${Number(it.totalKg || 0).toFixed(3)}</td>
           <td class="px-2 py-2 mono">${fmtCostMoney(it.materialTotal, cur)}</td>
@@ -15130,13 +15210,37 @@ ${vadeLine}`;
           <td class="px-2 py-2 mono">${fmtCostMoney(it.costSubtotal, cur)}</td>
           <td class="px-2 py-2 mono">${fmtCostMoney(it.laborTotal, cur)}</td>
           <td class="px-2 py-2 mono font-semibold text-navy">${fmtCostMoney(genelToplam, cur)}</td>
-          <td class="px-2 py-2 text-right"><button type="button" data-del-cost-item="${i}" class="text-steel-300 hover:text-red-500 p-1">✕</button></td>
+          <td class="px-2 py-2 text-right whitespace-nowrap">
+            <button type="button" data-edit-cost-item="${i}" class="text-[10px] font-semibold text-navy hover:underline mr-1">Düzenle</button>
+            <button type="button" data-del-cost-item="${i}" class="text-steel-300 hover:text-red-500 p-1">✕</button>
+          </td>
         </tr>`;
       }).join('');
       tbody.querySelectorAll('[data-del-cost-item]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          costItemsDraft.splice(Number(btn.dataset.delCostItem), 1);
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const idx = Number(btn.dataset.delCostItem);
+          costItemsDraft.splice(idx, 1);
+          if (costItemEditIndex === idx) { costItemEditIndex = null; resetCostItemFormFields(); }
+          else if (costItemEditIndex != null && costItemEditIndex > idx) costItemEditIndex -= 1;
           renderCostItemsDraft();
+        });
+      });
+      const editItem = (idx) => {
+        const it = costItemsDraft[idx];
+        if (!it) return;
+        costItemEditIndex = idx;
+        loadCostItemIntoForm(it);
+        renderCostItemsDraft();
+        showToast(`Kalem düzenleniyor: ${formatCostPartLabel(it)}`, 'info');
+      };
+      tbody.querySelectorAll('[data-edit-cost-item]').forEach(btn => {
+        btn.addEventListener('click', (e) => { e.stopPropagation(); editItem(Number(btn.dataset.editCostItem)); });
+      });
+      tbody.querySelectorAll('[data-cost-item-row]').forEach(row => {
+        row.addEventListener('click', (e) => {
+          if (e.target.closest('input,button')) return;
+          editItem(Number(row.dataset.costItemRow));
         });
       });
       tbody.querySelectorAll('[data-cost-labor-idx]').forEach(inp => {
@@ -15147,6 +15251,7 @@ ${vadeLine}`;
           applyLaborUnitToCostItem(it, inp.value);
           renderCostItemsDraft();
         };
+        inp.addEventListener('click', (e) => e.stopPropagation());
         inp.addEventListener('change', commit);
         inp.addEventListener('keydown', (e) => {
           if (e.key === 'Enter') { e.preventDefault(); commit(); }
@@ -16976,8 +17081,13 @@ ${vadeLine}`;
     refreshTcmbRates().then(() => { updateCostDensityHint(); recalcCostItemPreview(); });
     renderCostMaterialSelects();
     renderCostDimRows();
+    costItemEditIndex = null;
+    const addBtn = document.getElementById('costAddItemBtn');
+    if (addBtn) addBtn.textContent = 'Ürün Ekle';
     renderCostItemsDraft();
     switchCostTab('product');
+    // Excel vb. çok kalemli analizlerde formu daralt; kaleme tıklayınca açılır
+    setCostEditorCollapsed(!!(existing && (existing.items || []).length >= 3));
     document.getElementById('newCostModalOverlay').classList.remove('hidden');
   }
   function closeCostModal() {
@@ -17070,10 +17180,12 @@ ${vadeLine}`;
   }
   function guessShapeFromExcelDesc(desc) {
     const t = String(desc || '').toLowerCase();
-    if (/yuvarlak|ø|⌀| mil\b/.test(t)) return 'yuvarlak';
-    if (/\bsac\b|levha/.test(t)) return 'sac';
-    if (/lama/.test(t)) return 'lama';
+    if (/yuvarlak|ø|⌀|\bmil\b/.test(t)) return 'yuvarlak';
+    if (/\bsac\b/.test(t)) return 'sac';
+    if (/levha/.test(t)) return 'levha';
+    if (/lama|so[gğ]uk\s*[çc]ekme/.test(t)) return 'lama';
     if (/kare/.test(t)) return 'yassi';
+    if (/boru/.test(t)) return 'boru';
     return 'lama';
   }
   function resolveExcelMaterialAlloy(codeG, desc) {
@@ -17082,23 +17194,90 @@ ${vadeLine}`;
     let group = 'Çelik';
     if (/AL[UÜ]M|6082|6013|6061|7075|5083/.test(up)) group = 'Alüminyum';
     else if (/PASLANMAZ|AISI\s*3|INOX/.test(up)) group = 'Paslanmaz';
-    else if (/PİRİNÇ|PIRINC|MS58|BRONZ/.test(up)) group = /BRONZ/.test(up) ? 'Bronz' : 'Pirinç';
+    else if (/PİRİNÇ|PIRINC|MS58/.test(up)) group = 'Pirinç';
+    else if (/BRONZ/.test(up)) group = 'Bronz';
     const alloys = procMaterialCatalog[group] || [];
     let alloy = alloys[0]?.name || '';
     const tryMatch = (re) => alloys.find(a => re.test(a.name));
     let hit = null;
     if (/CK\s*45|C45|1\.1191/.test(up)) hit = tryMatch(/CK45|1\.1191/i);
-    else if (/ST\s*37|S235/.test(up)) hit = tryMatch(/St37|S235/i);
-    else if (/ST\s*52|S355/.test(up)) hit = tryMatch(/4140|St52|S355|1018/i) || tryMatch(/./);
+    else if (/ST\s*37|S235JR|S235/.test(up)) hit = tryMatch(/St37|S235/i);
+    else if (/ST\s*52|S355/.test(up)) hit = tryMatch(/4140|1018|St52|S355/i);
+    else if (/4140|1\.7225/.test(up)) hit = tryMatch(/4140|1\.7225/i);
     else if (/6082/.test(up)) hit = tryMatch(/6082/);
+    else if (/6013/.test(up)) hit = tryMatch(/6082|6061/) || alloys[0];
     else if (/6061/.test(up)) hit = tryMatch(/6061/);
     else if (/7075/.test(up)) hit = tryMatch(/7075/);
+    else if (/304/.test(up)) hit = tryMatch(/304/);
+    else if (/316/.test(up)) hit = tryMatch(/316/);
     else if (codeG) {
-      const cg = String(codeG).trim().toUpperCase();
-      hit = alloys.find(a => a.name.toUpperCase().includes(cg) || cg.includes(a.name.toUpperCase().slice(0, 4)));
+      const cg = String(codeG).trim().toUpperCase().replace(/\s+/g, '');
+      hit = alloys.find(a => a.name.toUpperCase().replace(/\s+/g, '').includes(cg)
+        || cg.includes(a.name.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4)));
     }
     if (hit) alloy = hit.name;
     return { material: group, alloy };
+  }
+  function extractDimsFromText(text) {
+    const t = String(text || '').replace(/,/g, '.');
+    const nums = [];
+    const xx = [...t.matchAll(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)(?:\s*[xX×*]\s*(\d+(?:\.\d+)?))?/g)];
+    if (xx.length) {
+      const m = xx[0];
+      [m[1], m[2], m[3]].filter(Boolean).forEach((n) => nums.push(Number(n)));
+      return nums;
+    }
+    const diam = t.match(/(?:ø|⌀|çap)\s*:?\s*(\d+(?:\.\d+)?)/i);
+    if (diam) {
+      nums.push(Number(diam[1]));
+      const len = t.match(/(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:uzun|boy|l\b)/i);
+      if (len) nums.push(Number(len[1]));
+      return nums;
+    }
+    const yuvarlak = t.match(/yuvarlak\s+(\d+(?:\.\d+)?)/i);
+    if (yuvarlak) return [Number(yuvarlak[1])];
+    const sac = t.match(/\bsac\b\s+(\d+(?:\.\d+)?)/i);
+    if (sac) return [Number(sac[1])];
+    const mm = t.match(/(\d+(?:\.\d+)?)\s*mm/i);
+    if (mm) return [Number(mm[1])];
+    return nums;
+  }
+  function mapNumsToShapeDims(shape, nums) {
+    const dims = {};
+    (shape.fields || []).forEach((f) => { dims[f] = 0; });
+    if (!nums || !nums.length) return dims;
+    const id = shape.id;
+    if (id === 'yuvarlak' || id === 'altikose') {
+      dims['Çap'] = nums[0] || 0;
+      dims['Uzunluk'] = nums[1] || 0;
+    } else if (id === 'boru' || id === 'celikboru') {
+      if (dims['Dış Çap'] !== undefined) dims['Dış Çap'] = nums[0] || 0;
+      if (dims['Çeper kalınlığı'] !== undefined) dims['Çeper kalınlığı'] = nums[1] || 0;
+      if (dims['Kalınlık'] !== undefined && !nums[1]) dims['Kalınlık'] = nums[0] || 0;
+      dims['Uzunluk'] = nums[2] || nums[1] || 0;
+    } else if (id === 'sac' || id === 'levha' || id === 'lama' || id === 'yassi') {
+      if (nums.length === 1) {
+        dims['Ölçü'] = nums[0];
+      } else {
+        const a = nums[0] || 0;
+        const b = nums[1] || 0;
+        // Lama 80x30 → Genişlik 80, kalınlık (Ölçü) 30
+        dims['Ölçü'] = Math.min(a, b) || a;
+        dims['Genişlik'] = Math.max(a, b) || b;
+        dims['Uzunluk'] = nums[2] || 0;
+      }
+    } else {
+      (shape.fields || []).forEach((f, i) => { if (nums[i] != null) dims[f] = nums[i]; });
+    }
+    return dims;
+  }
+  function addMmToDims(dims, add) {
+    const out = { ...(dims || {}) };
+    Object.keys(out).forEach((k) => {
+      const n = Number(out[k]) || 0;
+      if (n > 0) out[k] = Math.round((n + add) * 10) / 10;
+    });
+    return out;
   }
   function rebuildCostItemTotals(it, profitPct) {
     const qty = Number(it.qty) || 0;
@@ -17122,14 +17301,55 @@ ${vadeLine}`;
       quoteUnit: qty ? quoteTotal / qty : 0,
     };
   }
-  function buildCostItemFromExcelRow(row) {
+  function buildCostItemFromExcelRow(row, currency = '₺') {
     const { material, alloy } = resolveExcelMaterialAlloy(row.matGrade, row.desc);
     const shapeId = guessShapeFromExcelDesc(row.desc);
     const shape = productShapes.find(s => s.id === shapeId) || productShapes[0];
     const alloyObj = (procMaterialCatalog[material] || []).find(a => a.name === alloy);
     const density = alloyObj ? alloyObj.density : 0;
-    const laborUnit = excelCellNum(row.unitPrice);
+    const priceEurPerKg = alloyObj ? (Number(alloyObj.priceEurPerKg) || 0) : 0;
+    const pricePerKg = convertEurToCurrency(priceEurPerKg, currency);
     const qty = excelCellNum(row.qty) || 1;
+    const excelAllInUnit = excelCellNum(row.unitPrice); // KDV hariç, her şey dahil satış/maliyet birim fiyatı
+
+    const mfgNums = extractDimsFromText(row.mfgDimText);
+    const ordNums = extractDimsFromText(row.ordDimText);
+    const descNums = extractDimsFromText(row.desc);
+    const baseNums = mfgNums.length ? mfgNums : descNums;
+    let mfgDims = mapNumsToShapeDims(shape, baseNums);
+    let ordDims = ordNums.length
+      ? mapNumsToShapeDims(shape, ordNums)
+      : (baseNums.length ? addMmToDims(mfgDims, 5) : mapNumsToShapeDims(shape, []));
+
+    // Sipariş ölçüleri yoksa ve imalat da boşsa en azından açıklamadaki kesiti imalata yaz
+    const hasMfg = Object.values(mfgDims).some((v) => Number(v) > 0);
+    const hasOrd = Object.values(ordDims).some((v) => Number(v) > 0);
+    if (!hasOrd && hasMfg) ordDims = addMmToDims(mfgDims, 5);
+
+    const volOrd = shape.volumeMm3(ordDims);
+    const volMfg = shape.volumeMm3(mfgDims);
+    const unitKg = density > 0 ? (volOrd * density) / 1e6 : 0;
+    const totalKg = unitKg * qty;
+    const mfgUnitKg = density > 0 ? (volMfg * density) / 1e6 : 0;
+    const mfgTotalKg = mfgUnitKg * qty;
+    const materialUnit = unitKg * pricePerKg;
+    const materialTotal = totalKg * pricePerKg;
+
+    // Kaplama/ısıl Excel'de yok → 0. İşçilik = her şey dahil − malzeme birim
+    let laborUnit = Math.round((excelAllInUnit - materialUnit) * 100) / 100;
+    let excelSplitNote = '';
+    if (laborUnit < 0) {
+      excelSplitNote = 'Malzeme birim maliyeti Excel fiyatını aştı; işçilik 0';
+      laborUnit = 0;
+    } else if (!(unitKg > 0)) {
+      excelSplitNote = 'Ölçü/kg eksik — Excel fiyatı geçici olarak işçiliğe yazıldı';
+      laborUnit = excelAllInUnit;
+    }
+
+    const supplierRaw = excelCellStr(row.supplier);
+    const companyForSup = row.company || activeCompany;
+    const supHit = supplierRaw ? findSupplierByName(companyForSup, supplierRaw) : null;
+
     return rebuildCostItemTotals({
       partNo: excelCellStr(row.partNo),
       desc: excelCellStr(row.desc),
@@ -17138,17 +17358,17 @@ ${vadeLine}`;
       alloy,
       shapeId: shape.id,
       shapeName: shape.name,
-      mfgDims: {},
-      ordDims: {},
+      mfgDims,
+      ordDims,
       density,
-      unitKg: 0,
-      totalKg: 0,
-      mfgUnitKg: 0,
-      mfgTotalKg: 0,
-      pricePerKg: 0,
-      priceEurPerKg: alloyObj ? (alloyObj.priceEurPerKg || 0) : 0,
-      materialUnit: 0,
-      materialTotal: 0,
+      unitKg,
+      totalKg,
+      mfgUnitKg,
+      mfgTotalKg,
+      pricePerKg,
+      priceEurPerKg,
+      materialUnit,
+      materialTotal,
       laborUnit,
       heatType: '',
       heatMode: 'kg',
@@ -17163,7 +17383,10 @@ ${vadeLine}`;
       coating2: 0,
       coating: 0,
       shipping: 0,
-      excelSupplier: excelCellStr(row.supplier),
+      excelSupplier: supHit ? supHit.name : supplierRaw,
+      excelAllInUnit,
+      excelSplitNote,
+      vatExcluded: true,
       source: 'excel',
     }, 0);
   }
@@ -17212,6 +17435,7 @@ ${vadeLine}`;
       }
     }
     const headerIdx = findExcelHeaderRow(matrix);
+    const companyEarly = matchCompanyFromExcel(maker) || activeCompany;
     const items = [];
     for (let r = headerIdx + 1; r < matrix.length; r++) {
       const partNo = excelCellStr(get(r, 1));
@@ -17229,7 +17453,8 @@ ${vadeLine}`;
         mfgDimText: excelCellStr(get(r, 7)),
         ordDimText: excelCellStr(get(r, 8)),
         supplier: excelCellStr(get(r, 9)),
-      }));
+        company: companyEarly,
+      }, '₺'));
     }
     if (!items.length) return null;
     let leadTimeDays = 15;
@@ -17241,7 +17466,9 @@ ${vadeLine}`;
       }
     }
     const laborSum = items.reduce((s, it) => s + (Number(it.laborTotal) || 0), 0);
-    const company = matchCompanyFromExcel(maker) || activeCompany;
+    const matSum = items.reduce((s, it) => s + (Number(it.materialTotal) || 0), 0);
+    const allInSum = items.reduce((s, it) => s + ((Number(it.excelAllInUnit) || 0) * (Number(it.qty) || 0)), 0);
+    const company = companyEarly;
     const custRes = resolveExcelCustomerName(company, customer);
     return {
       sheetName,
@@ -17257,6 +17484,8 @@ ${vadeLine}`;
       leadTimeDays,
       items,
       laborSum,
+      matSum,
+      allInSum,
       selected: true,
     };
   }
@@ -17289,9 +17518,11 @@ ${vadeLine}`;
         </td>
         <td class="px-3 py-2.5">${sh.maker || '—'} <span class="text-[10px] text-steel-400">→ ${sh.company}</span></td>
         <td class="px-3 py-2.5 mono">${sh.items.length}</td>
+        <td class="px-3 py-2.5 text-right mono">${fmtCostMoney(sh.allInSum || 0, '₺')}</td>
+        <td class="px-3 py-2.5 text-right mono">${fmtCostMoney(sh.matSum || 0, '₺')}</td>
         <td class="px-3 py-2.5 text-right mono font-semibold">${fmtCostMoney(sh.laborSum, '₺')}</td>
       </tr>
-    `).join('') || `<tr><td colspan="6" class="px-3 py-8 text-center text-steel-400">Uygun satır bulunamadı.</td></tr>`;
+    `).join('') || `<tr><td colspan="8" class="px-3 py-8 text-center text-steel-400">Uygun satır bulunamadı.</td></tr>`;
     body.querySelectorAll('[data-ex-sel]').forEach(cb => {
       cb.addEventListener('change', () => {
         const idx = Number(cb.dataset.exSel);
@@ -17364,7 +17595,7 @@ ${vadeLine}`;
     }
     renderCostingPage();
     if (typeof renderDashboard === 'function') renderDashboard();
-    showToast(`${created.length} maliyet analizi oluşturuldu (kâr %0). İsterseniz «Kâr ekle» / Teklife Aktar kullanın.`, 'success');
+    showToast(`${created.length} maliyet analizi oluşturuldu. Excel fiyatından malzeme düşülüp işçilik ayrıldı (kâr %0). Kaleme tıklayarak ölçü/düzenleme yapın.`, 'success');
     if (created.length === 1) openEditCostAnalysis(created[0]);
   }
 
@@ -17490,16 +17721,48 @@ ${vadeLine}`;
     const it = buildCostItemFromForm();
     if (!it.partNo) { showToast('Parça no / kod girin.', 'error'); return; }
     if (!it.desc) { showToast('Ürün / parça adı girin.', 'error'); return; }
-    if (it.totalKg <= 0) { showToast('Ebat ve malzeme ile ağırlık hesaplayın.', 'error'); return; }
-    if (!(Number(it.laborUnit) > 0)) {
+    if (it.totalKg <= 0 && costItemEditIndex == null) {
+      showToast('Ebat ve malzeme ile ağırlık hesaplayın (veya Excel kalemini düzenleyip boyu tamamlayın).', 'error');
+      return;
+    }
+    if (!(Number(it.laborUnit) > 0) && !(Number(it.excelAllInUnit) > 0)) {
       showToast('İşçilik fiyatı girilmemesi maliyet hatasına sebebiyet verecektir.', 'error');
       document.getElementById('costLaborUnit')?.focus();
       return;
     }
-    costItemsDraft.push(it);
+    if (costItemEditIndex != null && costItemsDraft[costItemEditIndex]) {
+      const prev = costItemsDraft[costItemEditIndex];
+      let next = {
+        ...it,
+        source: prev.source || it.source,
+        excelAllInUnit: prev.excelAllInUnit,
+        excelSplitNote: prev.excelSplitNote,
+        excelSupplier: prev.excelSupplier,
+        vatExcluded: prev.vatExcluded,
+      };
+      // Excel kaynaklı: ölçü düzenlenince malzemeyi yenile, işçiliği Excel birim − malzeme olarak güncelle
+      if (prev.source === 'excel' && Number(prev.excelAllInUnit) > 0) {
+        let laborUnit = Math.round((Number(prev.excelAllInUnit) - Number(next.materialUnit || 0)) * 100) / 100;
+        let note = prev.excelSplitNote || '';
+        if (laborUnit < 0) { note = 'Malzeme birim maliyeti Excel fiyatını aştı; işçilik 0'; laborUnit = 0; }
+        else if (!(Number(next.unitKg) > 0)) { note = 'Ölçü/kg eksik — Excel fiyatı geçici olarak işçiliğe yazıldı'; laborUnit = Number(prev.excelAllInUnit); }
+        else note = '';
+        next.laborUnit = laborUnit;
+        next.excelSplitNote = note;
+        next = rebuildCostItemTotals(next, Number(document.getElementById('newCostProfitPct')?.value) || 0);
+        document.getElementById('costLaborUnit').value = laborUnit;
+      }
+      costItemsDraft[costItemEditIndex] = next;
+      showToast('Kalem güncellendi.', 'success');
+    } else {
+      costItemsDraft.push(it);
+      showToast('Ürün eklendi. Form sıfırlandı — yeni ürün girebilirsiniz.', 'success');
+    }
     renderCostItemsDraft();
     resetCostItemFormFields();
-    showToast('Ürün eklendi. Form sıfırlandı — yeni ürün girebilirsiniz.', 'success');
+  });
+  document.getElementById('costEditorToggleBtn')?.addEventListener('click', () => {
+    setCostEditorCollapsed(!costEditorCollapsed);
   });
   document.getElementById('newCostSaveBtn')?.addEventListener('click', () => saveCostAnalysis(false));
   document.getElementById('newCostCustomer')?.addEventListener('change', () => {
