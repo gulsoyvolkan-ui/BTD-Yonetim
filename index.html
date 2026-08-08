@@ -836,7 +836,15 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Makine Parkı <span class="text-steel-400 font-medium">/ Atölyeler</span></h1>
-            <p class="text-sm text-steel-400 mt-1">Atölye bazlı makine envanteri ve iş ataması · <span id="companyNameMachinepark" class="font-semibold text-navy">Technomac</span></p>
+            <p class="text-sm text-steel-400 mt-1">Atölye · makine · firmalar arası paylaşım · <span id="companyNameMachinepark" class="font-semibold text-navy">Technomac</span></p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="mpNewWorkshopBtn" class="flex items-center gap-2 bg-white border border-steel-200 hover:border-navy/30 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm">
+              + Atölye
+            </button>
+            <button type="button" id="mpNewMachineBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold shadow-md shadow-navy/25">
+              + Makine
+            </button>
           </div>
         </div>
 
@@ -2436,6 +2444,74 @@
       </button>
     </div>
     <div id="assignModalList" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+  </div>
+</div>
+
+<!-- ============ MAKİNE / ATÖLYE DÜZENLE ============ -->
+<div id="mpEditorOverlay" class="hidden fixed inset-0 bg-steel-900/60 backdrop-blur-panel z-[70] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
+    <div class="bg-navy px-5 py-4 flex items-start justify-between shrink-0">
+      <div>
+        <p id="mpEditorKicker" class="text-[11px] text-white/50 font-semibold uppercase tracking-wide">Makine Parkı</p>
+        <h3 id="mpEditorTitle" class="text-white font-bold text-lg mt-0.5">Makine</h3>
+      </div>
+      <button type="button" id="mpEditorCloseBtn" class="text-white/70 hover:text-white hover:bg-white/10 rounded-lg p-1.5 shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-y-auto p-5 space-y-4">
+      <div id="mpEditorWorkshopFields" class="space-y-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Atölye Adı *</label>
+          <input id="mpWsName" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" placeholder="Örn. CNC İmalat Atölyesi" />
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold text-steel-500 uppercase mb-2">Bu atölyeyi kullanan firmalar</p>
+          <div id="mpWsCompanies" class="flex flex-wrap gap-2"></div>
+          <p class="text-[10px] text-steel-400 mt-1.5">Birden fazla seçilirse makine ortak havuzda görünür.</p>
+        </div>
+      </div>
+      <div id="mpEditorMachineFields" class="space-y-3 hidden">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Atölye *</label>
+          <select id="mpMachineWorkshop" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm"></select>
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Makine Adı *</label>
+          <input id="mpMachineName" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" placeholder="Örn. HERMLE 600 V" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Alt Bilgi / Tip</label>
+          <input id="mpMachineSub" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" placeholder="Örn. İşleme Merkezi" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">İkon</label>
+          <select id="mpMachineIcon" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+            <option value="mill">İşleme / Freze</option>
+            <option value="lathe">Torna</option>
+            <option value="edm">EDM</option>
+            <option value="grind">Taşlama</option>
+            <option value="weld">Kaynak</option>
+            <option value="saw">Testere</option>
+            <option value="assembly">Montaj</option>
+            <option value="pc">CAD/CAM PC</option>
+            <option value="printer">3D Yazıcı</option>
+          </select>
+        </div>
+        <div>
+          <p class="text-[11px] font-semibold text-steel-500 uppercase mb-2">Fonksiyonlar</p>
+          <div id="mpMachineFunctions" class="flex flex-wrap gap-2"></div>
+          <div class="mt-2 flex gap-2">
+            <input id="mpMachineFuncCustom" type="text" placeholder="Özel fonksiyon ekle" class="flex-1 rounded-xl border border-steel-200 px-3 py-2 text-sm" />
+            <button type="button" id="mpMachineFuncAddBtn" class="text-xs font-semibold bg-steel-800 text-white px-3 py-2 rounded-xl">Ekle</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2 shrink-0">
+      <button type="button" id="mpEditorCancelBtn" class="text-sm font-medium text-steel-500 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="mpEditorSaveBtn" class="bg-navy text-white text-sm font-semibold px-5 py-2.5 rounded-xl">Kaydet</button>
+    </div>
   </div>
 </div>
 
@@ -6656,7 +6732,7 @@ ${vadeLine}`;
   // ---------- Makine Parkı Verisi ----------
   // Bazı atölyeler/makineler birden fazla firma tarafından ORTAK kullanılır (aynı fiziksel makine).
   // Bu yüzden makine parkı firma başına ayrı değil, "companies" listesiyle etiketlenmiş TEK bir havuzdur.
-  const machinePark = [
+  let machinePark = [
     {
       workshop: 'CNC İmalat Atölyesi',
       companies: ['Technomac', 'Bluemac'],
@@ -9051,10 +9127,12 @@ ${vadeLine}`;
     if (!workshops.length) {
       wsContainer.innerHTML = `
         <div class="bg-white rounded-2xl border border-dashed border-steel-300 p-10 text-center">
-          <p class="text-sm font-semibold text-steel-500">Bu firma için makine parkı verisi henüz tanımlanmamış.</p>
-          <p class="text-xs text-steel-400 mt-1">Makine ekleyerek atölye envanterini oluşturabilirsiniz.</p>
+          <p class="text-sm font-semibold text-steel-500">Bu firma için henüz atölye tanımlı değil.</p>
+          <p class="text-xs text-steel-400 mt-1">Atölye ekleyip makine tanımlayın; gerekirse birden fazla firmayla paylaşın.</p>
+          <button type="button" id="mpEmptyNewWsBtn" class="mt-4 inline-flex items-center gap-2 bg-navy text-white text-sm font-semibold px-4 py-2.5 rounded-xl">+ Atölye Ekle</button>
         </div>
       `;
+      document.getElementById('mpEmptyNewWsBtn')?.addEventListener('click', () => openMpWorkshopEditor(null));
       return;
     }
 
@@ -9062,8 +9140,9 @@ ${vadeLine}`;
 
     try {
     wsContainer.innerHTML = workshops.map(ws => {
+      const wsIdx = machinePark.indexOf(ws);
       const isShared = ws.companies.length > 1;
-      const cards = (ws.machines || []).map(m => {
+      const cards = (ws.machines || []).map((m, mi) => {
         const label = machineLabel(m);
         const info = machineState(label);
         const isBusy = info.state === 'busy';
@@ -9082,12 +9161,16 @@ ${vadeLine}`;
           : (isPlanned && activeStepInfo && activeStepInfo.plannedMachine
             ? `<p class="text-[11px] text-steel-400 mt-1">Planlı tezgâh · sıra gelince NFC start</p>`
             : '');
-        // Boş makinelerde info.part yok — planTitle yalnızca dolu / planlı kartlarda kullanılır
         const planTitle = isBusy
           ? 'Çalışıyor (NFC start alındı)'
           : (isPlanned
             ? (info.stepIdx === info.part.activeCam ? 'Sıradaki görev · NFC start bekliyor' : 'Planlanan İş (ileri adım)')
             : '');
+        const fnTags = (m.functions || []).slice(0, 4).map(f =>
+          `<span class="text-[10px] bg-steel-100 text-steel-600 font-medium px-1.5 py-0.5 rounded">${escapeHtml(f)}</span>`
+        ).join('');
+        const moreFn = (m.functions || []).length > 4
+          ? `<span class="text-[10px] text-steel-400">+${m.functions.length - 4}</span>` : '';
 
         return `
           <div class="bg-white rounded-2xl border ${cardBorder} p-4 shadow-sm flex flex-col gap-3">
@@ -9096,29 +9179,34 @@ ${vadeLine}`;
                 ${machineIconSvg(m.icon)}
               </div>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold text-steel-800 leading-tight">${m.name}</p>
-                ${m.sub ? `<p class="text-[11px] text-steel-400 leading-tight mt-0.5">${m.sub}</p>` : ''}
+                <p class="text-sm font-bold text-steel-800 leading-tight">${escapeHtml(m.name)}</p>
+                ${m.sub ? `<p class="text-[11px] text-steel-400 leading-tight mt-0.5">${escapeHtml(m.sub)}</p>` : ''}
               </div>
               <span class="inline-flex items-center gap-1.5 ${badge.bg} ${badge.txt} text-[11px] font-bold px-2 py-1 rounded-full shrink-0">
                 <span class="w-1.5 h-1.5 rounded-full ${badge.dot}"></span>
                 ${badge.text}
               </span>
             </div>
+            ${fnTags ? `<div class="flex flex-wrap gap-1">${fnTags}${moreFn}</div>` : ''}
             ${(isBusy || isPlanned) && info.part ? `
               <div class="bg-steel-50 rounded-xl px-3 py-2">
                 <p class="text-[11px] text-steel-400 font-semibold uppercase">${planTitle}</p>
                 <p class="text-xs font-semibold text-navy mono mt-0.5">${partCode(info.wo, info.part)} · Adım ${info.stepIdx + 1}/${info.part.cam?.length || '?'}</p>
-                <p class="text-xs text-steel-600 truncate">${info.part.name} — ${activeStepInfo?.label || '—'}</p>
-                ${info.wo.company !== activeCompany ? `<p class="text-[11px] text-steel-400 mt-1">Firma: <span class="font-semibold text-steel-500">${info.wo.company}</span> (ortak makine)</p>` : ''}
+                <p class="text-xs text-steel-600 truncate">${escapeHtml(info.part.name)} — ${escapeHtml(activeStepInfo?.label || '—')}</p>
+                ${info.wo.company !== activeCompany ? `<p class="text-[11px] text-steel-400 mt-1">Firma: <span class="font-semibold text-steel-500">${escapeHtml(info.wo.company)}</span> (ortak makine)</p>` : ''}
                 ${nfcLine}
               </div>
               <div class="flex items-center gap-2">
-                <button data-release="${label}" class="release-btn flex-1 text-center text-xs font-semibold text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 hover:bg-red-50 rounded-xl py-2 transition-colors">${isBusy ? 'Serbest Bırak' : 'Planı Kaldır'}</button>
-                ${isPlanned ? `<button data-assign="${label}" ${hasSlots ? '' : 'disabled'} class="assign-btn flex-1 text-center text-xs font-semibold rounded-xl py-2 transition-colors ${hasSlots ? 'bg-navy hover:bg-navy-light text-white' : 'bg-steel-100 text-steel-400 cursor-not-allowed'}">İş Ata</button>` : ''}
+                <button data-release="${escapeHtml(label)}" class="release-btn flex-1 text-center text-xs font-semibold text-red-600 hover:text-red-700 border border-red-200 hover:border-red-300 hover:bg-red-50 rounded-xl py-2 transition-colors">${isBusy ? 'Serbest Bırak' : 'Planı Kaldır'}</button>
+                ${isPlanned ? `<button data-assign="${escapeHtml(label)}" ${hasSlots ? '' : 'disabled'} class="assign-btn flex-1 text-center text-xs font-semibold rounded-xl py-2 transition-colors ${hasSlots ? 'bg-navy hover:bg-navy-light text-white' : 'bg-steel-100 text-steel-400 cursor-not-allowed'}">İş Ata</button>` : ''}
               </div>
             ` : `
-              <button data-assign="${label}" ${hasSlots ? '' : 'disabled'} class="assign-btn w-full text-center text-xs font-semibold rounded-xl py-2 transition-colors ${hasSlots ? 'bg-navy hover:bg-navy-light text-white' : 'bg-steel-100 text-steel-400 cursor-not-allowed'}" ${hasSlots ? '' : 'title="Atanabilecek boş adım yok"'}>İş Ata</button>
+              <button data-assign="${escapeHtml(label)}" ${hasSlots ? '' : 'disabled'} class="assign-btn w-full text-center text-xs font-semibold rounded-xl py-2 transition-colors ${hasSlots ? 'bg-navy hover:bg-navy-light text-white' : 'bg-steel-100 text-steel-400 cursor-not-allowed'}" ${hasSlots ? '' : 'title="Atanabilecek boş adım yok"'}>İş Ata</button>
             `}
+            <div class="flex items-center gap-2 pt-1 border-t border-steel-100">
+              <button type="button" data-mp-edit-m="${wsIdx}" data-mp-mi="${mi}" class="mp-edit-m flex-1 text-center text-[11px] font-semibold text-steel-500 hover:text-navy hover:bg-steel-50 rounded-lg py-1.5">Düzenle</button>
+              <button type="button" data-mp-del-m="${wsIdx}" data-mp-mi="${mi}" class="mp-del-m flex-1 text-center text-[11px] font-semibold text-red-500 hover:bg-red-50 rounded-lg py-1.5">Sil</button>
+            </div>
           </div>
         `;
       }).join('');
@@ -9126,15 +9214,20 @@ ${vadeLine}`;
       return `
         <div>
           <div class="flex items-center gap-2 mb-3 flex-wrap">
-            <h2 class="font-bold text-steel-800 text-sm">${ws.workshop}</h2>
+            <h2 class="font-bold text-steel-800 text-sm">${escapeHtml(ws.workshop)}</h2>
             <span class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">${(ws.machines || []).length} makine</span>
             ${isShared ? `<span class="text-[11px] bg-sky-50 text-sky-700 font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2"></path><circle cx="19" cy="8" r="3"></circle></svg>
-              Ortak: ${ws.companies.join(' + ')}
-            </span>` : ''}
+              Ortak: ${ws.companies.map(c => escapeHtml(c)).join(' + ')}
+            </span>` : `<span class="text-[11px] bg-steel-100 text-steel-500 font-semibold px-2 py-0.5 rounded-full">${ws.companies.map(c => escapeHtml(c)).join(', ') || '—'}</span>`}
+            <div class="ml-auto flex items-center gap-1.5">
+              <button type="button" data-mp-add-m="${wsIdx}" class="mp-add-m text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2.5 py-1 rounded-lg">+ Makine</button>
+              <button type="button" data-mp-edit-ws="${wsIdx}" class="mp-edit-ws text-[11px] font-semibold text-steel-500 hover:text-navy px-2 py-1 rounded-lg hover:bg-steel-50">Atölye</button>
+              <button type="button" data-mp-del-ws="${wsIdx}" class="mp-del-ws text-[11px] font-semibold text-red-500 hover:bg-red-50 px-2 py-1 rounded-lg">Sil</button>
+            </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            ${cards}
+            ${cards || `<div class="col-span-full text-sm text-steel-400 border border-dashed border-steel-200 rounded-2xl p-6 text-center">Bu atölyede makine yok. <button type="button" data-mp-add-m="${wsIdx}" class="mp-add-m text-navy font-semibold">Makine ekle</button></div>`}
           </div>
         </div>
       `;
@@ -9156,7 +9249,219 @@ ${vadeLine}`;
     wsContainer.querySelectorAll('.release-btn').forEach(btn => {
       btn.addEventListener('click', () => releaseMachine(btn.dataset.release));
     });
+    wsContainer.querySelectorAll('.mp-add-m').forEach(btn => {
+      btn.addEventListener('click', () => openMpMachineEditor(+btn.dataset.mpAddM, null));
+    });
+    wsContainer.querySelectorAll('.mp-edit-m').forEach(btn => {
+      btn.addEventListener('click', () => openMpMachineEditor(+btn.dataset.mpEditM, +btn.dataset.mpMi));
+    });
+    wsContainer.querySelectorAll('.mp-del-m').forEach(btn => {
+      btn.addEventListener('click', () => deleteMpMachine(+btn.dataset.mpDelM, +btn.dataset.mpMi));
+    });
+    wsContainer.querySelectorAll('.mp-edit-ws').forEach(btn => {
+      btn.addEventListener('click', () => openMpWorkshopEditor(+btn.dataset.mpEditWs));
+    });
+    wsContainer.querySelectorAll('.mp-del-ws').forEach(btn => {
+      btn.addEventListener('click', () => deleteMpWorkshop(+btn.dataset.mpDelWs));
+    });
   }
+
+  // ---------- Makine Parkı CRUD ----------
+  const MP_FUNC_PRESETS = [
+    'Tornalama', 'Frezeleme', 'Bohrwerk', 'Kaynak', 'Lazer Kesim', 'Abkant',
+    'EDM', 'Taşlama', 'Montaj', '3D Baskı', 'CAD', 'CAM', 'Kesim', 'Delik Delme',
+  ];
+  let mpEditorMode = null;
+  let mpEditorWsIdx = null;
+  let mpEditorMachineIdx = null;
+  let mpSelectedFunctions = [];
+
+  function persistMachinePark() {
+    cloudSave('saveMachinePark', machinePark, companies);
+  }
+
+  function closeMpEditor() {
+    document.getElementById('mpEditorOverlay')?.classList.add('hidden');
+    mpEditorMode = null;
+    mpEditorWsIdx = null;
+    mpEditorMachineIdx = null;
+    mpSelectedFunctions = [];
+  }
+
+  function openMpWorkshopEditor(wsIdx) {
+    mpEditorMode = 'workshop';
+    mpEditorWsIdx = wsIdx;
+    const overlay = document.getElementById('mpEditorOverlay');
+    const wsFields = document.getElementById('mpEditorWorkshopFields');
+    const mFields = document.getElementById('mpEditorMachineFields');
+    wsFields.classList.remove('hidden');
+    mFields.classList.add('hidden');
+    document.getElementById('mpEditorKicker').textContent = 'Atölye';
+    document.getElementById('mpEditorTitle').textContent = wsIdx == null ? 'Yeni Atölye' : 'Atölyeyi Düzenle';
+    const ws = wsIdx != null ? machinePark[wsIdx] : null;
+    document.getElementById('mpWsName').value = ws?.workshop || '';
+    const box = document.getElementById('mpWsCompanies');
+    const selected = new Set(ws?.companies?.length ? ws.companies : [activeCompany]);
+    box.innerHTML = Object.keys(companies).map(c => `
+      <label class="inline-flex items-center gap-2 text-sm font-medium text-steel-700 bg-steel-50 border border-steel-200 rounded-xl px-3 py-2 cursor-pointer hover:border-navy/30">
+        <input type="checkbox" data-mp-company="${escapeHtml(c)}" ${selected.has(c) ? 'checked' : ''} class="rounded border-steel-300 text-navy focus:ring-navy" />
+        ${escapeHtml(c)}
+      </label>
+    `).join('');
+    overlay.classList.remove('hidden');
+  }
+
+  function openMpMachineEditor(wsIdx, machineIdx) {
+    if (!machinePark.length) {
+      showToast('Önce bir atölye ekleyin.', 'error');
+      openMpWorkshopEditor(null);
+      return;
+    }
+    const targetWs = wsIdx != null && machinePark[wsIdx]
+      ? wsIdx
+      : machinePark.findIndex(w => (w.companies || []).includes(activeCompany));
+    if (targetWs < 0) {
+      showToast('Bu firma için atölye yok. Önce atölye ekleyin.', 'error');
+      openMpWorkshopEditor(null);
+      return;
+    }
+    mpEditorMode = 'machine';
+    mpEditorWsIdx = targetWs;
+    mpEditorMachineIdx = machineIdx;
+    const overlay = document.getElementById('mpEditorOverlay');
+    document.getElementById('mpEditorWorkshopFields').classList.add('hidden');
+    document.getElementById('mpEditorMachineFields').classList.remove('hidden');
+    document.getElementById('mpEditorKicker').textContent = 'Makine';
+    document.getElementById('mpEditorTitle').textContent = machineIdx == null ? 'Yeni Makine' : 'Makineyi Düzenle';
+
+    const sel = document.getElementById('mpMachineWorkshop');
+    sel.innerHTML = machinePark.map((w, i) =>
+      `<option value="${i}" ${i === targetWs ? 'selected' : ''}>${escapeHtml(w.workshop)} (${(w.companies || []).join(', ')})</option>`
+    ).join('');
+
+    const m = machineIdx != null ? machinePark[targetWs]?.machines?.[machineIdx] : null;
+    document.getElementById('mpMachineName').value = m?.name || '';
+    document.getElementById('mpMachineSub').value = m?.sub || '';
+    document.getElementById('mpMachineIcon').value = m?.icon || 'mill';
+    mpSelectedFunctions = [...(m?.functions || [])];
+    renderMpFunctionChips();
+    overlay.classList.remove('hidden');
+  }
+
+  function renderMpFunctionChips() {
+    const box = document.getElementById('mpMachineFunctions');
+    if (!box) return;
+    const fromCatalog = (typeof fasonMfgCatalog !== 'undefined' ? fasonMfgCatalog : []).map(x => x.name);
+    const extras = mpSelectedFunctions.filter(f => !MP_FUNC_PRESETS.includes(f) && !fromCatalog.includes(f));
+    const all = [...new Set([...MP_FUNC_PRESETS, ...fromCatalog, ...extras])];
+    box.innerHTML = all.map(f => {
+      const on = mpSelectedFunctions.includes(f);
+      return `<button type="button" data-mp-fn="${escapeHtml(f)}" class="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${on ? 'bg-navy text-white border-navy' : 'bg-white text-steel-600 border-steel-200 hover:border-navy/40'}">${escapeHtml(f)}</button>`;
+    }).join('');
+    box.querySelectorAll('[data-mp-fn]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const f = btn.dataset.mpFn;
+        const i = mpSelectedFunctions.indexOf(f);
+        if (i >= 0) mpSelectedFunctions.splice(i, 1);
+        else mpSelectedFunctions.push(f);
+        renderMpFunctionChips();
+      });
+    });
+  }
+
+  function saveMpEditor() {
+    if (mpEditorMode === 'workshop') {
+      const name = document.getElementById('mpWsName').value.trim();
+      if (!name) { showToast('Atölye adı gerekli.', 'error'); return; }
+      const selected = [...document.querySelectorAll('#mpWsCompanies [data-mp-company]:checked')].map(cb => cb.dataset.mpCompany);
+      if (!selected.length) { showToast('En az bir firma seçin.', 'error'); return; }
+      const dup = machinePark.findIndex((w, i) => i !== mpEditorWsIdx && w.workshop.toLowerCase() === name.toLowerCase());
+      if (dup >= 0) { showToast('Bu atölye adı zaten var.', 'error'); return; }
+      if (mpEditorWsIdx == null) {
+        machinePark.push({ workshop: name, companies: selected, machines: [] });
+        showToast('Atölye eklendi.', 'success');
+      } else {
+        const ws = machinePark[mpEditorWsIdx];
+        ws.workshop = name;
+        ws.companies = selected;
+        showToast('Atölye güncellendi.', 'success');
+      }
+    } else if (mpEditorMode === 'machine') {
+      const name = document.getElementById('mpMachineName').value.trim();
+      if (!name) { showToast('Makine adı gerekli.', 'error'); return; }
+      const toWsIdx = +document.getElementById('mpMachineWorkshop').value;
+      if (!machinePark[toWsIdx]) { showToast('Atölye seçin.', 'error'); return; }
+      const entry = {
+        name,
+        sub: document.getElementById('mpMachineSub').value.trim(),
+        icon: document.getElementById('mpMachineIcon').value || 'mill',
+        functions: [...mpSelectedFunctions],
+      };
+      if (mpEditorMachineIdx != null && machinePark[mpEditorWsIdx]?.machines?.[mpEditorMachineIdx]) {
+        const prev = machinePark[mpEditorWsIdx].machines[mpEditorMachineIdx];
+        if (prev.dbId) entry.dbId = prev.dbId;
+        if (toWsIdx === mpEditorWsIdx) {
+          machinePark[mpEditorWsIdx].machines[mpEditorMachineIdx] = entry;
+        } else {
+          machinePark[mpEditorWsIdx].machines.splice(mpEditorMachineIdx, 1);
+          machinePark[toWsIdx].machines.push(entry);
+        }
+        showToast('Makine güncellendi.', 'success');
+      } else {
+        machinePark[toWsIdx].machines.push(entry);
+        showToast('Makine eklendi.', 'success');
+      }
+    }
+    closeMpEditor();
+    persistMachinePark();
+    renderMachinePark();
+  }
+
+  function deleteMpMachine(wsIdx, mi) {
+    const m = machinePark[wsIdx]?.machines?.[mi];
+    if (!m) return;
+    if (!confirmDelete(machineLabel(m))) return;
+    machinePark[wsIdx].machines.splice(mi, 1);
+    persistMachinePark();
+    renderMachinePark();
+    showToast('Makine silindi.', 'info');
+  }
+
+  function deleteMpWorkshop(wsIdx) {
+    const ws = machinePark[wsIdx];
+    if (!ws) return;
+    const n = (ws.machines || []).length;
+    if (!confirmDelete(`${ws.workshop}${n ? ` (${n} makine)` : ''}`)) return;
+    machinePark.splice(wsIdx, 1);
+    persistMachinePark();
+    renderMachinePark();
+    showToast('Atölye silindi.', 'info');
+  }
+
+  document.getElementById('mpNewWorkshopBtn')?.addEventListener('click', () => openMpWorkshopEditor(null));
+  document.getElementById('mpNewMachineBtn')?.addEventListener('click', () => {
+    const idx = machinePark.findIndex(w => (w.companies || []).includes(activeCompany));
+    openMpMachineEditor(idx >= 0 ? idx : null, null);
+  });
+  document.getElementById('mpEditorCloseBtn')?.addEventListener('click', closeMpEditor);
+  document.getElementById('mpEditorCancelBtn')?.addEventListener('click', closeMpEditor);
+  document.getElementById('mpEditorSaveBtn')?.addEventListener('click', saveMpEditor);
+  document.getElementById('mpEditorOverlay')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'mpEditorOverlay') closeMpEditor();
+  });
+  document.getElementById('mpMachineFuncAddBtn')?.addEventListener('click', () => {
+    const inp = document.getElementById('mpMachineFuncCustom');
+    const v = (inp?.value || '').trim();
+    if (!v) return;
+    if (!mpSelectedFunctions.includes(v)) mpSelectedFunctions.push(v);
+    inp.value = '';
+    renderMpFunctionChips();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('mpEditorOverlay')?.classList.contains('hidden')) {
+      closeMpEditor();
+    }
+  });
 
   function formatTime(iso) {
     if (!iso) return '—';

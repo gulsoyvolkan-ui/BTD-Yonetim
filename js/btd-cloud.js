@@ -2374,6 +2374,100 @@
     }
   }
 
+  async function upsertMachineRow(client, row, dbId) {
+    const withFns = { ...row };
+    if (dbId) {
+      let { error } = await client.from('makineler').update(withFns).eq('id', dbId);
+      if (error && /fonksiyonlar/i.test(error.message || '')) {
+        delete withFns.fonksiyonlar;
+        ({ error } = await client.from('makineler').update(withFns).eq('id', dbId));
+      }
+      if (error) throw error;
+      return dbId;
+    }
+    let { data, error } = await client.from('makineler').insert(withFns).select('id').single();
+    if (error && /fonksiyonlar/i.test(error.message || '')) {
+      delete withFns.fonksiyonlar;
+      ({ data, error } = await client.from('makineler').insert(withFns).select('id').single());
+    }
+    if (error) throw error;
+    return data.id;
+  }
+
+  /** Makine parkı tam senkron: atölye + firma paylaşımı + makineler */
+  async function saveMachinePark(park, companies) {
+    try {
+      const client = sb();
+      if (!client || !Array.isArray(park)) return fail('no-client', 'saveMachinePark');
+      const existingWs = await selectAll(client, 'atolyeler', 'id');
+      const keepWsIds = new Set();
+
+      for (const ws of park) {
+        if (!ws?.workshop) continue;
+        let atId = ws.dbId || null;
+        if (atId) {
+          const { error } = await client.from('atolyeler').update({ ad: ws.workshop }).eq('id', atId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await client
+            .from('atolyeler')
+            .upsert({ ad: ws.workshop }, { onConflict: 'ad' })
+            .select('id')
+            .single();
+          if (error) throw error;
+          atId = data.id;
+          ws.dbId = atId;
+        }
+        keepWsIds.add(atId);
+
+        await client.from('atolye_firmalar').delete().eq('atolye_id', atId);
+        const links = (ws.companies || [])
+          .map((n) => firmaId(companies, n))
+          .filter(Boolean)
+          .map((fid) => ({ atolye_id: atId, firma_id: fid }));
+        if (links.length) {
+          const { error } = await client.from('atolye_firmalar').upsert(links);
+          if (error) throw error;
+        }
+
+        const { data: exM, error: exErr } = await client
+          .from('makineler')
+          .select('id')
+          .eq('atolye_id', atId);
+        if (exErr) throw exErr;
+        const keepM = new Set();
+        for (const m of (ws.machines || [])) {
+          if (!m?.name) continue;
+          const row = {
+            atolye_id: atId,
+            ad: m.name,
+            alt_bilgi: m.sub || null,
+            ikon: m.icon || 'mill',
+            aktif: true,
+            fonksiyonlar: Array.isArray(m.functions) ? m.functions : [],
+          };
+          const id = await upsertMachineRow(client, row, m.dbId || null);
+          m.dbId = id;
+          keepM.add(id);
+        }
+        const toDelM = (exM || []).map((r) => r.id).filter((id) => !keepM.has(id));
+        if (toDelM.length) {
+          const { error } = await client.from('makineler').delete().in('id', toDelM);
+          if (error) throw error;
+        }
+      }
+
+      const toDelWs = (existingWs || []).map((r) => r.id).filter((id) => !keepWsIds.has(id));
+      if (toDelWs.length) {
+        const { error } = await client.from('atolyeler').delete().in('id', toDelWs);
+        if (error) throw error;
+      }
+      return ok({ workshops: keepWsIds.size, deletedWorkshops: toDelWs.length });
+    } catch (e) {
+      return fail(e, 'saveMachinePark');
+    }
+  }
+
   // ─── Catalogs ──────────────────────────────────────────────────────────────
   async function hydrateCatalogs(ctx) {
     const client = sb();
@@ -2543,6 +2637,7 @@
             ad: m.name,
             alt_bilgi: m.sub || null,
             ikon: m.icon || null,
+            fonksiyonlar: Array.isArray(m.functions) ? m.functions : [],
           }));
           if (machines.length) await client.from('makineler').insert(machines);
         }
@@ -2557,12 +2652,15 @@
           dbId: r.id,
           workshop: r.ad,
           companies: (r.atolye_firmalar || []).map((af) => af.firmalar?.ad).filter(Boolean),
-          machines: (r.makineler || []).map((m) => ({
-            dbId: m.id,
-            name: m.ad,
-            sub: m.alt_bilgi || '',
-            icon: m.ikon || 'mill',
-          })),
+          machines: (r.makineler || [])
+            .filter((m) => m.aktif !== false)
+            .map((m) => ({
+              dbId: m.id,
+              name: m.ad,
+              sub: m.alt_bilgi || '',
+              icon: m.ikon || 'mill',
+              functions: Array.isArray(m.fonksiyonlar) ? m.fonksiyonlar : [],
+            })),
         })));
       }
     }
@@ -2706,5 +2804,6 @@
     saveHeatTreatmentCatalog,
     saveCoatingCatalog,
     saveFasonMfgCatalog,
+    saveMachinePark,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
