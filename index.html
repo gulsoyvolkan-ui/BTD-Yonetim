@@ -1053,7 +1053,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Müşteriler <span class="text-steel-400 font-medium">/ CRM</span></h1>
-            <p class="text-sm text-steel-400 mt-1">Firma bazlı müşteri kayıtları · <span id="companyNameCustomers" class="font-semibold text-navy">Technomac</span></p>
+            <p class="text-sm text-steel-400 mt-1"><span id="companyNameCustomers" class="font-semibold text-navy">Technomac</span> carileri · Bluemac / Devorias karışmaz</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <input type="file" id="parasutCrmFileInput" accept=".xlsx,.xls" class="hidden" />
@@ -1067,6 +1067,9 @@
           </div>
         </div>
 
+        <div class="mb-4 rounded-xl border border-navy/15 bg-navy/5 px-4 py-3 text-[12px] text-steel-600 leading-relaxed">
+          <span class="font-semibold text-navy">Firma ayrımı:</span> Her şirketin (Technomac / Bluemac / Devorias) kendi müşteri listesi vardır. Aynı vergi no diğer firmada ayrı cari olabilir; bakiyeler ve ilerideki hareketler karışmaz.
+        </div>
         <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
           <div class="px-5 py-3.5 border-b border-steel-100 flex flex-wrap items-center justify-between gap-2">
             <p class="text-sm font-semibold text-steel-700">Müşteri Listesi</p>
@@ -1103,7 +1106,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Tedarikçiler</h1>
-            <p class="text-sm text-steel-400 mt-1">Hammadde, fason, hırdavat ve takım firmaları · otomatik tedarik eşleştirme · <span id="companyNameSuppliers" class="font-semibold text-navy">Technomac</span></p>
+            <p class="text-sm text-steel-400 mt-1"><span id="companyNameSuppliers" class="font-semibold text-navy">Technomac</span> carileri · Bluemac / Devorias karışmaz</p>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" id="parasutCrmImportBtnSuppliers" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-emerald-600/20">
@@ -1116,6 +1119,9 @@
           </div>
         </div>
 
+        <div class="mb-4 rounded-xl border border-navy/15 bg-navy/5 px-4 py-3 text-[12px] text-steel-600 leading-relaxed">
+          <span class="font-semibold text-navy">Firma ayrımı:</span> Üstten aktif firmayı değiştirerek her şirketin kendi tedarikçi listesini görürsünüz. Aynı dış tedarikçi üç firmada ayrı cari kartı olarak tutulur.
+        </div>
         <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
           <div class="px-5 py-3.5 border-b border-steel-100 flex flex-wrap items-center justify-between gap-2">
             <p class="text-sm font-semibold text-steel-700">Tedarikçi Listesi</p>
@@ -3602,7 +3608,7 @@
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
     <div class="bg-navy px-5 py-4 flex items-start justify-between">
       <div class="min-w-0">
-        <p class="text-[11px] text-white/60 font-semibold uppercase tracking-wide">Cari Takip · Rol</p>
+        <p class="text-[11px] text-white/60 font-semibold uppercase tracking-wide">Cari Takip · Rol · <span id="cariRoleCompanyBadge">Technomac</span></p>
         <h3 id="cariRoleTitle" class="text-white font-bold text-lg mt-0.5 truncate">Firma</h3>
         <p id="cariRoleMeta" class="text-white/65 text-xs mt-1">—</p>
       </div>
@@ -3644,7 +3650,7 @@
       <div>
         <p class="text-[11px] text-white/70 font-semibold uppercase tracking-wide">Paraşüt · Cari Aktarım</p>
         <h3 class="text-white font-bold text-lg mt-0.5">Müşteri / Tedarikçi Önizleme</h3>
-        <p class="text-white/70 text-xs mt-1">Hedef: <span id="parasutCrmTargetCompany" class="font-semibold text-white">Technomac</span> · vergi no / unvan eşlemesi · çift yönlü bağlantı</p>
+        <p class="text-white/70 text-xs mt-1">Hedef: <span id="parasutCrmTargetCompany" class="font-semibold text-white">Technomac</span> · yalnızca bu firmanın carisine yazılır · Bluemac/Devorias etkilenmez</p>
       </div>
       <button type="button" id="parasutCrmImportCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5 shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -5341,11 +5347,15 @@ ${vadeLine}`;
     if (!party) return;
     cariRoleSeed = party;
     const role = resolveCariRole(party) || 'both';
+    const co = party.company || activeCompany;
     const title = document.getElementById('cariRoleTitle');
     const meta = document.getElementById('cariRoleMeta');
+    const badge = document.getElementById('cariRoleCompanyBadge');
     if (title) title.textContent = party.name || 'Firma';
+    if (badge) badge.textContent = co;
     if (meta) {
       meta.textContent = [
+        co + ' carisi',
         party.partyKey || buildPartyKey(party.taxNo, party.name) || '—',
         'Bakiye: ' + formatTlBalance(party.tlBalance),
         party.taxNo ? ('VN ' + party.taxNo) : '',
@@ -5360,10 +5370,17 @@ ${vadeLine}`;
     if (!seed || !['customer', 'supplier', 'both'].includes(newRole)) {
       return { ok: false, reason: 'invalid' };
     }
+    // Cari her zaman o kayıtın firmasına aittir; aktif firma başka olsa bile karışmaz.
     const company = seed.company || activeCompany;
+    if (seed.company && seed.company !== company) {
+      return { ok: false, reason: 'firma-mismatch' };
+    }
     const partyKey = ensurePartyKey(seed) || buildPartyKey(seed.taxNo, seed.name);
     let cust = findCustomerByPartyKey(company, partyKey, seed.taxNo, seed.name);
     let supp = findSupplierByPartyKey(company, partyKey, seed.taxNo, seed.name);
+    // Kardeş firma carilerine dokunma
+    if (cust && cust.company !== company) cust = null;
+    if (supp && supp.company !== company) supp = null;
     const base = {
       company,
       name: seed.name || cust?.name || supp?.name || '',
@@ -9971,6 +9988,13 @@ ${vadeLine}`;
   function companyCustomers() {
     return customers.filter(c => c.company === activeCompany);
   }
+  function companySuppliers() {
+    return suppliers.filter(s => s.company === activeCompany);
+  }
+  /** Aynı vergi no başka grup firmasında ayrı cari olabilir — arama her zaman company ile sınırlı. */
+  function crmFirmScopeNote() {
+    return `${activeCompany} carileri (Bluemac / Technomac / Devorias birbirine karışmaz)`;
+  }
 
   function customerActiveOrders(customer) {
     return orders.filter(o => o.company === customer.company && o.customer === customer.name && o.status !== 'Tamamlandı').length;
@@ -9995,7 +10019,7 @@ ${vadeLine}`;
     const tbody = document.getElementById('customersTableBody');
     if (!tbody) return;
     const list = sortPartiesByAbsBalance(companyCustomers());
-    document.getElementById('customersCount').textContent = `${list.length} müşteri`;
+    document.getElementById('customersCount').textContent = `${list.length} · ${activeCompany}`;
 
     if (!list.length) {
       tbody.innerHTML = `
@@ -10097,17 +10121,13 @@ ${vadeLine}`;
   };
   // supplierDepartments → crmDepartments (üstte tanımlı)
 
-  function companySuppliers() {
-    return suppliers.filter(s => s.company === activeCompany);
-  }
-
   function renderSuppliersPage() {
     const tbody = document.getElementById('suppliersTableBody');
     if (!tbody) return;
     const nameEl = document.getElementById('companyNameSuppliers');
     if (nameEl) nameEl.textContent = activeCompany;
     const list = sortPartiesByAbsBalance(companySuppliers());
-    document.getElementById('suppliersCount').textContent = `${list.length} tedarikçi`;
+    document.getElementById('suppliersCount').textContent = `${list.length} · ${activeCompany}`;
     refreshProcSupplierDatalist();
 
     if (!list.length) {
@@ -18568,6 +18588,14 @@ ${vadeLine}`;
     }
   }
   function triggerParasutCrmFilePick() {
+    if (activeCompany !== PARASUT_CRM_TARGET) {
+      const ok = window.confirm(
+        `Paraşüt Excel şu an yalnızca ${PARASUT_CRM_TARGET} carilerine yazılır.\n\n` +
+        `Aktif firma: ${activeCompany}\n` +
+        `Bluemac / Devorias listeleri etkilenmez.\n\nDevam edip ${PARASUT_CRM_TARGET} için mi aktarayım?`
+      );
+      if (!ok) return;
+    }
     const inp = document.getElementById('parasutCrmFileInput');
     if (inp) { inp.value = ''; inp.click(); }
   }
