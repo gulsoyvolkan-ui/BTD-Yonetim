@@ -11239,9 +11239,11 @@ ${vadeLine}`;
         if (!q) return;
         if (!confirmDelete(`Teklif ${id} silinecek.`)) return;
         quotes = quotes.filter(x => x.id !== id);
+        unlinkCostAnalysesFromQuote(id);
         cloudSave('deleteQuote', q, companies);
         renderQuotesPage();
-        showToast(`${id} numaralı teklif silindi.`, 'info');
+        if (typeof renderCostingPage === 'function') renderCostingPage();
+        showToast(`${id} numaralı teklif silindi. İlişkili maliyet yeniden teklife aktarılabilir.`, 'info');
       });
     });
   }
@@ -15915,6 +15917,34 @@ ${vadeLine}`;
       financials: fin,
     };
   }
+  /** Maliyet analizine bağlı teklif hâlâ quotes listesinde mi? (silindiyse orphan) */
+  function findLiveQuoteForCostAnalysis(a) {
+    if (!a || !a.quoteId) return null;
+    return quotes.find((q) => q.id === a.quoteId) || null;
+  }
+  function costAnalysisHasLiveQuote(a) {
+    return !!findLiveQuoteForCostAnalysis(a);
+  }
+  /** Silinen teklif kalıntısı: quoteId var ama teklif yok → yeniden aktarıma izin ver */
+  function clearOrphanCostQuoteLink(a) {
+    if (!a || !a.quoteId) return false;
+    if (findLiveQuoteForCostAnalysis(a)) return false;
+    a.quoteId = null;
+    cloudSave('saveCostAnalysis', a, companies);
+    return true;
+  }
+  function unlinkCostAnalysesFromQuote(quoteId) {
+    if (!quoteId) return 0;
+    let n = 0;
+    costAnalyses.forEach((a) => {
+      if (a.quoteId === quoteId) {
+        a.quoteId = null;
+        cloudSave('saveCostAnalysis', a, companies);
+        n += 1;
+      }
+    });
+    return n;
+  }
   function renderCostingPage() {
     const el = document.getElementById('companyNameCosting');
     if (el) el.textContent = activeCompany;
@@ -15931,12 +15961,18 @@ ${vadeLine}`;
       const excelBadge = a.source === 'excel'
         ? `<span class="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 align-middle">Excel</span>`
         : '';
-      const profitZeroHint = (Number(a.profitPct) === 0)
-        ? `<button type="button" data-cost-add-profit="${a.id}" class="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-lg" title="Excel fiyatında kâr dahil kabul edildi. İsterseniz kâr oranı ekleyin.">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
-            Kâr ekle
-          </button>`
-        : `<span class="text-steel-700">%${a.profitPct}</span>`;
+      const liveQuote = findLiveQuoteForCostAnalysis(a);
+      const canToQuote = !liveQuote;
+      let statusHtml;
+      if (liveQuote) {
+        statusHtml = `<span class="text-[11px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">Teklife aktarıldı</span>
+          <p class="text-[10px] text-steel-400 mono mt-0.5">${a.quoteId}</p>`;
+      } else if (a.quoteId) {
+        statusHtml = `<span class="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700">Teklif silindi</span>
+          <p class="text-[10px] text-steel-400 mt-0.5">Yeniden aktarılabilir</p>`;
+      } else {
+        statusHtml = `<span class="text-[11px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700">Taslak</span>`;
+      }
       return `<tr class="hover:bg-steel-50/60">
         <td class="px-5 py-3.5 font-semibold mono text-steel-800">${a.id}${excelBadge}${a.externalRef ? `<p class="text-[10px] text-steel-400 font-normal mt-0.5">Ref: ${a.externalRef}</p>` : ''}</td>
         <td class="px-4 py-3.5"><p class="font-medium text-steel-700">${a.customer}</p><p class="text-[11px] text-steel-400">${first ? formatCostPartLabel(first) : '—'}</p></td>
@@ -15945,20 +15981,19 @@ ${vadeLine}`;
           <p>${fmtCostMoney(tot.cost, a.currency)}</p>
           <p class="text-[10px] text-steel-400 font-normal">KDV hariç · maliyet</p>
         </td>
-        <td class="px-4 py-3.5">${profitZeroHint}</td>
+        <td class="px-4 py-3.5 text-steel-700">%${Number(a.profitPct) || 0}</td>
         <td class="px-4 py-3.5 mono font-semibold text-navy">
           <p>${fmtCostMoney(tot.quoteWithVat, a.currency)}</p>
           <p class="text-[10px] text-steel-500 font-normal">KDV dahil (%${tot.vatRate || 20})</p>
           <p class="text-[10px] text-steel-400 font-normal mt-0.5">KDV’siz: ${fmtCostMoney(tot.quote, a.currency)}</p>
         </td>
-        <td class="px-4 py-3.5"><span class="text-[11px] font-bold px-2 py-1 rounded-full ${a.quoteId ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}">${a.quoteId ? 'Teklife aktarıldı' : 'Taslak'}</span>
-          ${a.quoteId ? `<p class="text-[10px] text-steel-400 mono mt-0.5">${a.quoteId}</p>` : ''}</td>
+        <td class="px-4 py-3.5">${statusHtml}</td>
         <td class="px-4 py-3.5 text-right space-x-1 whitespace-nowrap">
           <button data-cost-edit="${a.id}" class="text-steel-300 hover:text-navy transition-colors p-1.5 rounded-lg hover:bg-navy/5 inline-flex" title="Düzenle">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
           </button>
           <button data-cost-summary="${a.id}" class="text-[11px] font-semibold text-steel-700 bg-steel-100 hover:bg-steel-200 px-2.5 py-1.5 rounded-lg">Özet</button>
-          ${!a.quoteId ? `<button data-cost-to-quote="${a.id}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2.5 py-1.5 rounded-lg">Teklife Aktar</button>` : ''}
+          ${canToQuote ? `<button data-cost-to-quote="${a.id}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2.5 py-1.5 rounded-lg">Teklife Aktar</button>` : ''}
           <button data-cost-to-proc="${a.id}" class="text-[11px] font-semibold text-sky-700 bg-sky-50 hover:bg-sky-100 px-2.5 py-1.5 rounded-lg" title="Malzeme grubuna göre RFQ / tedarik formu">Tedarik RFQ</button>
           <button data-del-cost="${a.id}" class="text-steel-300 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50">✕</button>
         </td>
@@ -15968,20 +16003,6 @@ ${vadeLine}`;
       btn.addEventListener('click', () => {
         const a = costAnalyses.find(x => x.id === btn.dataset.costEdit);
         if (a) openEditCostAnalysis(a);
-      });
-    });
-    tbody.querySelectorAll('[data-cost-add-profit]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const a = costAnalyses.find(x => x.id === btn.dataset.costAddProfit);
-        if (!a) return;
-        openEditCostAnalysis(a);
-        const sel = document.getElementById('newCostProfitPct');
-        if (sel) {
-          sel.focus();
-          sel.classList.add('ring-2', 'ring-amber-400');
-          setTimeout(() => sel.classList.remove('ring-2', 'ring-amber-400'), 1800);
-        }
-        showToast('Kâr oranını seçip kaydedin. Excel birim fiyatı işçilik olarak duruyor.', 'info');
       });
     });
     tbody.querySelectorAll('[data-cost-summary]').forEach(btn => {
@@ -16015,7 +16036,14 @@ ${vadeLine}`;
     });
   }
   function pushCostToQuote(analysis) {
-    if (analysis.quoteId) { showToast('Bu analiz zaten teklife aktarılmış.', 'info'); return analysis.quoteId; }
+    if (costAnalysisHasLiveQuote(analysis)) {
+      showToast(`Bu analiz zaten teklife aktarılmış: ${analysis.quoteId}`, 'info');
+      return analysis.quoteId;
+    }
+    // Teklif silinmişse eski bağı temizle, yeni teklif numarası ver
+    if (analysis.quoteId && !findLiveQuoteForCostAnalysis(analysis)) {
+      clearOrphanCostQuoteLink(analysis);
+    }
     if (warnMissingLaborCost(analysis.items)) return null;
     const seq = nextQuoteSeq(analysis.company);
     const qid = quoteId(analysis.company, seq);
@@ -17517,7 +17545,7 @@ ${vadeLine}`;
           }).join('')}</tbody>
         </table>
       </div>`;
-    document.getElementById('costSummaryToQuoteBtn').classList.toggle('hidden', !!a.quoteId);
+    document.getElementById('costSummaryToQuoteBtn').classList.toggle('hidden', costAnalysisHasLiveQuote(a));
     document.getElementById('costSummaryModalOverlay').classList.remove('hidden');
   }
   function buildCostSummaryHtml(a) {
