@@ -8267,6 +8267,7 @@ ${vadeLine}`;
   };
   const navLinks = document.querySelectorAll('.sidebar-item[data-page]');
   let currentAppPage = 'dashboard';
+  let activeSettingsTab = 'company';
   let appHistLock = false;
 
   function appHistUrl(state) {
@@ -8294,9 +8295,9 @@ ${vadeLine}`;
     }
   }
   function currentPageHistState() {
-    const tab = (typeof activeSettingsTab !== 'undefined') ? activeSettingsTab : 'company';
-    if (currentAppPage === 'settings') return { type: 'settings', page: 'settings', tab };
-    return { type: 'page', page: currentAppPage };
+    return currentAppPage === 'settings'
+      ? { type: 'settings', page: 'settings', tab: activeSettingsTab || 'company' }
+      : { type: 'page', page: currentAppPage };
   }
 
   function setActiveNav(page) {
@@ -8347,9 +8348,8 @@ ${vadeLine}`;
     currentAppPage = page;
     if (!fromPop) {
       if (!(opts && opts.keepOverlays)) closeAppOverlaysSilent();
-      const tab = (typeof activeSettingsTab !== 'undefined') ? activeSettingsTab : 'company';
       const nextState = page === 'settings'
-        ? { type: 'settings', page: 'settings', tab }
+        ? { type: 'settings', page: 'settings', tab: activeSettingsTab || 'company' }
         : { type: 'page', page };
       const topIsModal = history.state && history.state.btd && history.state.type === 'modal';
       if (replace || prevPage === page || topIsModal) appHistPush(nextState, true);
@@ -13705,7 +13705,6 @@ ${vadeLine}`;
   }
 
   // ---------- Ayarlar sayfası (Firma / Döviz / Nakliye / Kullanıcı) ----------
-  let activeSettingsTab = 'company';
   function switchSettingsTab(tab, opts = {}) {
     const prev = activeSettingsTab;
     activeSettingsTab = tab;
