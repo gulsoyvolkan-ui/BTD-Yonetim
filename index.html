@@ -6595,6 +6595,12 @@ ${vadeLine}`;
     }
   }
 
+  /** Silme onayı — Evet/Hayır (tarayıcı confirm) */
+  function confirmDelete(what) {
+    const label = what ? String(what) : 'Bu kayıt';
+    return window.confirm(`${label}\n\nSilmek istediğinizden emin misiniz?\nBu işlem kalıcıdır.`);
+  }
+
   function setActiveCompany(name) {
     const info = companies[name];
     if (!info) return;
@@ -9545,7 +9551,10 @@ ${vadeLine}`;
     tbody.querySelectorAll('[data-del-customer]').forEach(btn => {
       btn.addEventListener('click', () => {
         const target = list[Number(btn.dataset.delCustomer)];
+        if (!target) return;
+        if (!confirmDelete(`Müşteri “${target.name}” silinecek.`)) return;
         customers = customers.filter(c => c !== target);
+        cloudSave('deleteCustomer', target, companies);
         renderCustomersPage();
         showToast(`${target.name} müşteri listesinden kaldırıldı.`, 'info');
       });
@@ -9644,7 +9653,9 @@ ${vadeLine}`;
       btn.addEventListener('click', () => {
         const target = list[Number(btn.dataset.delSupplier)];
         if (!target) return;
+        if (!confirmDelete(`Tedarikçi “${target.name}” silinecek.`)) return;
         suppliers = suppliers.filter(s => s !== target);
+        cloudSave('deleteSupplier', target, companies);
         renderSuppliersPage();
         showToast(`${target.name} tedarikçi listesinden kaldırıldı.`, 'info');
       });
@@ -10660,7 +10671,11 @@ ${vadeLine}`;
           showToast('Önce bağlı siparişi iptal edin.', 'error');
           return;
         }
+        const q = quotes.find(x => x.id === id);
+        if (!q) return;
+        if (!confirmDelete(`Teklif ${id} silinecek.`)) return;
         quotes = quotes.filter(x => x.id !== id);
+        cloudSave('deleteQuote', q, companies);
         renderQuotesPage();
         showToast(`${id} numaralı teklif silindi.`, 'info');
       });
@@ -12469,7 +12484,11 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-proc]').forEach(btn => {
       btn.addEventListener('click', () => {
-        procurementItems = procurementItems.filter(p => p.id !== btn.dataset.delProc);
+        const item = procurementItems.find(p => p.id === btn.dataset.delProc);
+        if (!item) return;
+        if (!confirmDelete(`Tedarik kaydı ${item.id} silinecek.`)) return;
+        procurementItems = procurementItems.filter(p => p.id !== item.id);
+        cloudSave('deleteProcurementItem', item, companies);
         renderProcurementPage();
       });
     });
@@ -12852,7 +12871,14 @@ ${vadeLine}`;
       </tr>
     `).join('');
     tbody.querySelectorAll('[data-del-qc]').forEach(btn => {
-      btn.addEventListener('click', () => { qcRecords = qcRecords.filter(r => r.id !== btn.dataset.delQc); renderQualityPage(); });
+      btn.addEventListener('click', () => {
+        const rec = qcRecords.find(r => r.id === btn.dataset.delQc);
+        if (!rec) return;
+        if (!confirmDelete(`Kalite kaydı ${rec.id} silinecek.`)) return;
+        qcRecords = qcRecords.filter(r => r.id !== rec.id);
+        cloudSave('deleteQc', rec, companies);
+        renderQualityPage();
+      });
     });
   }
 
@@ -13065,7 +13091,11 @@ ${vadeLine}`;
     tbody.querySelectorAll('[data-fason-del]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        fasonJobs = fasonJobs.filter(x => x.id !== btn.dataset.fasonDel);
+        const job = fasonJobs.find(x => x.id === btn.dataset.fasonDel);
+        if (!job) return;
+        if (!confirmDelete(`Fason kaydı ${job.id} silinecek.`)) return;
+        fasonJobs = fasonJobs.filter(x => x.id !== job.id);
+        cloudSave('deleteFason', job, companies);
         renderFasonPage();
         if (typeof renderDashboard === 'function') renderDashboard();
       });
@@ -13232,7 +13262,14 @@ ${vadeLine}`;
         btn.addEventListener('click', () => openShipSignModal(btn.dataset.shipDeliver));
       });
       root.querySelectorAll('[data-del-ship]').forEach(btn => {
-        btn.addEventListener('click', () => { shipments = shipments.filter(s => s.id !== btn.dataset.delShip); renderShippingPage(); });
+        btn.addEventListener('click', () => {
+          const s = shipments.find(x => x.id === btn.dataset.delShip);
+          if (!s) return;
+          if (!confirmDelete(`Sevkiyat kaydı ${s.id} silinecek.`)) return;
+          shipments = shipments.filter(x => x.id !== s.id);
+          cloudSave('deleteShipment', s, companies);
+          renderShippingPage();
+        });
       });
     };
     wireShip(tbody);
@@ -13339,7 +13376,14 @@ ${vadeLine}`;
       });
     });
     tbody.querySelectorAll('[data-del-inv]').forEach(btn => {
-      btn.addEventListener('click', () => { invoices = invoices.filter(i => i.id !== btn.dataset.delInv); renderInvoicingPage(); });
+      btn.addEventListener('click', () => {
+        const inv = invoices.find(i => i.id === btn.dataset.delInv);
+        if (!inv) return;
+        if (!confirmDelete(`Fatura ${inv.id} silinecek.`)) return;
+        invoices = invoices.filter(i => i.id !== inv.id);
+        cloudSave('deleteInvoice', inv, companies);
+        renderInvoicingPage();
+      });
     });
   }
 
@@ -14174,7 +14218,9 @@ ${vadeLine}`;
           showToast('Kendi hesabınızı silemezsiniz.', 'error');
           return;
         }
+        if (!confirmDelete(`Kullanıcı “${u.name || u.username}” silinecek.`)) return;
         users = users.filter(x => x !== u);
+        cloudSave('deleteUser', u);
         revealedPasswords = new Set();
         renderUsersTable();
         showToast(`${u.name} kullanıcı listesinden kaldırıldı.`, 'info');
@@ -14568,7 +14614,7 @@ ${vadeLine}`;
         const arr = procMaterialCatalog[group];
         if (!arr) return;
         const name = arr[idx]?.name || 'Malzeme';
-        if (!confirm(`“${name}” silinsin mi?`)) return;
+        if (!confirmDelete(`“${name}” malzemesi silinecek.`)) return;
         arr.splice(idx, 1);
         matCatEditIndex = null;
         document.getElementById('matCatSaveBtn').textContent = 'Malzeme Kaydet';
@@ -14676,7 +14722,7 @@ ${vadeLine}`;
       btn.addEventListener('click', () => {
         const idx = Number(btn.dataset.svcDel);
         const name = catalog[idx]?.name || 'Kayıt';
-        if (!confirm(`“${name}” silinsin mi?`)) return;
+        if (!confirmDelete(`“${name}” kaydı silinecek.`)) return;
         catalog.splice(idx, 1);
         if (isHeat) { heatCatEditIndex = null; document.getElementById('heatCatSaveBtn').textContent = 'Kaydet'; }
         else { coatCatEditIndex = null; document.getElementById('coatCatSaveBtn').textContent = 'Kaydet'; }
@@ -15359,8 +15405,13 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-cost]').forEach(btn => {
       btn.addEventListener('click', () => {
-        costAnalyses = costAnalyses.filter(x => x.id !== btn.dataset.delCost);
+        const a = costAnalyses.find(x => x.id === btn.dataset.delCost);
+        if (!a) return;
+        if (!confirmDelete(`Maliyet analizi ${a.id} silinecek.`)) return;
+        costAnalyses = costAnalyses.filter(x => x.id !== a.id);
+        cloudSave('deleteCostAnalysis', a, companies);
         renderCostingPage();
+        showToast(`${a.id} silindi.`, 'info');
       });
     });
   }
@@ -18610,8 +18661,13 @@ ${vadeLine}`;
     tbody.querySelectorAll('[data-del-hr]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        personnel = personnel.filter(p => p.id !== btn.dataset.delHr);
+        const p = personnel.find(x => x.id === btn.dataset.delHr);
+        if (!p) return;
+        if (!confirmDelete(`Personel “${p.name}” silinecek.`)) return;
+        personnel = personnel.filter(x => x.id !== p.id);
+        cloudSave('deletePersonnel', p, companies);
         renderHrPage();
+        showToast(`${p.name} personel listesinden kaldırıldı.`, 'info');
       });
     });
   }

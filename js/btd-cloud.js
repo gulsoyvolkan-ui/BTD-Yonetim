@@ -9,8 +9,15 @@
   const CURRENCY_TO_DB = { '₺': 'TRY', '€': 'EUR', '$': 'USD', '£': 'GBP', TRY: 'TRY', EUR: 'EUR', USD: 'USD', GBP: 'GBP' };
   const CURRENCY_TO_UI = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', '₺': '₺', '€': '€', '$': '$', '£': '£' };
   const PROTECTED_USERS = new Set(['volkan', 'ahmet']);
+  const SEED_FLAG = 'btd_cloud_seeded_v1';
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
+  function alreadySeeded() {
+    try { return localStorage.getItem(SEED_FLAG) === '1'; } catch (_) { return false; }
+  }
+  function markSeeded() {
+    try { localStorage.setItem(SEED_FLAG, '1'); } catch (_) { /* ignore */ }
+  }
   function currencyToDb(sym) {
     if (!sym) return 'EUR';
     return CURRENCY_TO_DB[sym] || CURRENCY_TO_DB[String(sym).toUpperCase()] || String(sym).toUpperCase();
@@ -47,6 +54,32 @@
     if (!Array.isArray(target)) return;
     target.length = 0;
     (rows || []).forEach((r) => target.push(r));
+  }
+  /** İlk seed sonrası boş tabloları tekrar demo veriyle doldurmayı engeller */
+  function blockReseed(arr) {
+    if (!alreadySeeded()) return false;
+    if (Array.isArray(arr)) replaceArray(arr, []);
+    return true;
+  }
+  async function deleteBelgeRow(table, entity, companies, label) {
+    try {
+      const client = sb();
+      if (!client || !entity) return fail('no-client', label);
+      if (entity.dbId) {
+        const { error } = await client.from(table).delete().eq('id', entity.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, entity.company);
+      if (fid && entity.id) {
+        const { error } = await client.from(table).delete().eq('firma_id', fid).eq('belge_no', entity.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', label);
+    } catch (e) {
+      return fail(e, label);
+    }
   }
   function assignObject(target, src) {
     if (!target || !src || typeof target !== 'object') return;
@@ -197,13 +230,22 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveCustomer'); }
   }
-  async function deleteCustomer(c) {
+  async function deleteCustomer(c, companies) {
     try {
       const client = sb();
-      if (!client || !c?.dbId) return fail('no-id', 'deleteCustomer');
-      const { error } = await client.from('musteriler').delete().eq('id', c.dbId);
-      if (error) throw error;
-      return ok();
+      if (!client || !c) return fail('no-client', 'deleteCustomer');
+      if (c.dbId) {
+        const { error } = await client.from('musteriler').delete().eq('id', c.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, c.company);
+      if (fid && c.name) {
+        const { error } = await client.from('musteriler').delete().eq('firma_id', fid).eq('unvan', c.name);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteCustomer');
     } catch (e) { return fail(e, 'deleteCustomer'); }
   }
   async function hydrateCustomers(ctx) {
@@ -211,6 +253,7 @@
     if (!client || !ctx.customers) return;
     const n = await countTable(client, 'musteriler');
     if (!n) {
+      if (blockReseed(ctx.customers)) return;
       if (ctx.customers.length) {
         progress(ctx, `Müşteriler seed (${ctx.customers.length})…`);
         for (const c of ctx.customers) await saveCustomer(c, ctx.companies);
@@ -329,13 +372,22 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveSupplier'); }
   }
-  async function deleteSupplier(s) {
+  async function deleteSupplier(s, companies) {
     try {
       const client = sb();
-      if (!client || !s?.dbId) return fail('no-id', 'deleteSupplier');
-      const { error } = await client.from('tedarikciler').delete().eq('id', s.dbId);
-      if (error) throw error;
-      return ok();
+      if (!client || !s) return fail('no-client', 'deleteSupplier');
+      if (s.dbId) {
+        const { error } = await client.from('tedarikciler').delete().eq('id', s.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, s.company);
+      if (fid && s.name) {
+        const { error } = await client.from('tedarikciler').delete().eq('firma_id', fid).eq('unvan', s.name);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteSupplier');
     } catch (e) { return fail(e, 'deleteSupplier'); }
   }
   async function hydrateSuppliers(ctx) {
@@ -344,6 +396,7 @@
     await ensureMaterialGroups(client, []);
     const n = await countTable(client, 'tedarikciler');
     if (!n) {
+      if (blockReseed(ctx.suppliers)) return;
       if (ctx.suppliers.length) {
         progress(ctx, `Tedarikçiler seed (${ctx.suppliers.length})…`);
         for (const s of ctx.suppliers) await saveSupplier(s, ctx.companies);
@@ -471,11 +524,30 @@
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'savePersonnel'); }
   }
+  async function deletePersonnel(p, companies) {
+    try {
+      const client = sb();
+      if (!client || !p) return fail('no-client', 'deletePersonnel');
+      if (p.dbId) {
+        const { error } = await client.from('personel').delete().eq('id', p.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, p.company);
+      if (fid && p.id) {
+        const { error } = await client.from('personel').delete().eq('firma_id', fid).eq('personel_kodu', p.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deletePersonnel');
+    } catch (e) { return fail(e, 'deletePersonnel'); }
+  }
   async function hydratePersonnel(ctx) {
     const client = sb();
     if (!client || !ctx.personnel) return;
     const n = await countTable(client, 'personel');
     if (!n) {
+      if (blockReseed(ctx.personnel)) return;
       if (ctx.personnel.length) {
         progress(ctx, `Personel seed (${ctx.personnel.length})…`);
         for (const p of ctx.personnel) await savePersonnel(p, ctx.companies);
@@ -641,11 +713,31 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveUser'); }
   }
+  async function deleteUser(u) {
+    try {
+      const client = sb();
+      if (!client || !u) return fail('no-client', 'deleteUser');
+      const uname = (u.username || '').toLowerCase();
+      if (PROTECTED_USERS.has(uname)) return fail('Korumalı kullanıcı silinemez', 'deleteUser');
+      if (u.dbId) {
+        const { error } = await client.from('kullanicilar').delete().eq('id', u.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      if (uname) {
+        const { error } = await client.from('kullanicilar').delete().eq('kullanici_adi', uname);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteUser');
+    } catch (e) { return fail(e, 'deleteUser'); }
+  }
   async function hydrateUsers(ctx) {
     const client = sb();
     if (!client || !ctx.users) return;
     const n = await countTable(client, 'kullanicilar');
     if (!n) {
+      if (blockReseed(ctx.users)) return;
       if (ctx.users.length) {
         progress(ctx, `Kullanıcılar seed (${ctx.users.length})…`);
         for (const u of ctx.users) await saveUser(u, ctx.companies);
@@ -838,11 +930,30 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveCostAnalysis'); }
   }
+  async function deleteCostAnalysis(a, companies) {
+    try {
+      const client = sb();
+      if (!client || !a) return fail('no-client', 'deleteCostAnalysis');
+      if (a.dbId) {
+        const { error } = await client.from('maliyet_analizleri').delete().eq('id', a.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, a.company);
+      if (fid && a.id) {
+        const { error } = await client.from('maliyet_analizleri').delete().eq('firma_id', fid).eq('belge_no', a.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteCostAnalysis');
+    } catch (e) { return fail(e, 'deleteCostAnalysis'); }
+  }
   async function hydrateCostAnalyses(ctx) {
     const client = sb();
     if (!client || !ctx.costAnalyses) return;
     const n = await countTable(client, 'maliyet_analizleri');
     if (!n) {
+      if (blockReseed(ctx.costAnalyses)) return;
       if (ctx.costAnalyses.length) {
         progress(ctx, `Maliyet seed (${ctx.costAnalyses.length})…`);
         for (const a of ctx.costAnalyses) await saveCostAnalysis(a, ctx.companies);
@@ -944,13 +1055,22 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveQuote'); }
   }
-  async function deleteQuote(q) {
+  async function deleteQuote(q, companies) {
     try {
       const client = sb();
-      if (!client || !q?.dbId) return fail('no-id', 'deleteQuote');
-      const { error } = await client.from('teklifler').delete().eq('id', q.dbId);
-      if (error) throw error;
-      return ok();
+      if (!client || !q) return fail('no-client', 'deleteQuote');
+      if (q.dbId) {
+        const { error } = await client.from('teklifler').delete().eq('id', q.dbId);
+        if (error) throw error;
+        return ok();
+      }
+      const fid = firmaId(companies, q.company);
+      if (fid && q.id) {
+        const { error } = await client.from('teklifler').delete().eq('firma_id', fid).eq('belge_no', q.id);
+        if (error) throw error;
+        return ok();
+      }
+      return fail('no-id', 'deleteQuote');
     } catch (e) { return fail(e, 'deleteQuote'); }
   }
   async function hydrateQuotes(ctx) {
@@ -958,6 +1078,7 @@
     if (!client || !ctx.quotes) return;
     const n = await countTable(client, 'teklifler');
     if (!n) {
+      if (blockReseed(ctx.quotes)) return;
       if (ctx.quotes.length) {
         progress(ctx, `Teklifler seed (${ctx.quotes.length})…`);
         for (const q of ctx.quotes) await saveQuote(q, ctx.companies);
@@ -1084,11 +1205,15 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveOrder'); }
   }
+  async function deleteOrder(o, companies) {
+    return deleteBelgeRow('siparisler', o, companies, 'deleteOrder');
+  }
   async function hydrateOrders(ctx) {
     const client = sb();
     if (!client || !ctx.orders) return;
     const n = await countTable(client, 'siparisler');
     if (!n) {
+      if (blockReseed(ctx.orders)) return;
       if (ctx.orders.length) {
         progress(ctx, `Siparişler seed (${ctx.orders.length})…`);
         for (const o of ctx.orders) await saveOrder(o, ctx.companies);
@@ -1228,11 +1353,15 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveWorkOrder'); }
   }
+  async function deleteWorkOrder(wo, companies) {
+    return deleteBelgeRow('is_emirleri', wo, companies, 'deleteWorkOrder');
+  }
   async function hydrateWorkOrders(ctx) {
     const client = sb();
     if (!client || !ctx.workOrders) return;
     const n = await countTable(client, 'is_emirleri');
     if (!n) {
+      if (blockReseed(ctx.workOrders)) return;
       if (ctx.workOrders.length) {
         progress(ctx, `İş emirleri seed (${ctx.workOrders.length})…`);
         for (const wo of ctx.workOrders) await saveWorkOrder(wo, ctx.companies);
@@ -1346,11 +1475,15 @@
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveProcurementItem'); }
   }
+  async function deleteProcurementItem(item, companies) {
+    return deleteBelgeRow('tedarik_kalemleri', item, companies, 'deleteProcurementItem');
+  }
   async function hydrateProcurement(ctx) {
     const client = sb();
     if (!client || !ctx.procurementItems) return;
     const n = await countTable(client, 'tedarik_kalemleri');
     if (!n) {
+      if (blockReseed(ctx.procurementItems)) return;
       if (ctx.procurementItems.length) {
         progress(ctx, `Tedarik seed (${ctx.procurementItems.length})…`);
         for (const it of ctx.procurementItems) await saveProcurementItem(it, ctx.companies);
@@ -1692,6 +1825,9 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveFason'); }
   }
+  async function deleteFason(f, companies) {
+    return deleteBelgeRow('fason_isler', f, companies, 'deleteFason');
+  }
   async function saveQc(r, companies) {
     try {
       const client = sb();
@@ -1721,6 +1857,9 @@
       r.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveQc'); }
+  }
+  async function deleteQc(r, companies) {
+    return deleteBelgeRow('kalite_kayitlari', r, companies, 'deleteQc');
   }
   async function saveShipment(s, companies) {
     try {
@@ -1754,6 +1893,9 @@
       s.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveShipment'); }
+  }
+  async function deleteShipment(s, companies) {
+    return deleteBelgeRow('sevkiyatlar', s, companies, 'deleteShipment');
   }
   async function saveInvoice(inv, companies) {
     try {
@@ -1803,6 +1945,9 @@
       inv.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveInvoice'); }
+  }
+  async function deleteInvoice(inv, companies) {
+    return deleteBelgeRow('faturalar', inv, companies, 'deleteInvoice');
   }
   async function saveStockItem(item, companies) {
     try {
@@ -1871,9 +2016,11 @@
 
     if (ctx.fasonJobs) {
       const n = await countTable(client, 'fason_isler');
-      if (!n && ctx.fasonJobs.length) {
-        progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
-        for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.fasonJobs) && ctx.fasonJobs.length) {
+          progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
+          for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
+        }
       } else if (n) {
         progress(ctx, 'Fason hydrate…');
         const rows = await selectAll(client, 'fason_isler', '*, fason_log(*)');
@@ -1902,8 +2049,10 @@
 
     if (ctx.qcRecords) {
       const n = await countTable(client, 'kalite_kayitlari');
-      if (!n && ctx.qcRecords.length) {
-        for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.qcRecords) && ctx.qcRecords.length) {
+          for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
+        }
       } else if (n) {
         const rows = await selectAll(client, 'kalite_kayitlari', '*');
         replaceArray(ctx.qcRecords, rows.map((r) => ({
@@ -1921,8 +2070,10 @@
 
     if (ctx.shipments) {
       const { count } = await client.from('sevkiyatlar').select('id', { count: 'exact', head: true });
-      if (!count && ctx.shipments.length) {
-        for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
+      if (!count) {
+        if (!blockReseed(ctx.shipments) && ctx.shipments.length) {
+          for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
+        }
       } else if (count) {
         const rows = await selectAll(client, 'sevkiyatlar', '*, siparisler(belge_no)');
         replaceArray(ctx.shipments, rows.map((r) => ({
@@ -1944,8 +2095,10 @@
 
     if (ctx.invoices) {
       const n = await countTable(client, 'faturalar');
-      if (!n && ctx.invoices.length) {
-        for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.invoices) && ctx.invoices.length) {
+          for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
+        }
       } else if (n) {
         const rows = await selectAll(client, 'faturalar', '*, siparisler(belge_no), maliyet_analizleri(belge_no)');
         replaceArray(ctx.invoices, rows.map((r) => ({
@@ -1972,9 +2125,11 @@
 
     if (ctx.stockItems) {
       const n = await countTable(client, 'stok_kartlari');
-      if (!n && ctx.stockItems.length) {
-        progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
-        for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
+      if (!n) {
+        if (!blockReseed(ctx.stockItems) && ctx.stockItems.length) {
+          progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
+          for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
+        }
       } else if (n) {
         progress(ctx, 'Stok hydrate…');
         const rows = await selectAll(client, 'stok_kartlari', '*');
@@ -2127,6 +2282,9 @@
     if (ctx.procMaterialCatalog) {
       const n = await countTable(client, 'malzemeler');
       if (!n) {
+        if (alreadySeeded()) {
+          assignObject(ctx.procMaterialCatalog, {});
+        } else {
         progress(ctx, 'Malzeme katalogu seed…');
         const groups = await ensureMaterialGroups(client, Object.keys(ctx.procMaterialCatalog));
         const rows = [];
@@ -2143,6 +2301,7 @@
           });
         });
         if (rows.length) await client.from('malzemeler').upsert(rows, { onConflict: 'malzeme_grup_id,ad' });
+        }
       } else {
         progress(ctx, 'Malzeme katalogu hydrate…');
         await ensureMaterialGroups(client, []);
@@ -2199,6 +2358,10 @@
       if (!arr) return;
       const n = await countTable(client, table);
       if (!n && arr.length) {
+        if (alreadySeeded()) {
+          replaceArray(arr, []);
+          return;
+        }
         const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
         if (error) throw error;
       } else if (n) {
@@ -2389,6 +2552,7 @@
       }
     }
     progress(ctx, 'Bulut senkron tamamlandı');
+    markSeeded();
     return ok({ results });
   }
 
@@ -2404,20 +2568,30 @@
     saveSupplier,
     deleteSupplier,
     savePersonnel,
+    deletePersonnel,
     saveUser,
+    deleteUser,
     saveCostAnalysis,
+    deleteCostAnalysis,
     saveQuote,
     deleteQuote,
     saveOrder,
+    deleteOrder,
     saveWorkOrder,
+    deleteWorkOrder,
     saveProcurementItem,
+    deleteProcurementItem,
     saveMaterialRfq,
     saveReproc,
     saveUnforeseen,
     saveFason,
+    deleteFason,
     saveQc,
+    deleteQc,
     saveShipment,
+    deleteShipment,
     saveInvoice,
+    deleteInvoice,
     saveStockItem,
     saveStockMove,
     saveSupplierGroupPriorities,
