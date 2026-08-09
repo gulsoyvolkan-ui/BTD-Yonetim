@@ -2979,6 +2979,8 @@
           <option value="Fason Dış Hizmet">Fason Dış Hizmet</option>
           <option value="Hırdavat">Hırdavat</option>
           <option value="Takım">Takım</option>
+          <option value="Lojistik">Lojistik</option>
+          <option value="Diğer">Diğer</option>
         </select>
       </div>
 
@@ -3937,11 +3939,36 @@
           </label>
         </div>
       </div>
-      <p class="text-[11px] text-steel-400 leading-relaxed">Rol menü görünürlüğünü belirler. Tedarikçi türü (fasoncu, hammadde vb.) Tedarikçiler listesindeki kategori alanından ayarlanır. Rol değişince karşı listedeki kart senkronlanır.</p>
+      <p class="text-[11px] text-steel-400 leading-relaxed">Rol menü görünürlüğünü belirler. Tedarikçi türü (fasoncu, hammadde vb.) listede <strong>Kategori</strong> rozetine tıklayarak veya Düzenle ile değiştirilir.</p>
     </div>
     <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
       <button type="button" id="cariRoleCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
       <button type="button" id="cariRoleSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md">Rolü Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TEDARİKÇİ KATEGORİ AYARI ============ -->
+<div id="supplierCatOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[86] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+    <div class="bg-navy px-5 py-4 flex items-start justify-between">
+      <div class="min-w-0">
+        <p class="text-[11px] text-white/60 font-semibold uppercase tracking-wide">Tedarikçi · Kategori · <span id="supplierCatCompanyBadge">Technomac</span></p>
+        <h3 id="supplierCatTitle" class="text-white font-bold text-lg mt-0.5 truncate">Firma</h3>
+        <p id="supplierCatMeta" class="text-white/65 text-xs mt-1">Tedarik türünü seçin</p>
+      </div>
+      <button type="button" id="supplierCatCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5 shrink-0">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="p-5 space-y-3">
+      <p class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Kategori</p>
+      <div class="space-y-2" id="supplierCatOptions"></div>
+      <p class="text-[11px] text-steel-400 leading-relaxed">Kategori değişince yetenek listesi (malzeme grubu / fason hizmetleri) uyumlu olmayanlar temizlenir. Ayrıntılı seçim için Düzenle kullanın.</p>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
+      <button type="button" id="supplierCatCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="supplierCatSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md">Kategoriyi Kaydet</button>
     </div>
   </div>
 </div>
@@ -11695,6 +11722,64 @@ ${vadeLine}`;
     'Lojistik': 'bg-emerald-50 text-emerald-700',
     'Diğer': 'bg-steel-100 text-steel-600',
   };
+  const SUPPLIER_CATEGORY_OPTIONS = [
+    'Hammadde', 'Yedek Parça', 'Fason İmalatçı', 'Fason Dış Hizmet',
+    'Hırdavat', 'Takım', 'Lojistik', 'Diğer',
+  ];
+  let supplierCatTarget = null;
+
+  function closeSupplierCategoryOverlay() {
+    supplierCatTarget = null;
+    document.getElementById('supplierCatOverlay')?.classList.add('hidden');
+  }
+  function openSupplierCategoryOverlay(supplier) {
+    if (!supplier) return;
+    supplierCatTarget = supplier;
+    const cur = supplier.category || 'Diğer';
+    const badge = document.getElementById('supplierCatCompanyBadge');
+    const title = document.getElementById('supplierCatTitle');
+    const meta = document.getElementById('supplierCatMeta');
+    if (badge) badge.textContent = supplier.company || activeCompany;
+    if (title) title.textContent = supplier.name || 'Tedarikçi';
+    if (meta) meta.textContent = `Mevcut: ${cur}`;
+    const host = document.getElementById('supplierCatOptions');
+    const cats = SUPPLIER_CATEGORY_OPTIONS.includes(cur)
+      ? SUPPLIER_CATEGORY_OPTIONS
+      : [cur, ...SUPPLIER_CATEGORY_OPTIONS];
+    if (host) {
+      host.innerHTML = cats.map((c) => `
+        <label class="flex items-center gap-3 rounded-xl border border-steel-200 px-3.5 py-2.5 cursor-pointer hover:bg-steel-50 has-[:checked]:border-navy has-[:checked]:bg-navy/5">
+          <input type="radio" name="supplierCatPick" value="${String(c).replace(/"/g, '&quot;')}" class="accent-navy" ${c === cur ? 'checked' : ''} />
+          <span class="text-[11px] font-bold px-2 py-1 rounded-full ${supplierCatStyle[c] || supplierCatStyle['Diğer']}">${c}</span>
+        </label>`).join('');
+    }
+    document.getElementById('supplierCatOverlay')?.classList.remove('hidden');
+  }
+  async function saveSupplierCategoryFromOverlay() {
+    if (!supplierCatTarget) return;
+    const picked = document.querySelector('input[name="supplierCatPick"]:checked')?.value;
+    if (!picked) {
+      showToast('Bir kategori seçin.', 'error');
+      return;
+    }
+    const s = supplierCatTarget;
+    const prev = s.category || '';
+    s.category = picked;
+    if (typeof isMaterialSupplierCategory === 'function' && !isMaterialSupplierCategory(picked)) s.materialGroups = [];
+    if (typeof isFasonDisHizmetCategory === 'function' && !isFasonDisHizmetCategory(picked)) s.fasonServices = [];
+    if (typeof isFasonImalatciCategory === 'function' && !isFasonImalatciCategory(picked)) s.fasonMfgServices = [];
+    if (typeof clearTombstone === 'function') clearTombstone('suppliers', partyEntityKey(s));
+    if (typeof persistEntityCache === 'function') persistEntityCache();
+    const r = await cloudSaveAwait('saveSupplier', s, companies);
+    closeSupplierCategoryOverlay();
+    renderSuppliersPage();
+    if (typeof refreshProcSupplierDatalist === 'function') refreshProcSupplierDatalist();
+    if (r && r.ok === false) {
+      cloudToast(`Kategori yerelde güncellendi; bulut: ${r.reason || 'hata'}`, 'warn');
+    } else {
+      showToast(`${s.name}: ${prev || '—'} → ${picked}`, 'success');
+    }
+  }
   // supplierDepartments → crmDepartments (üstte tanımlı)
 
   function renderSuppliersPage() {
@@ -11748,7 +11833,7 @@ ${vadeLine}`;
           <button type="button" data-cari-role-sup="${idx}" class="inline-flex text-[10px] font-bold px-1.5 py-0.5 rounded ${cariRoleBadgeClass(role)} hover:ring-2 hover:ring-navy/20" title="Rolü değiştir">${cariRoleLabel(role)}</button>
         </td>
         <td class="px-4 py-3.5">
-          <span class="text-[11px] font-bold px-2 py-1 rounded-full ${supplierCatStyle[s.category] || supplierCatStyle['Diğer']}">${s.category || 'Diğer'}</span>
+          <button type="button" data-sup-cat="${idx}" class="text-[11px] font-bold px-2 py-1 rounded-full ${supplierCatStyle[s.category] || supplierCatStyle['Diğer']} hover:ring-2 hover:ring-navy/25" title="Kategoriyi değiştir">${s.category || 'Diğer'}</button>
         </td>
         <td class="px-4 py-3.5 text-steel-600 text-sm">
           ${primary.name || '—'}
@@ -11798,6 +11883,9 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-cari-role-sup]').forEach(btn => {
       btn.addEventListener('click', () => openCariRoleOverlay(list[Number(btn.dataset.cariRoleSup)]));
+    });
+    tbody.querySelectorAll('[data-sup-cat]').forEach(btn => {
+      btn.addEventListener('click', () => openSupplierCategoryOverlay(list[Number(btn.dataset.supCat)]));
     });
     renderSupplierPriorityPanel();
   }
@@ -20827,6 +20915,18 @@ Teşekkürler.`;
   document.getElementById('cariRoleSaveBtn')?.addEventListener('click', saveCariRoleFromOverlay);
   document.getElementById('cariRoleOverlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'cariRoleOverlay') closeCariRoleOverlay();
+  });
+
+  document.getElementById('supplierCatCloseBtn')?.addEventListener('click', closeSupplierCategoryOverlay);
+  document.getElementById('supplierCatCancelBtn')?.addEventListener('click', closeSupplierCategoryOverlay);
+  document.getElementById('supplierCatSaveBtn')?.addEventListener('click', saveSupplierCategoryFromOverlay);
+  document.getElementById('supplierCatOverlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'supplierCatOverlay') closeSupplierCategoryOverlay();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const ov = document.getElementById('supplierCatOverlay');
+    if (ov && !ov.classList.contains('hidden')) closeSupplierCategoryOverlay();
   });
 
   document.getElementById('costMaterial')?.addEventListener('change', () => {
