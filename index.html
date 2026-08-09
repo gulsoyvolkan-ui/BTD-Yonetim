@@ -5891,7 +5891,7 @@ ${vadeLine}`;
     applyTombstones('qcRecords', qcRecords, (x) => x?.id, 'deleteQc');
     applyTombstones('shipments', shipments, (x) => x?.id, 'deleteShipment');
     applyTombstones('invoices', invoices, (x) => x?.id, 'deleteInvoice');
-    applyTombstones('personnel', personnel, (x) => x?.id, 'deletePersonnel');
+    applyTombstones('personnel', personnel, (x) => (x?.dbId || x?.id), 'deletePersonnel');
     applyTombstones('users', users, (x) => (x?.username || '').toLowerCase(), 'deleteUser');
   }
 
@@ -16390,7 +16390,7 @@ Teşekkürler.`;
     if (!p && user.tcNo) p = list.find(x => x.tcNo && x.tcNo === user.tcNo) || null;
     if (!p) {
       if (!opts.create) return null;
-      const id = `P-${companyCode[primary] || 'XX'}-${String(personnelSeq++).padStart(3, '0')}`;
+      const id = nextPersonnelCode(primary);
       p = {
         id, company: primary, name: user.name, dept: user.dept || 'Genel',
         startDate: new Date().toISOString().slice(0, 10), salary: 0, status: 'Aktif',
@@ -21170,6 +21170,61 @@ Teşekkürler.`;
   function companyPersonnel() {
     return personnel.filter(p => p.company === activeCompany);
   }
+  /** Benzersiz personel anahtarı (UUID tercih) — aynı personel_kodu çakışmalarında yanlış kaydı açmayı önler */
+  function personnelKey(p) {
+    if (!p) return '';
+    return String(p.dbId || p.id || '');
+  }
+  function findPersonnel(key) {
+    if (key == null || key === '') return null;
+    const k = String(key);
+    const byDb = personnel.find((x) => x.dbId && String(x.dbId) === k);
+    if (byDb) return byDb;
+    const matches = personnel.filter((x) => String(x.id) === k);
+    if (matches.length <= 1) return matches[0] || null;
+    return matches.find((x) => x.company === activeCompany) || matches[0];
+  }
+  function nextPersonnelCode(company) {
+    const co = company || activeCompany || 'Bluemac';
+    const prefix = `P-${companyCode[co] || 'XX'}-`;
+    let max = 0;
+    (personnel || []).forEach((p) => {
+      const id = String(p?.id || '');
+      if (!id.startsWith(prefix)) return;
+      const n = parseInt(id.slice(prefix.length), 10);
+      if (Number.isFinite(n) && n > max) max = n;
+    });
+    personnelSeq = Math.max(personnelSeq || 1, max + 1);
+    return `${prefix}${String(personnelSeq++).padStart(3, '0')}`;
+  }
+  /** Aynı personel koduna sahip kayıtları ayır; buluta yeni kodu yaz */
+  function repairDuplicatePersonnelIds() {
+    if (!Array.isArray(personnel) || !personnel.length) return 0;
+    const seen = new Set();
+    let fixed = 0;
+    for (const p of personnel) {
+      if (!p) continue;
+      const code = String(p.id || '');
+      if (code && !seen.has(code)) {
+        seen.add(code);
+        continue;
+      }
+      const old = p.id;
+      p.id = nextPersonnelCode(p.company || activeCompany);
+      seen.add(String(p.id));
+      fixed += 1;
+      // Devam/izin bağları eski koddaysa ve başka kimse bu kodu tutmuyorsa taşıma
+      // (ilk sahip eski kodu tutar; kopya kayıt yeni koda geçer)
+      try {
+        if (typeof cloudSave === 'function') cloudSave('savePersonnel', p, companies);
+      } catch (_) { /* ignore */ }
+      console.warn('[BTD] Yinelenen personel kodu düzeltildi', old, '→', p.id, p.name);
+    }
+    if (fixed) {
+      try { if (typeof schedulePersistEntityCache === 'function') schedulePersistEntityCache(); } catch (_) { /* ignore */ }
+    }
+    return fixed;
+  }
   function hrHourlyRate(p) {
     return hrMonthlyHours > 0 ? (Number(p.salary) || 0) / hrMonthlyHours : 0;
   }
@@ -21251,9 +21306,9 @@ Teşekkürler.`;
     viewingHrId = null;
   }
   function openHrDetail(id) {
-    const p = personnel.find(x => x.id === id);
+    const p = findPersonnel(id);
     if (!p) return;
-    viewingHrId = id;
+    viewingHrId = personnelKey(p);
     document.getElementById('hrListView')?.classList.add('hidden');
     document.getElementById('hrDetailView')?.classList.remove('hidden');
     const ym = new Date().toISOString().slice(0, 7);
@@ -21550,6 +21605,7 @@ Teşekkürler.`;
 
   function renderHrPage() {
     seedPersonnelIfEmpty();
+    repairDuplicatePersonnelIds();
     const hoursInp = document.getElementById('hrMonthlyHours');
     if (hoursInp && !hoursInp.dataset.bound) {
       hoursInp.value = hrMonthlyHours;
@@ -21592,10 +21648,11 @@ Teşekkürler.`;
       const leaveDays = leaveRequests.filter(l => l.personnelId === p.id).reduce((s, l) => s + (Number(l.days) || 0), 0);
       const hasUser = users.some(u => u.personnelId === p.id || (p.userId && u.username === p.userId));
       const collar = normalizeCollar(p.collar);
+      const pkey = personnelKey(p);
       const av = p.photo
         ? `<img src="${String(p.photo).replace(/"/g, '&quot;')}" alt="" class="w-9 h-9 rounded-lg object-cover border border-steel-200 shrink-0" />`
         : `<div class="w-9 h-9 rounded-lg bg-navy/10 text-navy flex items-center justify-center text-xs font-bold shrink-0">${(p.name || '?').charAt(0).toUpperCase()}</div>`;
-      return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-hr-open="${p.id}">
+      return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-hr-open="${pkey}">
         <td class="px-5 py-3.5"><div class="flex items-center gap-2.5">${av}<div><p class="font-semibold text-steel-800">${p.name}</p><p class="text-[11px] text-steel-400">${p.dept || '—'} · <span class="price-sensitive">${pay.hourly.toFixed(0)} ₺/sa</span></p></div></div></td>
         <td class="px-4 py-3.5"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${collarBadgeClass(collar)}">${collarLabel(collar)}</span></td>
         <td class="px-4 py-3.5 text-steel-500 text-xs">${fmtDate(p.startDate)}</td>
@@ -21605,10 +21662,10 @@ Teşekkürler.`;
         <td class="px-4 py-3.5 text-steel-600 text-xs">${leaveDays}</td>
         <td class="px-4 py-3.5 font-bold text-emerald-700 mono text-xs price-sensitive">${pay.total.toLocaleString('tr-TR')} ₺</td>
         <td class="px-4 py-3.5 text-right whitespace-nowrap" onclick="event.stopPropagation()">
-          ${!hasUser ? `<button data-hr-user="${p.id}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2 py-1 rounded-lg">Kullanıcı</button>` : `<span class="text-[10px] text-emerald-600 font-semibold">${p.userId || 'Hesaplı'}</span>`}
-          <button data-hr-card="${p.id}" class="text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg" title="Kimlik kartı yazdır">Kart</button>
-          <button data-edit-hr="${p.id}" class="text-navy hover:bg-navy/5 text-[11px] font-semibold px-2 py-1 rounded-lg">Düzenle</button>
-          <button data-del-hr="${p.id}" class="text-steel-300 hover:text-red-500 p-1.5 rounded-lg" title="Sil">✕</button>
+          ${!hasUser ? `<button data-hr-user="${pkey}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2 py-1 rounded-lg">Kullanıcı</button>` : `<span class="text-[10px] text-emerald-600 font-semibold">${p.userId || 'Hesaplı'}</span>`}
+          <button data-hr-card="${pkey}" class="text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg" title="Kimlik kartı yazdır">Kart</button>
+          <button data-edit-hr="${pkey}" class="text-navy hover:bg-navy/5 text-[11px] font-semibold px-2 py-1 rounded-lg">Düzenle</button>
+          <button data-del-hr="${pkey}" class="text-steel-300 hover:text-red-500 p-1.5 rounded-lg" title="Sil">✕</button>
         </td>
       </tr>`;
     }).join('');
@@ -21624,7 +21681,7 @@ Teşekkürler.`;
     tbody.querySelectorAll('[data-hr-card]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const p = personnel.find(x => x.id === btn.dataset.hrCard);
+        const p = findPersonnel(btn.dataset.hrCard);
         if (p) printPersonnelIdCard(p);
       });
     });
@@ -21634,11 +21691,13 @@ Teşekkürler.`;
     tbody.querySelectorAll('[data-del-hr]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const p = personnel.find(x => x.id === btn.dataset.delHr);
+        const p = findPersonnel(btn.dataset.delHr);
         if (!p) return;
         if (!confirmDelete(`Personel “${p.name}” silinecek.`)) return;
-        removeLocalById(personnel, p.id);
+        const idx = personnel.indexOf(p);
+        if (idx >= 0) personnel.splice(idx, 1);
         addTombstone('personnel', p.id);
+        if (p.dbId) addTombstone('personnel', p.dbId);
         persistEntityCache();
         cloudSave('deletePersonnel', p, companies);
         renderHrPage();
@@ -21648,7 +21707,7 @@ Teşekkürler.`;
   }
 
   function openUserCreateFromPersonnel(personnelId) {
-    const p = personnel.find(x => x.id === personnelId);
+    const p = findPersonnel(personnelId);
     if (!p) return;
     if (!userCanAccessPage(currentUser, 'settings')) {
       showToast('Kullanıcı oluşturmak için Ayarlar yetkisi gerekir.', 'error');
@@ -21692,8 +21751,8 @@ Teşekkürler.`;
     if (clearBtn) clearBtn.classList.toggle('hidden', !dataUrl);
   }
   function openHrModal(editId) {
-    editingHrId = editId || null;
-    const p = editId ? personnel.find(x => x.id === editId) : null;
+    const p = editId ? findPersonnel(editId) : null;
+    editingHrId = p ? personnelKey(p) : null;
     document.querySelector('#newHrModalOverlay h3').textContent = p ? 'Personel Düzenle' : 'Personel Kaydı';
     document.getElementById('hrName').value = p ? p.name : '';
     setHrPhotoUi(p ? (p.photo || null) : null);
@@ -21739,7 +21798,7 @@ Teşekkürler.`;
   document.getElementById('hrDetailBackBtn')?.addEventListener('click', () => { viewingHrId = null; renderHrPage(); });
   document.getElementById('hrDetailEditBtn')?.addEventListener('click', () => { if (viewingHrId) openHrModal(viewingHrId); });
   document.getElementById('hrDetailPrintCardBtn')?.addEventListener('click', () => {
-    const p = viewingHrId ? personnel.find(x => x.id === viewingHrId) : null;
+    const p = viewingHrId ? findPersonnel(viewingHrId) : null;
     if (p) printPersonnelIdCard(p);
   });
   document.getElementById('hrDetailCardBtn')?.addEventListener('click', () => {
@@ -21782,7 +21841,7 @@ Teşekkürler.`;
     const leaveEntitle = Math.max(0, Number(document.getElementById('hrLeaveEntitle')?.value) || 0);
     const leavePlanned = Math.max(0, Number(document.getElementById('hrLeavePlanned')?.value) || 0);
     if (editingHrId) {
-      const p = personnel.find(x => x.id === editingHrId);
+      const p = findPersonnel(editingHrId);
       if (p) {
         p.name = name;
         p.dept = dept;
@@ -21805,7 +21864,7 @@ Teşekkürler.`;
       }
       showToast(`${name} güncellendi.`, 'success');
     } else {
-      const id = `P-${companyCode[activeCompany]}-${String(personnelSeq++).padStart(3, '0')}`;
+      const id = nextPersonnelCode(activeCompany);
       personnel.push({
         id, company: activeCompany, name,
         dept,
@@ -21926,6 +21985,7 @@ Teşekkürler.`;
       if (fxManualRef.value) fxRatesManual = true;
       // Silinenleri tekrar enjekte etme; bulutta olmayan yerelleri geri yaz
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
+      if (typeof repairDuplicatePersonnelIds === 'function') repairDuplicatePersonnelIds();
       if (typeof reconcileLocalOrphans === 'function') await reconcileLocalOrphans(localSnapshot);
       // Ayarlar: bulut hydrate sonrası yerel kaydı üstüne yaz (son kaydedilen ayarlar geçerli)
       if (typeof restoreSettingsCache === 'function') restoreSettingsCache();

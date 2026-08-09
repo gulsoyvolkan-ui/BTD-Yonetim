@@ -669,6 +669,21 @@
         userId: null,
       };
     }));
+    // Aynı personel_kodu çakışmalarını ayır (UI yanlış kişi açmasın)
+    const seenCodes = new Set();
+    for (const p of ctx.personnel) {
+      const code = String(p.id || '');
+      if (code && !seenCodes.has(code)) {
+        seenCodes.add(code);
+        continue;
+      }
+      const co = (p.company || 'XX').slice(0, 2).toUpperCase();
+      const short = String(p.dbId || '').replace(/-/g, '').slice(0, 6).toUpperCase() || String(Date.now()).slice(-6);
+      p.id = `P-${co}-${short}`;
+      seenCodes.add(p.id);
+      try { await savePersonnel(p, ctx.companies); } catch (_) { /* ignore */ }
+      console.warn('[BtdCloud] Yinelenen personel_kodu düzeltildi →', p.id, p.name);
+    }
   }
   async function hydrateAttendanceLeave(ctx) {
     const client = sb();
