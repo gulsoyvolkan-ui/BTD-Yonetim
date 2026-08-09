@@ -19,6 +19,7 @@
 <script src="js/btd-supabase.js?v=datafix1"></script>
 <script src="js/btd-cloud.js?v=datafix1"></script>
 <script src="js/btd-parasut.js?v=datafix1"></script>
+<script src="js/btd-accounting.js?v=acct1"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -649,6 +650,10 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z"></path><path d="M3 9 5.5 3.5A1 1 0 0 1 6.4 3h11.2a1 1 0 0 1 .9.5L21 9"></path><path d="M12 12v5"></path><path d="M9 15h6"></path></svg>
           <span class="sidebar-label text-sm font-medium flex-1">Tedarikçiler</span>
         </a>
+        <a href="#" data-page="accounting" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Muhasebe">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M2 10h20"></path><path d="M6 15h2"></path><path d="M10 15h4"></path></svg>
+          <span class="sidebar-label text-sm font-medium flex-1">Muhasebe <span class="opacity-70 font-normal">(Cari)</span></span>
+        </a>
         <a href="#" data-page="machinepark" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Makine Parkı">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="1.5"></rect><path d="M16 10h2.5L21 12.5V16h-5"></path><circle cx="6.5" cy="19.5" r="1.5"></circle><circle cx="13.5" cy="19.5" r="1.5"></circle><path d="M7 10v4"></path><path d="M5.5 12h3"></path></svg>
           <span class="sidebar-label text-sm font-medium flex-1">Makine Parkı</span>
@@ -1133,6 +1138,9 @@
             <button type="button" id="parasutCrmImportBtnCustomers" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-emerald-600/20">
               Paraşüt Excel
             </button>
+            <button type="button" id="gotoAccountingFromCustomers" class="flex items-center gap-2 bg-white border border-steel-200 hover:bg-steel-50 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors">
+              Muhasebe / Cari
+            </button>
             <button id="newCustomerBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             Yeni Müşteri Ekle
@@ -1184,6 +1192,9 @@
           <div class="flex flex-wrap items-center gap-2">
             <button type="button" id="parasutCrmImportBtnSuppliers" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-emerald-600/20">
               Paraşüt Excel
+            </button>
+            <button type="button" id="gotoAccountingFromSuppliers" class="flex items-center gap-2 bg-white border border-steel-200 hover:bg-steel-50 text-steel-700 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors">
+              Muhasebe / Cari
             </button>
             <button id="newSupplierBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -1836,6 +1847,166 @@
                 </tr>
               </thead>
               <tbody id="invTableBody" class="divide-y divide-steel-100"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="h-6"></div>
+      </div>
+
+      <!-- ============ PAGE: MUHASEBE / CARİ ============ -->
+      <div id="page-accounting" class="hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <div>
+            <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Muhasebe <span class="text-steel-400 font-medium">/ Cari Defter</span></h1>
+            <p class="text-sm text-steel-400 mt-1"><span id="companyNameAccounting" class="font-semibold text-navy">Technomac</span> · vergi no ile eşleşir · kart kimlik alanları korunur</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <input type="file" id="acctMoveFileInput" accept=".xlsx,.xls,.csv" class="hidden" />
+            <button type="button" id="acctImportExcelBtn" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-4 py-2.5 text-sm font-semibold shadow-md shadow-emerald-600/20">Paraşüt Excel</button>
+            <button type="button" id="acctNewVoucherBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold shadow-md shadow-navy/25">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Yeni Fiş
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Toplam Borç</p>
+            <p id="acctSumDebit" class="mt-1 text-xl font-bold mono text-steel-800">0 ₺</p>
+          </div>
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Toplam Alacak</p>
+            <p id="acctSumCredit" class="mt-1 text-xl font-bold mono text-emerald-700">0 ₺</p>
+          </div>
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Net</p>
+            <p id="acctSumNet" class="mt-1 text-xl font-bold mono text-navy">0 ₺</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-1 bg-steel-100 rounded-xl p-1 mb-4">
+          <button type="button" data-acct-tab="accounts" class="acct-tab-btn flex-1 min-w-[7rem] text-sm font-semibold py-2 rounded-lg transition-colors bg-navy text-white shadow-sm">Cari hesaplar</button>
+          <button type="button" data-acct-tab="moves" class="acct-tab-btn flex-1 min-w-[7rem] text-sm font-semibold py-2 rounded-lg transition-colors text-steel-500">Hareketler</button>
+          <button type="button" data-acct-tab="import" class="acct-tab-btn flex-1 min-w-[7rem] text-sm font-semibold py-2 rounded-lg transition-colors text-steel-500">Aktarım</button>
+          <button type="button" data-acct-tab="pending" class="acct-tab-btn flex-1 min-w-[7rem] text-sm font-semibold py-2 rounded-lg transition-colors text-steel-500">Onay bekleyenler <span id="acctPendingBadge" class="hidden ml-1 text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-full">0</span></button>
+        </div>
+
+        <div id="acctTabAccounts" class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-steel-100 flex flex-wrap items-center justify-between gap-2">
+            <p class="text-sm font-semibold text-steel-700">Cari hesaplar</p>
+            <input id="acctAccountSearch" type="search" placeholder="Unvan veya vergi no…" class="rounded-xl border border-steel-200 px-3 py-2 text-sm w-full sm:w-64" />
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-steel-50/80 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                  <th class="px-5 py-3">Unvan</th>
+                  <th class="px-4 py-3">Vergi No</th>
+                  <th class="px-4 py-3">Rol</th>
+                  <th class="px-4 py-3 text-right">Bakiye</th>
+                  <th class="px-4 py-3">Son hareket</th>
+                  <th class="px-4 py-3 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="acctAccountsBody" class="divide-y divide-steel-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="acctTabMoves" class="hidden bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-steel-100 flex flex-wrap items-center gap-2">
+            <input id="acctMoveSearch" type="search" placeholder="Cari / belge / açıklama…" class="rounded-xl border border-steel-200 px-3 py-2 text-sm flex-1 min-w-[12rem]" />
+            <input id="acctMoveDateFrom" type="date" class="rounded-xl border border-steel-200 px-3 py-2 text-sm" />
+            <input id="acctMoveDateTo" type="date" class="rounded-xl border border-steel-200 px-3 py-2 text-sm" />
+            <select id="acctMoveTypeFilter" class="rounded-xl border border-steel-200 px-3 py-2 text-sm">
+              <option value="">Tüm tipler</option>
+              <option value="invoice_sales">Satış faturası</option>
+              <option value="invoice_purchase">Alış faturası</option>
+              <option value="collection">Tahsilat</option>
+              <option value="payment">Ödeme</option>
+              <option value="debit">Borç fişi</option>
+              <option value="credit">Alacak fişi</option>
+              <option value="opening">Açılış / bakiye</option>
+              <option value="other">Diğer</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-steel-50/80 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                  <th class="px-5 py-3">Tarih</th>
+                  <th class="px-4 py-3">Cari</th>
+                  <th class="px-4 py-3">Belge</th>
+                  <th class="px-4 py-3">Tip</th>
+                  <th class="px-4 py-3">Açıklama</th>
+                  <th class="px-4 py-3 text-right">Borç</th>
+                  <th class="px-4 py-3 text-right">Alacak</th>
+                </tr>
+              </thead>
+              <tbody id="acctMovesBody" class="divide-y divide-steel-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="acctTabImport" class="hidden space-y-4">
+          <div class="bg-white rounded-2xl border border-steel-200 shadow-sm p-5">
+            <p class="text-sm font-bold text-steel-800">Paraşüt Excel / cari hareket aktarımı</p>
+            <p class="text-xs text-steel-500 mt-1.5 leading-relaxed max-w-3xl">Vergi numarasına göre mevcut müşteri/tedarikçi kartlarıyla eşleşir. Karttaki unvan, adres ve kontaklar değiştirilmez; yalnızca hareketler ve bakiye güncellenir. Sistemde olmayan vergi noları onay kuyruğuna düşer.</p>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <button type="button" id="acctImportExcelBtn2" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl">Excel seç</button>
+            </div>
+            <p id="acctImportHint" class="mt-3 text-[11px] text-steel-400">Beklenen kolonlar: Vergi No, Unvan, Tarih, Belge No, Açıklama, Borç, Alacak (veya TL Bakiye).</p>
+          </div>
+        </div>
+
+        <div id="acctTabPending" class="hidden bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-steel-100">
+            <p class="text-sm font-semibold text-steel-700">Yeni cari onayları</p>
+            <p class="text-[11px] text-steel-400 mt-0.5">Aktarımdan gelen, henüz kartı olmayan firmalar — bir kerelik onay</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-steel-50/80 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                  <th class="px-5 py-3">Önerilen unvan</th>
+                  <th class="px-4 py-3">Vergi No</th>
+                  <th class="px-4 py-3">Rol</th>
+                  <th class="px-4 py-3 text-right">Hareket</th>
+                  <th class="px-4 py-3 text-right">Örnek bakiye</th>
+                  <th class="px-4 py-3 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="acctPendingBody" class="divide-y divide-steel-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Ekstre paneli -->
+        <div id="acctStatementPanel" class="hidden mt-4 bg-white rounded-2xl border border-navy/20 shadow-sm overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-steel-100 flex flex-wrap items-center justify-between gap-2 bg-navy/5">
+            <div>
+              <p class="text-sm font-bold text-steel-800" id="acctStatementTitle">Cari ekstre</p>
+              <p class="text-[11px] text-steel-500 mono" id="acctStatementTax">—</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" id="acctStatementAddBtn" class="text-xs font-semibold bg-navy text-white px-3 py-2 rounded-xl">Hareket ekle</button>
+              <button type="button" id="acctStatementCloseBtn" class="text-xs font-semibold text-steel-500 hover:text-steel-800 px-3 py-2 rounded-xl">Kapat</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto max-h-[28rem]">
+            <table class="w-full text-sm">
+              <thead class="sticky top-0">
+                <tr class="bg-steel-50 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                  <th class="px-5 py-3">Tarih</th>
+                  <th class="px-4 py-3">Belge</th>
+                  <th class="px-4 py-3">Açıklama</th>
+                  <th class="px-4 py-3 text-right">Borç</th>
+                  <th class="px-4 py-3 text-right">Alacak</th>
+                  <th class="px-4 py-3 text-right">Bakiye</th>
+                </tr>
+              </thead>
+              <tbody id="acctStatementBody" class="divide-y divide-steel-100"></tbody>
             </table>
           </div>
         </div>
@@ -2779,6 +2950,7 @@
       <div class="flex items-center gap-1 bg-steel-100 rounded-xl p-1 mb-4">
         <button type="button" data-customer-tab="general" class="customer-tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition-colors">Genel Bilgiler</button>
         <button type="button" data-customer-tab="contacts" class="customer-tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition-colors">İletişim Kişileri</button>
+        <button type="button" data-customer-tab="ledger" class="customer-tab-btn flex-1 text-sm font-semibold py-2 rounded-lg transition-colors">Cari / Ekstre</button>
       </div>
 
       <!-- Sekme: Genel Bilgiler -->
@@ -2889,6 +3061,34 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           İletişim Kişisi Ekle
         </button>
+      </div>
+
+      <!-- Sekme: Cari / Ekstre -->
+      <div id="customerTabLedger" class="hidden space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-steel-200 bg-steel-50/80 px-4 py-3">
+          <div>
+            <p class="text-[11px] font-semibold text-steel-400 uppercase">TL Bakiye</p>
+            <p id="customerLedgerBalance" class="text-lg font-bold mono text-steel-800">—</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" id="customerLedgerAddBtn" class="text-xs font-semibold bg-navy text-white px-3 py-2 rounded-xl">Hareket ekle</button>
+            <button type="button" id="customerLedgerOpenAcctBtn" class="text-xs font-semibold border border-steel-200 text-steel-700 px-3 py-2 rounded-xl">Tüm ekstre</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto border border-steel-200 rounded-xl max-h-64">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-steel-50 text-left text-[11px] text-steel-400 font-semibold uppercase">
+                <th class="px-3 py-2">Tarih</th>
+                <th class="px-3 py-2">Belge</th>
+                <th class="px-3 py-2 text-right">Borç</th>
+                <th class="px-3 py-2 text-right">Alacak</th>
+              </tr>
+            </thead>
+            <tbody id="customerLedgerBody"></tbody>
+          </table>
+        </div>
+        <p id="customerLedgerEmpty" class="text-xs text-steel-400 text-center py-2">Kayıtlı hareket yok. Muhasebe → Aktarım veya Yeni Fiş kullanın.</p>
       </div>
     </div>
 
@@ -3001,6 +3201,33 @@
           <button type="button" id="addSupplierContactBtn" class="text-xs font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-3 py-1.5 rounded-lg">+ Kişi Ekle</button>
         </div>
         <div id="supplierContactsList" class="space-y-2"></div>
+      </div>
+
+      <div class="rounded-xl border border-steel-200 p-3 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Cari / Ekstre</p>
+            <p id="supplierLedgerBalance" class="text-base font-bold mono text-steel-800 mt-0.5">—</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" id="supplierLedgerAddBtn" class="text-xs font-semibold bg-navy text-white px-3 py-2 rounded-xl">Hareket ekle</button>
+            <button type="button" id="supplierLedgerOpenAcctBtn" class="text-xs font-semibold border border-steel-200 text-steel-700 px-3 py-2 rounded-xl">Tüm ekstre</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto border border-steel-100 rounded-lg max-h-48">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-steel-50 text-left text-[11px] text-steel-400 font-semibold uppercase">
+                <th class="px-3 py-2">Tarih</th>
+                <th class="px-3 py-2">Belge</th>
+                <th class="px-3 py-2 text-right">Borç</th>
+                <th class="px-3 py-2 text-right">Alacak</th>
+              </tr>
+            </thead>
+            <tbody id="supplierLedgerBody"></tbody>
+          </table>
+        </div>
+        <p id="supplierLedgerEmpty" class="text-xs text-steel-400 text-center">Kayıtlı hareket yok.</p>
       </div>
     </div>
     <div class="p-4 border-t border-steel-100 flex items-center justify-end gap-2 shrink-0">
@@ -4019,6 +4246,157 @@
     <div class="px-5 py-4 border-t border-steel-100 flex flex-wrap items-center justify-end gap-2 shrink-0">
       <button type="button" id="parasutCrmImportCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
       <button type="button" id="parasutCrmImportConfirmBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md">Seçilenleri Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MUHASEBE · YENİ FİŞ ============ -->
+<div id="acctVoucherOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[86] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
+    <div class="bg-navy px-5 py-4 flex items-start justify-between shrink-0">
+      <div>
+        <p class="text-[11px] text-white/70 font-semibold uppercase tracking-wide">Muhasebe</p>
+        <h3 class="text-white font-bold text-lg mt-0.5">Yeni cari fiş</h3>
+      </div>
+      <button type="button" id="acctVoucherCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="p-5 space-y-3 overflow-y-auto flex-1">
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Cari</label>
+        <select id="acctVoucherParty" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm"></select>
+        <p class="text-[10px] text-steel-400 mt-1">Listede yoksa vergi no ile elle girin (aşağı).</p>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Vergi No</label>
+          <input id="acctVoucherTaxNo" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm mono" placeholder="10/11 hane" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Tarih</label>
+          <input id="acctVoucherDate" type="date" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Belge No</label>
+          <input id="acctVoucherDocNo" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Tip</label>
+          <select id="acctVoucherType" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+            <option value="debit">Borç fişi</option>
+            <option value="credit">Alacak fişi</option>
+            <option value="collection">Tahsilat</option>
+            <option value="payment">Ödeme</option>
+            <option value="invoice_sales">Satış faturası</option>
+            <option value="invoice_purchase">Alış faturası</option>
+            <option value="opening">Açılış</option>
+            <option value="other">Diğer</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Açıklama</label>
+        <input id="acctVoucherDesc" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Borç (₺)</label>
+          <input id="acctVoucherDebit" type="text" inputmode="decimal" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm mono" placeholder="0" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Alacak (₺)</label>
+          <input id="acctVoucherCredit" type="text" inputmode="decimal" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm mono" placeholder="0" />
+        </div>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
+      <button type="button" id="acctVoucherCancelBtn" class="text-sm font-medium text-steel-500 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="acctVoucherSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MUHASEBE · HAREKET EXCEL ÖNİZLEME ============ -->
+<div id="acctMoveImportOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[86] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div class="bg-emerald-700 px-5 py-4 flex items-start justify-between shrink-0">
+      <div>
+        <p class="text-[11px] text-white/70 font-semibold uppercase tracking-wide">Paraşüt · Cari hareket</p>
+        <h3 class="text-white font-bold text-lg mt-0.5">Aktarım önizleme</h3>
+        <p class="text-white/70 text-xs mt-1" id="acctMoveImportMeta">—</p>
+      </div>
+      <button type="button" id="acctMoveImportCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-steel-50 text-[11px] uppercase text-steel-400 font-semibold">
+          <tr>
+            <th class="px-3 py-2.5 text-left">Aktar</th>
+            <th class="px-3 py-2.5 text-left">Durum</th>
+            <th class="px-3 py-2.5 text-left">Unvan</th>
+            <th class="px-3 py-2.5 text-left">Vergi No</th>
+            <th class="px-3 py-2.5 text-left">Tarih</th>
+            <th class="px-3 py-2.5 text-right">Borç</th>
+            <th class="px-3 py-2.5 text-right">Alacak</th>
+          </tr>
+        </thead>
+        <tbody id="acctMoveImportBody" class="divide-y divide-steel-100"></tbody>
+      </table>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
+      <button type="button" id="acctMoveImportCancelBtn" class="text-sm font-medium text-steel-500 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="acctMoveImportConfirmBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl">Seçilenleri aktar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MUHASEBE · YENİ CARİ ONAY ============ -->
+<div id="acctApproveOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[87] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+    <div class="bg-amber-600 px-5 py-4">
+      <p class="text-[11px] text-white/80 font-semibold uppercase tracking-wide">Bir kerelik onay</p>
+      <h3 class="text-white font-bold text-lg mt-0.5">Yeni cari kartı oluştur</h3>
+    </div>
+    <div class="p-5 space-y-3">
+      <p class="text-xs text-steel-500">Sistemde bu vergi no ile kart yok. Onaylarsanız minimal kart oluşturulur; mevcut diğer kartlar değişmez.</p>
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Unvan</label>
+        <input id="acctApproveName" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+      </div>
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Vergi No</label>
+        <input id="acctApproveTaxNo" type="text" readonly class="mt-1 w-full rounded-xl border border-steel-200 bg-steel-50 px-3 py-2.5 text-sm mono" />
+      </div>
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Rol</label>
+        <select id="acctApproveRole" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+          <option value="customer">Müşteri</option>
+          <option value="supplier">Tedarikçi</option>
+          <option value="both">Çift yönlü</option>
+        </select>
+      </div>
+      <div id="acctApproveCatWrap" class="hidden">
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Tedarikçi kategorisi</label>
+        <select id="acctApproveCategory" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+          <option value="Hammadde">Hammadde</option>
+          <option value="Yedek Parça">Yedek Parça</option>
+          <option value="Fason İmalatçı">Fason İmalatçı</option>
+          <option value="Fason Dış Hizmet">Fason Dış Hizmet</option>
+          <option value="Hırdavat">Hırdavat</option>
+          <option value="Takım">Takım</option>
+          <option value="Lojistik">Lojistik</option>
+          <option value="Diğer">Diğer</option>
+        </select>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
+      <button type="button" id="acctApproveCancelBtn" class="text-sm font-medium text-steel-500 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="acctApproveConfirmBtn" class="bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl">Onayla ve kartı oluştur</button>
     </div>
   </div>
 </div>
@@ -5978,6 +6356,8 @@ ${vadeLine}`;
       enrich(materialRfqs, c.materialRfqs);
       enrich(reprocRequests, c.reprocRequests);
       enrich(unforeseenCosts, c.unforeseenCosts);
+      enrich(cariMovements, c.cariMovements, (x) => x.externalKey || x.id);
+      enrich(pendingCariApprovals, c.pendingCariApprovals, (x) => x.id || `${x.company}|${x.taxNo}`);
       if (touched) console.info('[BTD] Yerel cache daha zengindi — geri yüklendi');
       return touched;
     } catch (e) {
@@ -6022,6 +6402,8 @@ ${vadeLine}`;
         materialRfqs,
         reprocRequests,
         unforeseenCosts,
+        cariMovements: Array.isArray(cariMovements) ? cariMovements : [],
+        pendingCariApprovals: Array.isArray(pendingCariApprovals) ? pendingCariApprovals : [],
       };
       localStorage.setItem(ENTITY_CACHE_KEY, JSON.stringify(payload));
     } catch (e) {
@@ -6051,6 +6433,8 @@ ${vadeLine}`;
           materialRfqs,
           reprocRequests,
           unforeseenCosts,
+          cariMovements: Array.isArray(cariMovements) ? cariMovements : [],
+          pendingCariApprovals: Array.isArray(pendingCariApprovals) ? pendingCariApprovals : [],
         };
         localStorage.setItem(ENTITY_CACHE_KEY, JSON.stringify(slim));
       } catch (e2) {
@@ -6084,6 +6468,8 @@ ${vadeLine}`;
       if (Array.isArray(c.materialRfqs)) mutateLocalArray(materialRfqs, c.materialRfqs);
       if (Array.isArray(c.reprocRequests)) mutateLocalArray(reprocRequests, c.reprocRequests);
       if (Array.isArray(c.unforeseenCosts)) mutateLocalArray(unforeseenCosts, c.unforeseenCosts);
+      if (Array.isArray(c.cariMovements) && Array.isArray(cariMovements)) mutateLocalArray(cariMovements, c.cariMovements);
+      if (Array.isArray(c.pendingCariApprovals) && Array.isArray(pendingCariApprovals)) mutateLocalArray(pendingCariApprovals, c.pendingCariApprovals);
       console.info('[BTD] Yerel entity cache yüklendi', new Date(c.at).toISOString());
       return true;
     } catch (e) {
@@ -6664,6 +7050,15 @@ ${vadeLine}`;
     },
   };
   let suppliers = [];
+  /** Cari hareketler (yerel defter) · eşleşme vergi no */
+  let cariMovements = [];
+  /** Yeni cari kartı onay kuyruğu */
+  let pendingCariApprovals = [];
+  let acctActiveTab = 'accounts';
+  let acctStatementTaxNo = '';
+  let acctMovePreviewRows = [];
+  let acctApproveTarget = null;
+  let acctVoucherPrefillTax = '';
   (function seedSuppliers() {
     const companiesList = ['Technomac', 'Bluemac', 'Devorias'];
     companiesList.forEach(company => {
@@ -8105,6 +8500,7 @@ ${vadeLine}`;
     setTxt('companyNameStock', name);
     setTxt('companyNameAndon', name);
     setTxt('companyNameUsers', name);
+    setTxt('companyNameAccounting', name);
     ['Dashboard', 'Orders', 'Procurement', 'Manufacturing', 'Quality', 'Shipping', 'Invoicing', 'Aiqc'].forEach(suffix => {
       setTxt(`companyName${suffix}`, name);
     });
@@ -8447,12 +8843,12 @@ ${vadeLine}`;
     'Kalite Kontrol': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason', 'andon', 'machinepark'],
     'Kalite Kontrol Uzmanı': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason', 'andon', 'machinepark'],
     'Sevkiyat': ['dashboard', 'shipping', 'orders', 'andon'],
-    'Muhasebe': ['dashboard', 'invoicing', 'orders', 'quotes', 'costing', 'customers', 'hr'],
+    'Muhasebe': ['dashboard', 'invoicing', 'accounting', 'orders', 'quotes', 'costing', 'customers', 'suppliers', 'hr'],
   };
   const roleLabels = { 'Yönetici': 'Sistem Yöneticisi', 'Kalite Kontrol': 'Kalite Kontrol Uzmanı', 'Sevkiyat': 'Sevkiyat Sorumlusu' };
   const NAV_REGION2_CRITICAL = ['customers', 'suppliers', 'hr', 'settings'];
   const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'fason', 'quality', 'shipping', 'machinepark', 'andon'];
-  const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders'];
+  const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders', 'accounting'];
 
   function isGroupAdmin(user) {
     if (!user || user.role !== 'Yönetici') return false;
@@ -9742,6 +10138,7 @@ ${vadeLine}`;
     quality: 'page-quality',
     shipping: 'page-shipping',
     invoicing: 'page-invoicing',
+    accounting: 'page-accounting',
     machinepark: 'page-machinepark',
     hr: 'page-hr',
     stock: 'page-stock',
@@ -9828,6 +10225,7 @@ ${vadeLine}`;
     if (page === 'quality') renderQualityPage();
     if (page === 'shipping') renderShippingPage();
     if (page === 'invoicing') renderInvoicingPage();
+    if (page === 'accounting') renderAccountingPage();
     if (page === 'andon') renderAndonHubPage();
     if (page === 'settings') renderSettingsPage();
 
@@ -12229,6 +12627,7 @@ ${vadeLine}`;
     }
     renderSupplierContactsList();
     renderSupplierCapabilityList();
+    renderPartyLedgerInModal('supplier');
     updateNewSupplierSubmitState();
     newSupplierModalOverlay.classList.remove('hidden');
   }
@@ -12362,8 +12761,10 @@ ${vadeLine}`;
       btn.classList.toggle('shadow-sm', active);
       btn.classList.toggle('text-steel-500', !active);
     });
-    document.getElementById('customerTabGeneral').classList.toggle('hidden', tab !== 'general');
-    document.getElementById('customerTabContacts').classList.toggle('hidden', tab !== 'contacts');
+    document.getElementById('customerTabGeneral')?.classList.toggle('hidden', tab !== 'general');
+    document.getElementById('customerTabContacts')?.classList.toggle('hidden', tab !== 'contacts');
+    document.getElementById('customerTabLedger')?.classList.toggle('hidden', tab !== 'ledger');
+    if (tab === 'ledger') renderPartyLedgerInModal('customer');
   }
 
   function renderCustomerContactsList() {
@@ -15851,6 +16252,511 @@ ${vadeLine}`;
     'Gecikmiş': 'text-red-500 bg-red-50',
   };
 
+  // ---------- Muhasebe / Cari defter ----------
+  function acctMoney(n) {
+    const v = Number(n) || 0;
+    return v.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₺';
+  }
+  function acctBalClass(n) {
+    const v = Number(n) || 0;
+    if (v > 0) return 'text-emerald-700';
+    if (v < 0) return 'text-red-600';
+    return 'text-steel-600';
+  }
+  function acctRoleLabel(side) {
+    if (side === 'customer') return 'Müşteri';
+    if (side === 'supplier') return 'Tedarikçi';
+    if (side === 'both') return 'Çift yönlü';
+    return '—';
+  }
+  function acctDocLabel(t) {
+    return (window.BtdAccounting && BtdAccounting.DOC_TYPES[t]) || t || '—';
+  }
+  function setAccountingTab(tab) {
+    acctActiveTab = tab || 'accounts';
+    document.querySelectorAll('.acct-tab-btn').forEach((btn) => {
+      const on = btn.dataset.acctTab === acctActiveTab;
+      btn.classList.toggle('bg-navy', on);
+      btn.classList.toggle('text-white', on);
+      btn.classList.toggle('shadow-sm', on);
+      btn.classList.toggle('text-steel-500', !on);
+    });
+    document.getElementById('acctTabAccounts')?.classList.toggle('hidden', acctActiveTab !== 'accounts');
+    document.getElementById('acctTabMoves')?.classList.toggle('hidden', acctActiveTab !== 'moves');
+    document.getElementById('acctTabImport')?.classList.toggle('hidden', acctActiveTab !== 'import');
+    document.getElementById('acctTabPending')?.classList.toggle('hidden', acctActiveTab !== 'pending');
+    renderAccountingPage();
+  }
+  function renderAccountingPage() {
+    if (!window.BtdAccounting) return;
+    const elCo = document.getElementById('companyNameAccounting');
+    if (elCo) elCo.textContent = activeCompany;
+    const sum = BtdAccounting.companyMovementSummary(cariMovements, activeCompany);
+    const setM = (id, v, cls) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = acctMoney(v);
+      if (cls) el.className = `mt-1 text-xl font-bold mono ${cls}`;
+    };
+    setM('acctSumDebit', sum.debit, 'text-steel-800');
+    setM('acctSumCredit', sum.credit, 'text-emerald-700');
+    setM('acctSumNet', sum.net, acctBalClass(sum.net));
+
+    const pendingN = (pendingCariApprovals || []).filter((p) => p.company === activeCompany && p.status === 'pending').length;
+    const badge = document.getElementById('acctPendingBadge');
+    if (badge) {
+      badge.textContent = String(pendingN);
+      badge.classList.toggle('hidden', pendingN === 0);
+    }
+
+    if (acctActiveTab === 'accounts' || !acctActiveTab) renderAcctAccounts();
+    if (acctActiveTab === 'moves') renderAcctMoves();
+    if (acctActiveTab === 'pending') renderAcctPending();
+    if (acctStatementTaxNo) openAcctStatement(acctStatementTaxNo, true);
+  }
+  function renderAcctAccounts() {
+    const q = (document.getElementById('acctAccountSearch')?.value || '').trim().toLocaleLowerCase('tr-TR');
+    let list = BtdAccounting.buildAccountsIndex(activeCompany, customers, suppliers, cariMovements);
+    if (q) {
+      list = list.filter((r) =>
+        (r.name || '').toLocaleLowerCase('tr-TR').includes(q) || String(r.taxNo || '').includes(q)
+      );
+    }
+    const tbody = document.getElementById('acctAccountsBody');
+    if (!tbody) return;
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-12 text-center text-sm text-steel-400">Cari hesap yok. Excel aktarın veya müşteri/tedarikçi ekleyin.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map((r) => `
+      <tr class="hover:bg-steel-50/60">
+        <td class="px-5 py-3.5 font-semibold text-steel-800">${escapeHtml(r.name || '—')}</td>
+        <td class="px-4 py-3.5 mono text-xs text-steel-500">${escapeHtml(r.taxNo || '—')}</td>
+        <td class="px-4 py-3.5"><span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-steel-100 text-steel-600">${acctRoleLabel(r.side)}</span></td>
+        <td class="px-4 py-3.5 text-right mono text-xs font-semibold ${acctBalClass(r.balance)}">${acctMoney(r.balance)}</td>
+        <td class="px-4 py-3.5 text-xs text-steel-500">${r.lastDate || '—'}</td>
+        <td class="px-4 py-3.5 text-right">
+          <button type="button" data-acct-open-tax="${escapeHtml(r.taxNo)}" class="text-xs font-semibold text-navy hover:underline">Ekstre</button>
+        </td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-acct-open-tax]').forEach((btn) => {
+      btn.addEventListener('click', () => openAcctStatement(btn.dataset.acctOpenTax));
+    });
+  }
+  function renderAcctMoves() {
+    const q = (document.getElementById('acctMoveSearch')?.value || '').trim().toLocaleLowerCase('tr-TR');
+    const from = document.getElementById('acctMoveDateFrom')?.value || '';
+    const to = document.getElementById('acctMoveDateTo')?.value || '';
+    const typ = document.getElementById('acctMoveTypeFilter')?.value || '';
+    let list = (cariMovements || []).filter((m) =>
+      m && m.company === activeCompany && m.approvalStatus !== 'orphan_rejected' && m.approvalStatus !== 'pending'
+    );
+    if (acctStatementTaxNo) list = list.filter((m) => BtdAccounting.digitsOnly(m.taxNo) === BtdAccounting.digitsOnly(acctStatementTaxNo));
+    if (from) list = list.filter((m) => (m.date || '') >= from);
+    if (to) list = list.filter((m) => (m.date || '') <= to);
+    if (typ) list = list.filter((m) => m.docType === typ);
+    if (q) {
+      list = list.filter((m) =>
+        (m.partyName || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        (m.description || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        (m.docNo || '').toLocaleLowerCase('tr-TR').includes(q) ||
+        String(m.taxNo || '').includes(q)
+      );
+    }
+    list.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')) || String(b.id || '').localeCompare(String(a.id || '')));
+    const tbody = document.getElementById('acctMovesBody');
+    if (!tbody) return;
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="px-5 py-12 text-center text-sm text-steel-400">Hareket yok.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.slice(0, 500).map((m) => `
+      <tr class="hover:bg-steel-50/60">
+        <td class="px-5 py-3 text-xs text-steel-600">${escapeHtml(m.date || '—')}</td>
+        <td class="px-4 py-3">
+          <p class="font-semibold text-steel-800 text-xs">${escapeHtml(m.partyName || '—')}</p>
+          <p class="mono text-[10px] text-steel-400">${escapeHtml(m.taxNo || '')}</p>
+        </td>
+        <td class="px-4 py-3 text-xs mono text-steel-500">${escapeHtml(m.docNo || '—')}</td>
+        <td class="px-4 py-3 text-[11px] text-steel-500">${escapeHtml(acctDocLabel(m.docType))}</td>
+        <td class="px-4 py-3 text-xs text-steel-600 max-w-[14rem] truncate">${escapeHtml(m.description || '')}</td>
+        <td class="px-4 py-3 text-right mono text-xs ${m.debit ? 'text-steel-800 font-semibold' : 'text-steel-300'}">${m.debit ? acctMoney(m.debit) : '—'}</td>
+        <td class="px-4 py-3 text-right mono text-xs ${m.credit ? 'text-emerald-700 font-semibold' : 'text-steel-300'}">${m.credit ? acctMoney(m.credit) : '—'}</td>
+      </tr>`).join('');
+  }
+  function renderAcctPending() {
+    const list = (pendingCariApprovals || []).filter((p) => p.company === activeCompany && p.status === 'pending');
+    const tbody = document.getElementById('acctPendingBody');
+    if (!tbody) return;
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-12 text-center text-sm text-steel-400">Onay bekleyen yeni cari yok.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map((p, i) => `
+      <tr class="hover:bg-amber-50/40">
+        <td class="px-5 py-3.5 font-semibold text-steel-800">${escapeHtml(p.suggestedName || '—')}</td>
+        <td class="px-4 py-3.5 mono text-xs">${escapeHtml(p.taxNo || '')}</td>
+        <td class="px-4 py-3.5 text-xs">${acctRoleLabel(p.suggestedRole)}</td>
+        <td class="px-4 py-3.5 text-right text-xs">${p.movementCount || 0}</td>
+        <td class="px-4 py-3.5 text-right mono text-xs ${acctBalClass(p.sampleBalance)}">${acctMoney(p.sampleBalance)}</td>
+        <td class="px-4 py-3.5 text-right whitespace-nowrap">
+          <button type="button" data-acct-approve-idx="${i}" class="text-xs font-semibold text-amber-700 hover:underline mr-2">Onayla</button>
+          <button type="button" data-acct-reject-idx="${i}" class="text-xs font-semibold text-red-600 hover:underline">Reddet</button>
+        </td>
+      </tr>`).join('');
+    tbody.querySelectorAll('[data-acct-approve-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => openAcctApprove(list[Number(btn.dataset.acctApproveIdx)]));
+    });
+    tbody.querySelectorAll('[data-acct-reject-idx]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const p = list[Number(btn.dataset.acctRejectIdx)];
+        if (!p || !confirm(`Vergi no ${p.taxNo} için yeni cari reddedilsin mi? İlişkili hareketler askıya alınır.`)) return;
+        BtdAccounting.rejectPendingCari(p, cariMovements);
+        persistEntityCache();
+        showToast('Yeni cari reddedildi.', 'info');
+        renderAccountingPage();
+      });
+    });
+  }
+  function openAcctStatement(taxNo, soft) {
+    const dig = BtdAccounting.isCheckableTaxNo(taxNo);
+    if (!dig) return;
+    acctStatementTaxNo = dig;
+    const panel = document.getElementById('acctStatementPanel');
+    if (!panel) return;
+    panel.classList.remove('hidden');
+    const hit = BtdAccounting.findPartyByTaxNo(activeCompany, dig, customers, suppliers);
+    const name = hit.customer?.name || hit.supplier?.name ||
+      (cariMovements.find((m) => m.company === activeCompany && BtdAccounting.digitsOnly(m.taxNo) === dig)?.partyName) ||
+      dig;
+    document.getElementById('acctStatementTitle').textContent = name;
+    document.getElementById('acctStatementTax').textContent = dig;
+    const withBal = BtdAccounting.withRunningBalance(
+      BtdAccounting.movementsForTaxNo(cariMovements, activeCompany, dig).filter((m) => m.approvalStatus !== 'pending')
+    );
+    const tbody = document.getElementById('acctStatementBody');
+    if (!withBal.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-8 text-center text-sm text-steel-400">Hareket yok.</td></tr>`;
+    } else {
+      tbody.innerHTML = withBal.map((m) => `
+        <tr>
+          <td class="px-5 py-2.5 text-xs">${escapeHtml(m.date || '')}</td>
+          <td class="px-4 py-2.5 text-xs mono">${escapeHtml(m.docNo || '—')}</td>
+          <td class="px-4 py-2.5 text-xs text-steel-600">${escapeHtml(m.description || acctDocLabel(m.docType))}</td>
+          <td class="px-4 py-2.5 text-right mono text-xs">${m.debit ? acctMoney(m.debit) : '—'}</td>
+          <td class="px-4 py-2.5 text-right mono text-xs text-emerald-700">${m.credit ? acctMoney(m.credit) : '—'}</td>
+          <td class="px-4 py-2.5 text-right mono text-xs font-semibold ${acctBalClass(m.balanceAfter)}">${acctMoney(m.balanceAfter)}</td>
+        </tr>`).join('');
+    }
+    if (!soft && acctActiveTab !== 'moves') {
+      /* keep accounts tab; panel below */
+    }
+  }
+  function closeAcctStatement() {
+    acctStatementTaxNo = '';
+    document.getElementById('acctStatementPanel')?.classList.add('hidden');
+  }
+  function renderPartyLedgerInModal(kind) {
+    const party = kind === 'customer' ? customerModalEditingTarget : supplierModalEditingTarget;
+    const balEl = document.getElementById(kind === 'customer' ? 'customerLedgerBalance' : 'supplierLedgerBalance');
+    const body = document.getElementById(kind === 'customer' ? 'customerLedgerBody' : 'supplierLedgerBody');
+    const empty = document.getElementById(kind === 'customer' ? 'customerLedgerEmpty' : 'supplierLedgerEmpty');
+    if (!party || !BtdAccounting.isCheckableTaxNo(party.taxNo)) {
+      if (balEl) balEl.textContent = 'Vergi no gerekli';
+      if (body) body.innerHTML = '';
+      if (empty) empty.classList.remove('hidden');
+      return;
+    }
+    const dig = BtdAccounting.digitsOnly(party.taxNo);
+    const bal = BtdAccounting.balanceForTaxNo(cariMovements, activeCompany, dig);
+    if (balEl) {
+      balEl.textContent = acctMoney(bal);
+      balEl.className = `text-lg font-bold mono ${acctBalClass(bal)}`;
+    }
+    const list = BtdAccounting.movementsForTaxNo(cariMovements, activeCompany, dig)
+      .filter((m) => m.approvalStatus !== 'pending' && m.approvalStatus !== 'orphan_rejected')
+      .slice()
+      .reverse()
+      .slice(0, 12);
+    if (body) {
+      body.innerHTML = list.map((m) => `
+        <tr>
+          <td class="px-3 py-1.5 text-xs">${escapeHtml(m.date || '')}</td>
+          <td class="px-3 py-1.5 text-xs mono">${escapeHtml(m.docNo || '—')}</td>
+          <td class="px-3 py-1.5 text-right mono text-xs">${m.debit ? acctMoney(m.debit) : '—'}</td>
+          <td class="px-3 py-1.5 text-right mono text-xs text-emerald-700">${m.credit ? acctMoney(m.credit) : '—'}</td>
+        </tr>`).join('');
+    }
+    if (empty) empty.classList.toggle('hidden', list.length > 0);
+  }
+  function fillAcctVoucherParties(prefillTax) {
+    const sel = document.getElementById('acctVoucherParty');
+    if (!sel) return;
+    const opts = [];
+    (customers || []).filter((c) => c.company === activeCompany && BtdAccounting.isCheckableTaxNo(c.taxNo)).forEach((c) => {
+      opts.push({ tax: BtdAccounting.digitsOnly(c.taxNo), label: `${c.name} · Müşteri · ${BtdAccounting.digitsOnly(c.taxNo)}`, side: 'customer', name: c.name });
+    });
+    (suppliers || []).filter((s) => s.company === activeCompany && BtdAccounting.isCheckableTaxNo(s.taxNo)).forEach((s) => {
+      const dig = BtdAccounting.digitsOnly(s.taxNo);
+      if (!opts.some((o) => o.tax === dig && o.side === 'supplier')) {
+        opts.push({ tax: dig, label: `${s.name} · Tedarikçi · ${dig}`, side: 'supplier', name: s.name });
+      }
+    });
+    opts.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
+    sel.innerHTML = `<option value="">— Seçin veya vergi no girin —</option>` +
+      opts.map((o) => `<option value="${o.tax}|${o.side}" data-name="${escapeHtml(o.name)}" ${prefillTax && o.tax === prefillTax ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('');
+    if (prefillTax) {
+      document.getElementById('acctVoucherTaxNo').value = prefillTax;
+    }
+  }
+  function openAcctVoucher(prefillTax) {
+    acctVoucherPrefillTax = prefillTax || '';
+    fillAcctVoucherParties(acctVoucherPrefillTax);
+    document.getElementById('acctVoucherDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('acctVoucherDocNo').value = '';
+    document.getElementById('acctVoucherDesc').value = '';
+    document.getElementById('acctVoucherDebit').value = '';
+    document.getElementById('acctVoucherCredit').value = '';
+    document.getElementById('acctVoucherType').value = 'debit';
+    if (acctVoucherPrefillTax) document.getElementById('acctVoucherTaxNo').value = acctVoucherPrefillTax;
+    else if (!document.getElementById('acctVoucherParty').value) document.getElementById('acctVoucherTaxNo').value = '';
+    document.getElementById('acctVoucherOverlay')?.classList.remove('hidden');
+  }
+  function closeAcctVoucher() {
+    document.getElementById('acctVoucherOverlay')?.classList.add('hidden');
+  }
+  function saveAcctVoucher() {
+    const partyVal = document.getElementById('acctVoucherParty')?.value || '';
+    let taxNo = (document.getElementById('acctVoucherTaxNo')?.value || '').trim();
+    let partyName = '';
+    let side = 'unknown';
+    if (partyVal) {
+      const [t, s] = partyVal.split('|');
+      taxNo = t || taxNo;
+      side = s || side;
+      const opt = document.getElementById('acctVoucherParty').selectedOptions[0];
+      partyName = opt?.dataset?.name || opt?.textContent?.split('·')[0]?.trim() || '';
+    }
+    const hit = BtdAccounting.findPartyByTaxNo(activeCompany, taxNo, customers, suppliers);
+    if (!partyName) partyName = hit.customer?.name || hit.supplier?.name || '';
+    if (hit.customer && hit.supplier) side = 'both';
+    else if (hit.customer) side = 'customer';
+    else if (hit.supplier) side = 'supplier';
+
+    const docType = document.getElementById('acctVoucherType').value;
+    let debit = document.getElementById('acctVoucherDebit').value;
+    let credit = document.getElementById('acctVoucherCredit').value;
+    if (docType === 'collection' || docType === 'credit' || docType === 'payment') {
+      if (!BtdAccounting.parseMoney(credit) && BtdAccounting.parseMoney(debit)) {
+        credit = debit;
+        debit = '0';
+      }
+    }
+    const res = BtdAccounting.createManualMovement({
+      company: activeCompany,
+      taxNo,
+      partyName,
+      side,
+      partyKey: hit.customer?.partyKey || hit.supplier?.partyKey || '',
+      date: document.getElementById('acctVoucherDate').value,
+      docNo: document.getElementById('acctVoucherDocNo').value,
+      description: document.getElementById('acctVoucherDesc').value,
+      docType,
+      debit,
+      credit,
+    });
+    if (!res.ok) {
+      showToast(res.reason || 'Kayıt hatası', 'error');
+      return;
+    }
+    if (!hit.customer && !hit.supplier) {
+      showToast('Bu vergi no ile cari kart yok. Önce müşteri/tedarikçi oluşturun veya Excel aktarımında onaylayın.', 'error');
+      return;
+    }
+    cariMovements.push(res.movement);
+    BtdAccounting.syncCardBalancesOnly(activeCompany, customers, suppliers, cariMovements);
+    persistEntityCache();
+    closeAcctVoucher();
+    showToast('Fiş kaydedildi.', 'success');
+    renderAccountingPage();
+    if (customerModalEditingTarget) renderPartyLedgerInModal('customer');
+    if (supplierModalEditingTarget) renderPartyLedgerInModal('supplier');
+  }
+  function openAcctApprove(pending) {
+    acctApproveTarget = pending;
+    document.getElementById('acctApproveName').value = pending.suggestedName || '';
+    document.getElementById('acctApproveTaxNo').value = pending.taxNo || '';
+    document.getElementById('acctApproveRole').value = pending.suggestedRole || 'customer';
+    document.getElementById('acctApproveCategory').value = pending.suggestedCategory || 'Hammadde';
+    const wrap = document.getElementById('acctApproveCatWrap');
+    const role = document.getElementById('acctApproveRole').value;
+    wrap?.classList.toggle('hidden', role === 'customer');
+    document.getElementById('acctApproveOverlay')?.classList.remove('hidden');
+  }
+  function closeAcctApprove() {
+    acctApproveTarget = null;
+    document.getElementById('acctApproveOverlay')?.classList.add('hidden');
+  }
+  async function confirmAcctApprove() {
+    if (!acctApproveTarget) return;
+    const role = document.getElementById('acctApproveRole').value;
+    const name = document.getElementById('acctApproveName').value.trim();
+    const category = document.getElementById('acctApproveCategory').value;
+    const r = BtdAccounting.approvePendingCari(
+      acctApproveTarget,
+      { role, name, category },
+      customers,
+      suppliers,
+      cariMovements,
+      buildPartyKey,
+      typeof guessCrmShortName === 'function' ? guessCrmShortName : null
+    );
+    if (!r.ok) {
+      showToast(r.reason || 'Onay başarısız', 'error');
+      return;
+    }
+    if (r.created.customer && r.customer) {
+      clearTombstone('customers', partyEntityKey(r.customer));
+      await cloudSaveAwait('saveCustomer', r.customer, companies);
+    }
+    if (r.created.supplier && r.supplier) {
+      clearTombstone('suppliers', partyEntityKey(r.supplier));
+      await cloudSaveAwait('saveSupplier', r.supplier, companies);
+    }
+    persistEntityCache();
+    closeAcctApprove();
+    showToast(`Cari onaylandı: ${name}`, 'success');
+    renderAccountingPage();
+    if (typeof renderCustomersPage === 'function') renderCustomersPage();
+    if (typeof renderSuppliersPage === 'function') renderSuppliersPage();
+  }
+  function renderAcctMoveImportPreview() {
+    const tbody = document.getElementById('acctMoveImportBody');
+    const meta = document.getElementById('acctMoveImportMeta');
+    if (!tbody) return;
+    const rows = acctMovePreviewRows || [];
+    const matched = rows.filter((r) => r.status === 'matched').length;
+    const pending = rows.filter((r) => r.status === 'pending_new').length;
+    const skipped = rows.filter((r) => r.status === 'skip').length;
+    if (meta) meta.textContent = `${activeCompany} · ${matched} eşleşti · ${pending} yeni (onay) · ${skipped} atlandı`;
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-sm text-steel-400">Satır yok</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rows.map((r, i) => {
+      const stCls = r.status === 'matched' ? 'text-emerald-700' : r.status === 'pending_new' ? 'text-amber-700' : 'text-steel-400';
+      return `<tr>
+        <td class="px-3 py-2"><input type="checkbox" data-acct-imp-sel="${i}" ${r.selected ? 'checked' : ''} ${r.status === 'skip' ? 'disabled' : ''} /></td>
+        <td class="px-3 py-2 text-xs font-semibold ${stCls}">${escapeHtml(r.reason || r.status)}</td>
+        <td class="px-3 py-2 text-xs font-semibold text-steel-800">${escapeHtml(r.name || '—')}</td>
+        <td class="px-3 py-2 text-xs mono">${escapeHtml(r.taxNo || '')}</td>
+        <td class="px-3 py-2 text-xs">${escapeHtml(r.date || '—')}</td>
+        <td class="px-3 py-2 text-right mono text-xs">${r.debit ? acctMoney(r.debit) : '—'}</td>
+        <td class="px-3 py-2 text-right mono text-xs text-emerald-700">${r.credit ? acctMoney(r.credit) : '—'}</td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-acct-imp-sel]').forEach((inp) => {
+      inp.addEventListener('change', () => {
+        const i = Number(inp.dataset.acctImpSel);
+        if (acctMovePreviewRows[i]) acctMovePreviewRows[i].selected = inp.checked;
+      });
+    });
+  }
+  async function handleAcctMoveFile(file) {
+    if (!file || typeof XLSX === 'undefined') {
+      showToast('Excel okuyucu yüklenemedi.', 'error');
+      return;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const preview = BtdAccounting.parseWorkbookToPreview(wb, activeCompany, customers, suppliers, cariMovements);
+      if (!preview.ok) {
+        showToast(preview.reason || 'Önizleme başarısız', 'error');
+        return;
+      }
+      acctMovePreviewRows = preview.rows;
+      renderAcctMoveImportPreview();
+      document.getElementById('acctMoveImportOverlay')?.classList.remove('hidden');
+      if (!preview.rows.length) showToast('Dosyada işlenebilir hareket satırı bulunamadı.', 'info');
+    } catch (err) {
+      console.warn('[BTD] acct excel', err);
+      showToast('Excel okunamadı: ' + (err.message || 'hata'), 'error');
+    }
+  }
+  function confirmAcctMoveImport() {
+    const r = BtdAccounting.applyPreviewImport(acctMovePreviewRows, activeCompany, cariMovements, pendingCariApprovals);
+    BtdAccounting.syncCardBalancesOnly(activeCompany, customers, suppliers, cariMovements);
+    persistEntityCache();
+    document.getElementById('acctMoveImportOverlay')?.classList.add('hidden');
+    acctMovePreviewRows = [];
+    const pendingN = (pendingCariApprovals || []).filter((p) => p.company === activeCompany && p.status === 'pending').length;
+    showToast(`${r.added} hareket aktarıldı${pendingN ? ` · ${pendingN} yeni cari onay bekliyor` : ''}.`, pendingN ? 'info' : 'success');
+    setAccountingTab(pendingN ? 'pending' : 'moves');
+    if (typeof renderCustomersPage === 'function') renderCustomersPage();
+    if (typeof renderSuppliersPage === 'function') renderSuppliersPage();
+  }
+
+  (function wireAccountingUi() {
+    document.querySelectorAll('.acct-tab-btn').forEach((btn) => {
+      btn.addEventListener('click', () => setAccountingTab(btn.dataset.acctTab));
+    });
+    document.getElementById('acctAccountSearch')?.addEventListener('input', () => { if (acctActiveTab === 'accounts') renderAcctAccounts(); });
+    ['acctMoveSearch', 'acctMoveDateFrom', 'acctMoveDateTo', 'acctMoveTypeFilter'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('input', () => { if (acctActiveTab === 'moves') renderAcctMoves(); });
+      document.getElementById(id)?.addEventListener('change', () => { if (acctActiveTab === 'moves') renderAcctMoves(); });
+    });
+    const openFile = () => document.getElementById('acctMoveFileInput')?.click();
+    document.getElementById('acctImportExcelBtn')?.addEventListener('click', openFile);
+    document.getElementById('acctImportExcelBtn2')?.addEventListener('click', openFile);
+    document.getElementById('acctMoveFileInput')?.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';
+      if (f) handleAcctMoveFile(f);
+    });
+    document.getElementById('acctNewVoucherBtn')?.addEventListener('click', () => openAcctVoucher(''));
+    document.getElementById('acctVoucherCloseBtn')?.addEventListener('click', closeAcctVoucher);
+    document.getElementById('acctVoucherCancelBtn')?.addEventListener('click', closeAcctVoucher);
+    document.getElementById('acctVoucherSaveBtn')?.addEventListener('click', saveAcctVoucher);
+    document.getElementById('acctVoucherParty')?.addEventListener('change', () => {
+      const v = document.getElementById('acctVoucherParty').value;
+      if (v) document.getElementById('acctVoucherTaxNo').value = v.split('|')[0] || '';
+    });
+    document.getElementById('acctStatementCloseBtn')?.addEventListener('click', closeAcctStatement);
+    document.getElementById('acctStatementAddBtn')?.addEventListener('click', () => openAcctVoucher(acctStatementTaxNo));
+    document.getElementById('acctMoveImportCloseBtn')?.addEventListener('click', () => document.getElementById('acctMoveImportOverlay')?.classList.add('hidden'));
+    document.getElementById('acctMoveImportCancelBtn')?.addEventListener('click', () => document.getElementById('acctMoveImportOverlay')?.classList.add('hidden'));
+    document.getElementById('acctMoveImportConfirmBtn')?.addEventListener('click', confirmAcctMoveImport);
+    document.getElementById('acctApproveCancelBtn')?.addEventListener('click', closeAcctApprove);
+    document.getElementById('acctApproveConfirmBtn')?.addEventListener('click', () => { confirmAcctApprove(); });
+    document.getElementById('acctApproveRole')?.addEventListener('change', () => {
+      const role = document.getElementById('acctApproveRole').value;
+      document.getElementById('acctApproveCatWrap')?.classList.toggle('hidden', role === 'customer');
+    });
+    document.getElementById('customerLedgerAddBtn')?.addEventListener('click', () => {
+      const t = customerModalEditingTarget;
+      openAcctVoucher(t ? BtdAccounting.digitsOnly(t.taxNo) : '');
+    });
+    document.getElementById('customerLedgerOpenAcctBtn')?.addEventListener('click', () => {
+      const t = customerModalEditingTarget;
+      closeNewCustomerModal();
+      showPage('accounting');
+      if (t && BtdAccounting.isCheckableTaxNo(t.taxNo)) openAcctStatement(t.taxNo);
+    });
+    document.getElementById('supplierLedgerAddBtn')?.addEventListener('click', () => {
+      const t = supplierModalEditingTarget;
+      openAcctVoucher(t ? BtdAccounting.digitsOnly(t.taxNo) : '');
+    });
+    document.getElementById('supplierLedgerOpenAcctBtn')?.addEventListener('click', () => {
+      const t = supplierModalEditingTarget;
+      closeNewSupplierModal();
+      showPage('accounting');
+      if (t && BtdAccounting.isCheckableTaxNo(t.taxNo)) openAcctStatement(t.taxNo);
+    });
+    document.getElementById('gotoAccountingFromCustomers')?.addEventListener('click', () => showPage('accounting'));
+    document.getElementById('gotoAccountingFromSuppliers')?.addEventListener('click', () => showPage('accounting'));
+  })();
+
   function renderInvoicingPage() {
     document.getElementById('companyNameInvoicing').textContent = activeCompany;
     const list = invoices.filter(i => i.company === activeCompany).sort((a, b) => b.id.localeCompare(a.id));
@@ -16497,7 +17403,7 @@ Teşekkürler.`;
   }
 
   // ---------- Kullanıcı ve Yetki Yönetimi (RBAC) ----------
-  const permModules = ['Maliyet', 'Teklifler', 'Siparişler', 'İş Emirleri', 'Tedarik', 'İmalat', 'Fason Takip', 'Kalite Kontrol', 'Sevkiyat', 'Faturalandırma', 'Müşteriler', 'Tedarikçiler', 'Stok'];
+  const permModules = ['Maliyet', 'Teklifler', 'Siparişler', 'İş Emirleri', 'Tedarik', 'İmalat', 'Fason Takip', 'Kalite Kontrol', 'Sevkiyat', 'Faturalandırma', 'Muhasebe', 'Müşteriler', 'Tedarikçiler', 'Stok'];
   const permColumns = ['view', 'edit', 'delete', 'export'];
 
   function defaultPerms() {
