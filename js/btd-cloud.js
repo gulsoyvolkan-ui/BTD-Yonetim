@@ -8,7 +8,7 @@
 
   const CURRENCY_TO_DB = { '₺': 'TRY', '€': 'EUR', '$': 'USD', '£': 'GBP', TRY: 'TRY', EUR: 'EUR', USD: 'USD', GBP: 'GBP' };
   const CURRENCY_TO_UI = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', '₺': '₺', '€': '€', '$': '$', '£': '£' };
-  const PROTECTED_USERS = new Set(['volkan', 'ahmet']);
+  const PROTECTED_USERS = new Set(['volkan']); // Canlı: yalnızca ana yönetici korunur
   const SEED_FLAG = 'btd_cloud_seeded_v1';
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -873,12 +873,13 @@
         perms: prev?.perms,
       };
     });
-    // Korunan demo kullanıcıları: kaybolmasın + şifre/yetki bozulmasın
+    // Korunan yönetici: yalnızca ilk seed’te eksikse enjekte et (canlıda silineni geri getirme)
     PROTECTED_USERS.forEach((uname) => {
       const local = localByUser[uname];
       if (!local) return;
       const idx = mapped.findIndex((u) => (u.username || '').toLowerCase() === uname);
       if (idx < 0) {
+        if (alreadySeeded()) return;
         mapped.push({ ...local });
         return;
       }

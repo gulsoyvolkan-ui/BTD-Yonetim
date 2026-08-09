@@ -5622,6 +5622,40 @@ ${vadeLine}`;
   function markCloudSeededLocal() {
     try { localStorage.setItem('btd_cloud_seeded_v1', '1'); } catch (_) { /* ignore */ }
   }
+  /** Canlı mod: bulut once seeded — demo tekrar basılmaz */
+  function isLiveMode() {
+    return isCloudSeeded();
+  }
+  function markLiveMode() {
+    markCloudSeededLocal();
+  }
+  /** Canlı kurulumda sayfa yükünde gömülü demo dizilerini boşalt */
+  function clearDemoEntitiesForLive() {
+    if (!isLiveMode()) return;
+    const wipe = (arr) => { if (Array.isArray(arr)) arr.length = 0; };
+    try {
+      wipe(typeof quotes !== 'undefined' ? quotes : null);
+      wipe(typeof orders !== 'undefined' ? orders : null);
+      wipe(typeof customers !== 'undefined' ? customers : null);
+      wipe(typeof suppliers !== 'undefined' ? suppliers : null);
+      wipe(typeof costAnalyses !== 'undefined' ? costAnalyses : null);
+      wipe(typeof procurementItems !== 'undefined' ? procurementItems : null);
+      wipe(typeof fasonJobs !== 'undefined' ? fasonJobs : null);
+      wipe(typeof qcRecords !== 'undefined' ? qcRecords : null);
+      wipe(typeof shipments !== 'undefined' ? shipments : null);
+      wipe(typeof invoices !== 'undefined' ? invoices : null);
+      wipe(typeof personnel !== 'undefined' ? personnel : null);
+      wipe(typeof attendanceLogs !== 'undefined' ? attendanceLogs : null);
+      wipe(typeof leaveRequests !== 'undefined' ? leaveRequests : null);
+      wipe(typeof materialRfqs !== 'undefined' ? materialRfqs : null);
+      wipe(typeof reprocRequests !== 'undefined' ? reprocRequests : null);
+      wipe(typeof unforeseenCosts !== 'undefined' ? unforeseenCosts : null);
+      wipe(typeof workOrders !== 'undefined' ? workOrders : null);
+      wipe(typeof users !== 'undefined' ? users : null);
+    } catch (e) {
+      console.warn('[BTD] demo wipe', e);
+    }
+  }
   function mutateLocalArray(arr, rows) {
     if (!Array.isArray(arr)) return;
     arr.length = 0;
@@ -5702,6 +5736,7 @@ ${vadeLine}`;
         invoices,
         workOrders: Array.isArray(workOrders) ? [...workOrders] : [],
         personnel,
+        users: Array.isArray(users) ? users.map((u) => ({ ...u, perms: u.perms || null })) : [],
         materialRfqs,
         reprocRequests,
         unforeseenCosts,
@@ -5724,6 +5759,13 @@ ${vadeLine}`;
           invoices,
           workOrders: Array.isArray(workOrders) ? workOrders.map((w) => ({ ...w })) : [],
           personnel: (personnel || []).map((p) => ({ ...p, photo: '' })),
+          users: Array.isArray(users) ? users.map((u) => ({
+            username: u.username, name: u.name, password: u.password, dept: u.dept,
+            role: u.role, scope: u.scope, companies: u.companies, isGod: u.isGod,
+            accessCritical: u.accessCritical, collar: u.collar, email: u.email,
+            phone: u.phone, tcNo: u.tcNo, address: u.address, personnelId: u.personnelId,
+            dbId: u.dbId, perms: u.perms || null,
+          })) : [],
           materialRfqs,
           reprocRequests,
           unforeseenCosts,
@@ -5756,6 +5798,7 @@ ${vadeLine}`;
       if (Array.isArray(c.invoices)) mutateLocalArray(invoices, c.invoices);
       if (Array.isArray(c.workOrders) && Array.isArray(workOrders)) mutateLocalArray(workOrders, c.workOrders);
       if (Array.isArray(c.personnel)) mutateLocalArray(personnel, c.personnel);
+      if (Array.isArray(c.users) && Array.isArray(users)) mutateLocalArray(users, c.users);
       if (Array.isArray(c.materialRfqs)) mutateLocalArray(materialRfqs, c.materialRfqs);
       if (Array.isArray(c.reprocRequests)) mutateLocalArray(reprocRequests, c.reprocRequests);
       if (Array.isArray(c.unforeseenCosts)) mutateLocalArray(unforeseenCosts, c.unforeseenCosts);
@@ -5779,6 +5822,7 @@ ${vadeLine}`;
       qcRecords: (qcRecords || []).slice(),
       shipments: (shipments || []).slice(),
       invoices: (invoices || []).slice(),
+      users: Array.isArray(users) ? users.map((u) => ({ ...u })) : [],
     };
   }
 
@@ -5825,8 +5869,14 @@ ${vadeLine}`;
     const o = await pushMissing(snapshot.orders, orders, (x) => x?.id, 'saveOrder');
     const q = await pushMissing(snapshot.quotes, quotes, (x) => x?.id, 'saveQuote');
     const ca = await pushMissing(snapshot.costAnalyses, costAnalyses, (x) => x?.id, 'saveCostAnalysis');
-    if (c || s || o || q || ca || mergedC || mergedS) {
-      console.info('[BTD] Yerel orphan senkron', { customers: c, suppliers: s, orders: o, quotes: q, costAnalyses: ca, mergedCustomers: mergedC, mergedSuppliers: mergedS });
+    const tombs = readTombstones().users || {};
+    const userList = (snapshot.users || []).filter((u) => {
+      const k = (u?.username || '').toLowerCase();
+      return k && !tombs[k];
+    });
+    const u = await pushMissing(userList, users, (x) => (x?.username || '').toLowerCase(), 'saveUser');
+    if (c || s || o || q || ca || u || mergedC || mergedS) {
+      console.info('[BTD] Yerel orphan senkron', { customers: c, suppliers: s, orders: o, quotes: q, costAnalyses: ca, users: u, mergedCustomers: mergedC, mergedSuppliers: mergedS });
     }
   }
 
@@ -5842,6 +5892,7 @@ ${vadeLine}`;
     applyTombstones('shipments', shipments, (x) => x?.id, 'deleteShipment');
     applyTombstones('invoices', invoices, (x) => x?.id, 'deleteInvoice');
     applyTombstones('personnel', personnel, (x) => x?.id, 'deletePersonnel');
+    applyTombstones('users', users, (x) => (x?.username || '').toLowerCase(), 'deleteUser');
   }
 
   /** Ayarlar (firma / ödeme / döviz / nakliye) yerel yedek — yenilemede hydrate üstüne yazılır */
@@ -16091,24 +16142,26 @@ Teşekkürler.`;
   let editUserTarget = null;
   let revealedPasswords = new Set();
 
-  let users = [
-    {
-      username: 'volkan', name: 'Volkan', password: '123456', dept: 'Yönetim',
-      scope: 'Tüm Grup', companies: ['Technomac', 'Bluemac', 'Devorias'],
-      role: 'Yönetici', perms: adminPerms(), isGod: true,
-      tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
-      collar: 'white', accessCritical: true,
-    },
-    {
-      username: 'ahmet', name: 'Ahmet Yıldız', password: '123456', dept: 'CNC',
-      scope: 'Technomac', companies: ['Technomac'],
-      role: 'Operatör', perms: defaultPerms(), isGod: false,
-      tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
-      address: 'Pendik / İstanbul', personnelId: 'P-TM-001',
-      collar: 'blue', accessCritical: false,
-    },
-  ];
-  // Yönetici: Volkan / 123456 · Mavi yaka demo: ahmet / 123456 (Technomac)
+  let users = (typeof isCloudSeeded === 'function' && isCloudSeeded())
+    ? []
+    : [
+      {
+        username: 'volkan', name: 'Volkan', password: '123456', dept: 'Yönetim',
+        scope: 'Tüm Grup', companies: ['Technomac', 'Bluemac', 'Devorias'],
+        role: 'Yönetici', perms: adminPerms(), isGod: true,
+        tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
+        collar: 'white', accessCritical: true,
+      },
+      {
+        username: 'ahmet', name: 'Ahmet Yıldız', password: '123456', dept: 'CNC',
+        scope: 'Technomac', companies: ['Technomac'],
+        role: 'Operatör', perms: defaultPerms(), isGod: false,
+        tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
+        address: 'Pendik / İstanbul', personnelId: 'P-TM-001',
+        collar: 'blue', accessCritical: false,
+      },
+    ];
+  // İlk kurulum: Volkan / 123456 · Canlı modda liste cache + Supabase’ten gelir
 
   function formatUserCompaniesLabel(u) {
     if (!u) return '—';
@@ -16250,7 +16303,7 @@ Teşekkürler.`;
     renderUserCompanyChecks('newUserCompanies', 'newUserAllGroup', companies);
     syncCriticalAccessUiFromCollar('newUserCollar', 'newUserAccessCritical');
   }
-  function createUserFromPersonnel(p, opts = {}) {
+  async function createUserFromPersonnel(p, opts = {}) {
     if (!p) return null;
     if (users.some(u => u.personnelId === p.id || (p.userId && u.username === p.userId))) {
       showToast('Bu personelin zaten kullanıcı hesabı var.', 'error');
@@ -16284,7 +16337,12 @@ Teşekkürler.`;
     if (row.collar === 'manager') row.accessCritical = true;
     users.push(row);
     p.userId = username;
-    cloudSave('saveUser', row, companies);
+    clearTombstone('users', username);
+    const saved = await cloudSaveAwait('saveUser', row, companies);
+    if (saved && saved.ok === false) {
+      showToast('Kullanıcı buluta yazılamadı; yerel kayıt tutuluyor.', 'warn');
+    }
+    schedulePersistEntityCache();
     return row;
   }
 
@@ -16450,8 +16508,10 @@ Teşekkürler.`;
       });
     });
     tbody.querySelectorAll('[data-del-user]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const u = users[Number(btn.dataset.delUser)];
+      btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.delUser);
+        const u = users[idx];
+        if (!u) return;
         const admins = users.filter(isGroupAdmin);
         if (isGroupAdmin(u) && admins.length <= 1) {
           showToast('Son grup yöneticisi silinemez.', 'error');
@@ -16461,9 +16521,19 @@ Teşekkürler.`;
           showToast('Kendi hesabınızı silemezsiniz.', 'error');
           return;
         }
+        const uname = (u.username || '').toLowerCase();
+        if (uname === 'volkan') {
+          showToast('Korumalı yönetici hesabı silinemez.', 'error');
+          return;
+        }
         if (!confirmDelete(`Kullanıcı “${u.name || u.username}” silinecek.`)) return;
-        users = users.filter(x => x !== u);
-        cloudSave('deleteUser', u);
+        users.splice(idx, 1);
+        addTombstone('users', uname);
+        const del = await cloudSaveAwait('deleteUser', u);
+        if (del && del.ok === false) {
+          showToast('Buluttan silinemedi; yerel olarak kaldırıldı (yenilemede tekrarlanmayacak).', 'warn');
+        }
+        schedulePersistEntityCache();
         revealedPasswords = new Set();
         renderUsersTable();
         showToast(`${u.name} kullanıcı listesinden kaldırıldı.`, 'info');
@@ -16521,7 +16591,7 @@ Teşekkürler.`;
     syncCriticalAccessUiFromCollar('editUserCollar', 'editUserAccessCritical');
   });
 
-  document.getElementById('addUserBtn').addEventListener('click', () => {
+  document.getElementById('addUserBtn').addEventListener('click', async () => {
     const mode = newUserSourceMode();
     const username = (document.getElementById('newUserUsername')?.value || '').trim().toLowerCase();
     const password = document.getElementById('newUserPassword').value;
@@ -16542,7 +16612,7 @@ Teşekkürler.`;
       const pid = document.getElementById('newUserPersonnelSelect')?.value;
       const p = personnel.find(x => x.id === pid);
       if (!p) { showToast('Kayıtlı personel seçin.', 'error'); return; }
-      const row = createUserFromPersonnel(p, {
+      const row = await createUserFromPersonnel(p, {
         username, password, role,
         companies: access.companies,
         allGroup: access.allGroup,
@@ -16579,7 +16649,12 @@ Teşekkürler.`;
     if (access.allGroup) { row.scope = 'Tüm Grup'; row.isGod = role === 'Yönetici'; }
     else row.isGod = isGroupAdmin(row);
     users.push(row);
-    cloudSave('saveUser', row, companies);
+    clearTombstone('users', username);
+    const saved = await cloudSaveAwait('saveUser', row, companies);
+    if (saved && saved.ok === false) {
+      showToast('Kullanıcı buluta yazılamadı; yerel kayıt tutuluyor.', 'warn');
+    }
+    schedulePersistEntityCache();
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserUsername').value = '';
     document.getElementById('newUserPassword').value = '';
@@ -16654,7 +16729,7 @@ Teşekkürler.`;
     if (e.key === 'Escape' && !editUserModalOverlay.classList.contains('hidden')) closeEditUserModal();
   });
 
-  document.getElementById('editUserSaveBtn').addEventListener('click', () => {
+  document.getElementById('editUserSaveBtn').addEventListener('click', async () => {
     if (!editUserTarget) return;
     const name = document.getElementById('editUserName').value.trim();
     const username = (document.getElementById('editUserUsername')?.value || '').trim().toLowerCase();
@@ -16728,8 +16803,18 @@ Teşekkürler.`;
       }
       applyCurrentUser();
     }
-    cloudSave('saveUser', editUserTarget, companies);
-    if (linkedP) cloudSave('savePersonnel', linkedP, companies);
+    if (prevUsername !== username) {
+      addTombstone('users', prevUsername);
+      clearTombstone('users', username);
+    } else {
+      clearTombstone('users', username);
+    }
+    const saved = await cloudSaveAwait('saveUser', editUserTarget, companies);
+    if (linkedP) await cloudSaveAwait('savePersonnel', linkedP, companies);
+    if (saved && saved.ok === false) {
+      showToast('Buluta yazılamadı; yerel kayıt güncellendi.', 'warn');
+    }
+    schedulePersistEntityCache();
     closeEditUserModal();
     renderUsersTable();
     if (typeof renderHrPage === 'function') renderHrPage();
@@ -21676,7 +21761,7 @@ Teşekkürler.`;
     setHrPhotoUi(null);
     if (document.getElementById('hrPhotoInput')) document.getElementById('hrPhotoInput').value = '';
   });
-  document.getElementById('newHrSubmitBtn')?.addEventListener('click', () => {
+  document.getElementById('newHrSubmitBtn')?.addEventListener('click', async () => {
     const name = document.getElementById('hrName').value.trim();
     if (!name) { showToast('Ad soyad zorunlu.', 'error'); return; }
     const collar = document.getElementById('hrCollar')?.value;
@@ -21714,8 +21799,9 @@ Teşekkürler.`;
         p.photo = editingHrPhoto || null;
         const u = users.find(x => x.personnelId === p.id || x.username === p.userId);
         if (u) syncUserProfileFromPersonnel(u, p);
-        cloudSave('savePersonnel', p, companies);
-        if (u) cloudSave('saveUser', u, companies);
+        await cloudSaveAwait('savePersonnel', p, companies);
+        if (u) await cloudSaveAwait('saveUser', u, companies);
+        schedulePersistEntityCache();
       }
       showToast(`${name} güncellendi.`, 'success');
     } else {
@@ -21781,6 +21867,8 @@ Teşekkürler.`;
 
   (async function btdCloudBoot() {
     try {
+      // Canlı kurulum: gömülü demo’yu boşalt, cache + bulut doldurur
+      if (typeof clearDemoEntitiesForLive === 'function') clearDemoEntitiesForLive();
       // Canlı kurulumda son bilinen yerel snapshot (demo üstüne yazma)
       if (typeof restoreEntityCache === 'function') restoreEntityCache();
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
