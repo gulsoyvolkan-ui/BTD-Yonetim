@@ -5844,6 +5844,104 @@ ${vadeLine}`;
     applyTombstones('personnel', personnel, (x) => x?.id, 'deletePersonnel');
   }
 
+  /** Ayarlar (firma / ödeme / döviz / nakliye) yerel yedek — yenilemede hydrate üstüne yazılır */
+  const SETTINGS_CACHE_KEY = 'btd_settings_cache_v1';
+  function persistSettingsCache() {
+    try {
+      const payload = { at: Date.now(), companies: {} };
+      if (typeof companies !== 'undefined' && companies) {
+        Object.keys(companies).forEach((name) => {
+          const c = companies[name];
+          if (!c) return;
+          payload.companies[name] = {
+            legal: c.legal,
+            address: c.address,
+            taxOffice: c.taxOffice,
+            taxNo: c.taxNo,
+            phone: c.phone,
+            website: c.website,
+            email: c.email,
+            signatory: c.signatory,
+            deliveryPlace: c.deliveryPlace,
+            warranty: c.warranty,
+            defaultPaymentType: c.defaultPaymentType,
+            quoteBankMode: c.quoteBankMode,
+            quoteBankSelected: Array.isArray(c.quoteBankSelected) ? [...c.quoteBankSelected] : [],
+            bankAccounts: Array.isArray(c.bankAccounts) ? c.bankAccounts.map((a) => ({ ...a })) : [],
+          };
+        });
+      }
+      if (typeof fxRates !== 'undefined' && fxRates) {
+        payload.fxRates = { ...fxRates };
+        payload.fxRatesManual = typeof fxRatesManual !== 'undefined' ? !!fxRatesManual : false;
+      }
+      if (typeof shippingPackages !== 'undefined' && Array.isArray(shippingPackages)) {
+        payload.shippingPackages = shippingPackages.map((p) => ({ ...p }));
+      }
+      localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn('[BTD] settings cache yazılamadı', e?.message || e);
+    }
+  }
+  function restoreSettingsCache() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_CACHE_KEY);
+      if (!raw) return false;
+      const c = JSON.parse(raw);
+      if (!c || !c.at) return false;
+      if (c.companies && typeof companies !== 'undefined') {
+        Object.keys(c.companies).forEach((name) => {
+          if (!companies[name]) return;
+          const src = c.companies[name];
+          Object.assign(companies[name], {
+            legal: src.legal ?? companies[name].legal,
+            address: src.address ?? companies[name].address,
+            taxOffice: src.taxOffice ?? companies[name].taxOffice,
+            taxNo: src.taxNo ?? companies[name].taxNo,
+            phone: src.phone ?? companies[name].phone,
+            website: src.website ?? companies[name].website,
+            email: src.email ?? companies[name].email,
+            signatory: src.signatory ?? companies[name].signatory,
+            deliveryPlace: src.deliveryPlace ?? companies[name].deliveryPlace,
+            warranty: src.warranty ?? companies[name].warranty,
+            defaultPaymentType: src.defaultPaymentType ?? companies[name].defaultPaymentType,
+            quoteBankMode: src.quoteBankMode || companies[name].quoteBankMode || 'auto',
+            quoteBankSelected: Array.isArray(src.quoteBankSelected)
+              ? src.quoteBankSelected
+              : (companies[name].quoteBankSelected || []),
+            bankAccounts: Array.isArray(src.bankAccounts) && src.bankAccounts.length
+              ? src.bankAccounts
+              : (companies[name].bankAccounts || []),
+          });
+        });
+      }
+      if (c.fxRates && typeof fxRates !== 'undefined') {
+        Object.assign(fxRates, c.fxRates);
+        if (typeof fxRatesManual !== 'undefined') fxRatesManual = !!c.fxRatesManual;
+      }
+      if (Array.isArray(c.shippingPackages) && typeof shippingPackages !== 'undefined') {
+        shippingPackages = c.shippingPackages.map((p) => ({ ...p }));
+      }
+      console.info('[BTD] Ayarlar cache yüklendi', new Date(c.at).toISOString());
+      return true;
+    } catch (e) {
+      console.warn('[BTD] settings cache okunamadı', e);
+      return false;
+    }
+  }
+  async function persistCompanyToCloud(companyName) {
+    const info = companies[companyName];
+    if (!info) return { ok: false, reason: 'no-info' };
+    persistSettingsCache();
+    const fn = window.BtdSupabase?.saveCompany;
+    if (typeof fn !== 'function') return { ok: true, localOnly: true };
+    try {
+      return await fn(info, companyName);
+    } catch (e) {
+      return { ok: false, reason: e?.message || String(e) };
+    }
+  }
+
   function formatTlBalance(n) {
     if (n == null || n === '') return '—';
     const v = Number(n);
@@ -14051,7 +14149,9 @@ ${vadeLine}`;
     syncFxRatesInputs();
     if (typeof recalcCostItemPreview === 'function') recalcCostItemPreview();
     if (typeof renderCostItemsDraft === 'function') renderCostItemsDraft();
-    showToast('Döviz kurları uygulandı.', 'success');
+    persistSettingsCache();
+    cloudSave('saveFxRates', fxRates, true);
+    showToast('Döviz kurları uygulandı ve kaydedildi.', 'success');
     return true;
   }
   function convertEurToCurrency(amountEur, currencySymbol) {
@@ -15791,7 +15891,7 @@ Teşekkürler.`;
     r.addEventListener('change', syncSettingsBankModeUi);
   });
 
-  document.getElementById('settingsCompanySaveBtn')?.addEventListener('click', () => {
+  document.getElementById('settingsCompanySaveBtn')?.addEventListener('click', async () => {
     const info = companies[activeCompany];
     if (!info) return;
     const val = (id) => (document.getElementById(id)?.value || '').trim();
@@ -15805,11 +15905,22 @@ Teşekkürler.`;
     info.email = val('settingsEmail');
     const badgeLegal = document.getElementById('companyBadgeLegal');
     if (badgeLegal) badgeLegal.textContent = info.legal;
-    showToast(`${activeCompany} firma bilgileri kaydedildi.`, 'success');
-    renderSettingsPage();
+    const btn = document.getElementById('settingsCompanySaveBtn');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await persistCompanyToCloud(activeCompany);
+      if (r && r.ok === false) {
+        showToast(`${activeCompany} yerel kaydedildi; bulut: ${r.reason || 'hata'}`, 'error');
+      } else {
+        showToast(`${activeCompany} firma bilgileri kaydedildi.`, 'success');
+      }
+      renderSettingsPage();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 
-  document.getElementById('settingsPaymentSaveBtn')?.addEventListener('click', () => {
+  document.getElementById('settingsPaymentSaveBtn')?.addEventListener('click', async () => {
     const info = ensureCompanyPaymentProfile(companies[activeCompany]);
     if (!info) return;
     const val = (id) => (document.getElementById(id)?.value || '').trim();
@@ -15823,8 +15934,19 @@ Teşekkürler.`;
     if (!info.quoteBankSelected.length && info.bankAccounts.length) {
       info.quoteBankSelected = info.bankAccounts.map(a => a.id);
     }
-    showToast(`${activeCompany} ödeme ayarları kaydedildi.`, 'success');
-    renderSettingsPage();
+    const btn = document.getElementById('settingsPaymentSaveBtn');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await persistCompanyToCloud(activeCompany);
+      if (r && r.ok === false) {
+        showToast(`${activeCompany} ödeme ayarları yerel; bulut: ${r.reason || 'hata'}`, 'error');
+      } else {
+        showToast(`${activeCompany} ödeme ayarları kaydedildi.`, 'success');
+      }
+      renderSettingsPage();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 
   document.getElementById('settingsBankAddBtn')?.addEventListener('click', () => {
@@ -15891,6 +16013,7 @@ Teşekkürler.`;
           document.getElementById('shipPkgAmount').value = 0;
           document.getElementById('shipPkgSaveBtn').textContent = 'Paketi Kaydet';
         }
+        persistSettingsCache();
         renderShippingPackagesTable();
         populateCostShipPackageSelect();
         showToast('Nakliye paketi silindi.', 'info');
@@ -15919,6 +16042,7 @@ Teşekkürler.`;
     document.getElementById('shipPkgName').value = '';
     document.getElementById('shipPkgAmount').value = 0;
     document.getElementById('shipPkgSaveBtn').textContent = 'Paketi Kaydet';
+    persistSettingsCache();
     renderShippingPackagesTable();
     populateCostShipPackageSelect();
   });
@@ -21645,10 +21769,12 @@ Teşekkürler.`;
   try {
     window.addEventListener('beforeunload', () => {
       try { if (typeof persistEntityCache === 'function') persistEntityCache(); } catch (_) { /* ignore */ }
+      try { if (typeof persistSettingsCache === 'function') persistSettingsCache(); } catch (_) { /* ignore */ }
     });
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && typeof persistEntityCache === 'function') {
-        try { persistEntityCache(); } catch (_) { /* ignore */ }
+      if (document.visibilityState === 'hidden') {
+        try { if (typeof persistEntityCache === 'function') persistEntityCache(); } catch (_) { /* ignore */ }
+        try { if (typeof persistSettingsCache === 'function') persistSettingsCache(); } catch (_) { /* ignore */ }
       }
     });
   } catch (_) { /* ignore */ }
@@ -21668,7 +21794,11 @@ Teşekkürler.`;
         const hr = await window.BtdSupabase.hydrateCompanies(companies);
         if (hr?.ok && typeof refreshCompanyChromeClasses === 'function') refreshCompanyChromeClasses();
       }
-      if (!window.BtdCloud?.boot) return;
+      if (!window.BtdCloud?.boot) {
+        if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
+        return;
+      }
+      const fxManualRef = { value: false };
       const bootRes = await window.BtdCloud.boot({
         companies,
         customers,
@@ -21701,13 +21831,19 @@ Teşekkürler.`;
         productShapes,
         operationCatalog,
         fxRates,
+        fxRatesManualRef: fxManualRef,
         turkishHolidays2026,
       });
       console.info('[BTD] Cloud boot', bootRes);
+      if (fxManualRef.value) fxRatesManual = true;
       // Silinenleri tekrar enjekte etme; bulutta olmayan yerelleri geri yaz
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
       if (typeof reconcileLocalOrphans === 'function') await reconcileLocalOrphans(localSnapshot);
+      // Ayarlar: bulut hydrate sonrası yerel kaydı üstüne yaz (son kaydedilen ayarlar geçerli)
+      if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
       if (typeof persistEntityCache === 'function') persistEntityCache();
+      if (typeof persistSettingsCache === 'function') persistSettingsCache();
+      if (typeof syncFxRatesInputs === 'function') syncFxRatesInputs();
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
       // Hidrate sonrası katalog UI (select/liste) yenile
       try {

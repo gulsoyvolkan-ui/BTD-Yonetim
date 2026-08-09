@@ -38,6 +38,15 @@
     return 'white';
   }
 
+  function mapCurrencyToDb(sym) {
+    const s = String(sym || '').trim();
+    if (s === '₺' || s.toUpperCase() === 'TRY') return 'TRY';
+    if (s === '€' || s.toUpperCase() === 'EUR') return 'EUR';
+    if (s === '$' || s.toUpperCase() === 'USD') return 'USD';
+    if (s === '£' || s.toUpperCase() === 'GBP') return 'GBP';
+    return s.toUpperCase() || 'TRY';
+  }
+
   /**
    * firmalar + banka hesaplarını mevcut `companies` nesnesine merge eder.
    * UI chrome (badgeBg vb.) yerel varsayılanlarla korunur.
@@ -109,6 +118,64 @@
     } catch (err) {
       lastError = err?.message || String(err);
       console.warn('[BTD] Firma hydrate başarısız, yerel veri kullanılıyor:', lastError);
+      return { ok: false, reason: lastError };
+    }
+  }
+
+  /** Ayarlar → Firma / ödeme / banka kaydı */
+  async function saveCompany(info, companyName) {
+    const sb = getClient();
+    if (!sb || !info) return { ok: false, reason: lastError || 'no-client' };
+    try {
+      let firmaId = info.dbId;
+      if (!firmaId && companyName) {
+        const { data: hit } = await sb.from('firmalar').select('id').eq('ad', companyName).maybeSingle();
+        firmaId = hit?.id || null;
+        if (firmaId) info.dbId = firmaId;
+      }
+      if (!firmaId) return { ok: false, reason: 'firma_id yok' };
+
+      const row = {
+        unvan: info.legal || companyName || '',
+        adres: info.address || null,
+        vergi_dairesi: info.taxOffice || null,
+        vergi_no: info.taxNo || null,
+        telefon: info.phone || null,
+        website: info.website || null,
+        eposta: info.email || null,
+        imza_yetkilisi: info.signatory || null,
+        teslim_yeri: info.deliveryPlace || null,
+        garanti_metni: info.warranty || null,
+        varsayilan_odeme: info.defaultPaymentType || null,
+      };
+      if (info.logo) row.logo_url = info.logo;
+
+      const { error: uErr } = await sb.from('firmalar').update(row).eq('id', firmaId);
+      if (uErr) throw uErr;
+
+      const { error: dErr } = await sb.from('firma_banka_hesaplari').delete().eq('firma_id', firmaId);
+      if (dErr) throw dErr;
+
+      const banks = Array.isArray(info.bankAccounts) ? info.bankAccounts : [];
+      if (banks.length) {
+        const bankRows = banks.map((a, i) => ({
+          firma_id: firmaId,
+          hesap_kodu: a.id || `acc-${i}`,
+          para_birimi: mapCurrencyToDb(a.currency),
+          etiket: a.label || null,
+          banka_adi: a.bankName || null,
+          sube: a.bankBranch || null,
+          iban: a.iban || null,
+          sira: i,
+          aktif: true,
+        }));
+        const { error: iErr } = await sb.from('firma_banka_hesaplari').insert(bankRows);
+        if (iErr) throw iErr;
+      }
+      return { ok: true, dbId: firmaId };
+    } catch (err) {
+      lastError = err?.message || String(err);
+      console.warn('[BTD] saveCompany', lastError);
       return { ok: false, reason: lastError };
     }
   }
@@ -197,6 +264,7 @@
     isReady: () => ready && !!getClient(),
     getLastError: () => lastError,
     hydrateCompanies,
+    saveCompany,
     fetchUserForLogin,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

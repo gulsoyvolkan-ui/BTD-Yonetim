@@ -2766,11 +2766,14 @@
       } else {
         const r = fxRows[0];
         Object.assign(ctx.fxRates, {
-          date: r.tarih,
+          date: r.manuel ? (`Manuel · ${r.tarih}`) : r.tarih,
           EURTRY: Number(r.eur_try),
           USDTRY: Number(r.usd_try),
           EURUSD: Number(r.eur_usd) || (Number(r.eur_try) / Number(r.usd_try)),
         });
+        if (ctx.fxRatesManualRef && typeof ctx.fxRatesManualRef === 'object') {
+          ctx.fxRatesManualRef.value = !!r.manuel;
+        }
       }
     }
 
@@ -2796,8 +2799,22 @@
     }
   }
 
-  // ─── Boot ──────────────────────────────────────────────────────────────────
-  async function boot(ctx) {
+  async function saveFxRates(fx, manual) {
+    try {
+      const client = sb();
+      if (!client || !fx) return fail('no-client', 'saveFxRates');
+      const d = new Date().toISOString().slice(0, 10);
+      const { error } = await client.from('doviz_kurlari').upsert({
+        tarih: d,
+        eur_try: Number(fx.EURTRY) || 0,
+        usd_try: Number(fx.USDTRY) || 0,
+        eur_usd: Number(fx.EURUSD) || null,
+        manuel: !!manual,
+      }, { onConflict: 'tarih' });
+      if (error) throw error;
+      return ok({ date: d });
+    } catch (e) { return fail(e, 'saveFxRates'); }
+  }
     const client = sb();
     if (!client) {
       console.warn('[BtdCloud] boot: Supabase istemcisi yok — yerel veri kullanılacak');
@@ -2890,5 +2907,6 @@
     saveCoatingCatalog,
     saveFasonMfgCatalog,
     saveMachinePark,
+    saveFxRates,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
