@@ -209,23 +209,57 @@
     delete next.intercompany;
     delete next.linked_tedarikci_id;
     delete next.linked_musteri_id;
+    delete next.kisa_ad;
     return next;
   }
+  function missingColumnFromError(msg) {
+    const s = String(msg || '');
+    const m = s.match(/Could not find the '([^']+)' column/i)
+      || s.match(/column ["'`]?([a-z_][a-z0-9_]*)["'`]?/i);
+    return m ? m[1] : null;
+  }
+  /** Eksik kolonlarda (şema güncellenmemiş) satırı incelterek tekrar dener */
   async function upsertCrmRow(client, table, row, onConflict) {
-    let { data, error } = await client.from(table).upsert(row, { onConflict }).select('id').single();
-    if (error && /column|schema cache|does not exist/i.test(error.message || '')) {
-      const slim = stripOptionalCrmCols(row);
-      ({ data, error } = await client.from(table).upsert(slim, { onConflict }).select('id').single());
+    let attempt = { ...row };
+    let lastErr = null;
+    for (let i = 0; i < 10; i++) {
+      const { data, error } = await client.from(table).upsert(attempt, { onConflict }).select('id').single();
+      if (!error) return { data, error: null };
+      lastErr = error;
+      if (!/column|schema cache|does not exist/i.test(error.message || '')) {
+        return { data, error };
+      }
+      const col = missingColumnFromError(error.message);
+      if (col && Object.prototype.hasOwnProperty.call(attempt, col)) {
+        delete attempt[col];
+        continue;
+      }
+      const slim = stripOptionalCrmCols(attempt);
+      if (Object.keys(slim).length >= Object.keys(attempt).length) break;
+      attempt = slim;
     }
-    return { data, error };
+    return { data: null, error: lastErr };
   }
   async function updateCrmRow(client, table, row, dbId) {
-    let { error } = await client.from(table).update(row).eq('id', dbId);
-    if (error && /column|schema cache|does not exist/i.test(error.message || '')) {
-      const slim = stripOptionalCrmCols(row);
-      ({ error } = await client.from(table).update(slim).eq('id', dbId));
+    let attempt = { ...row };
+    let lastErr = null;
+    for (let i = 0; i < 10; i++) {
+      const { error } = await client.from(table).update(attempt).eq('id', dbId);
+      if (!error) return { error: null };
+      lastErr = error;
+      if (!/column|schema cache|does not exist/i.test(error.message || '')) {
+        return { error };
+      }
+      const col = missingColumnFromError(error.message);
+      if (col && Object.prototype.hasOwnProperty.call(attempt, col)) {
+        delete attempt[col];
+        continue;
+      }
+      const slim = stripOptionalCrmCols(attempt);
+      if (Object.keys(slim).length >= Object.keys(attempt).length) break;
+      attempt = slim;
     }
-    return { error };
+    return { error: lastErr };
   }
   async function saveCustomer(c, companies) {
     try {

@@ -5785,13 +5785,34 @@ ${vadeLine}`;
       }
       return n;
     };
+    // Bulutta kolon yoksa kısa ad vb. hydrate ile silinmesin — yerelden geri yaz
+    const mergeCrmFields = (localList, liveArr, keyFn) => {
+      if (!Array.isArray(localList) || !Array.isArray(liveArr)) return 0;
+      const byKey = new Map(liveArr.map((r) => [keyFn(r), r]));
+      let n = 0;
+      for (const local of localList) {
+        const live = byKey.get(keyFn(local));
+        if (!live) continue;
+        let changed = false;
+        if (local.shortName && !live.shortName) { live.shortName = local.shortName; changed = true; }
+        if (local.taxNo && !live.taxNo) { live.taxNo = local.taxNo; changed = true; }
+        if (local.taxOffice && !live.taxOffice) { live.taxOffice = local.taxOffice; changed = true; }
+        if (local.partyKey && !live.partyKey) { live.partyKey = local.partyKey; changed = true; }
+        if (local.cariRole && !live.cariRole) { live.cariRole = local.cariRole; changed = true; }
+        if (local.tlBalance != null && live.tlBalance == null) { live.tlBalance = local.tlBalance; changed = true; }
+        if (changed) n += 1;
+      }
+      return n;
+    };
+    const mergedC = mergeCrmFields(snapshot.customers, customers, partyEntityKey);
+    const mergedS = mergeCrmFields(snapshot.suppliers, suppliers, partyEntityKey);
     const c = await pushMissing(snapshot.customers, customers, partyEntityKey, 'saveCustomer');
     const s = await pushMissing(snapshot.suppliers, suppliers, partyEntityKey, 'saveSupplier');
     const o = await pushMissing(snapshot.orders, orders, (x) => x?.id, 'saveOrder');
     const q = await pushMissing(snapshot.quotes, quotes, (x) => x?.id, 'saveQuote');
     const ca = await pushMissing(snapshot.costAnalyses, costAnalyses, (x) => x?.id, 'saveCostAnalysis');
-    if (c || s || o || q || ca) {
-      console.info('[BTD] Yerel orphan senkron', { customers: c, suppliers: s, orders: o, quotes: q, costAnalyses: ca });
+    if (c || s || o || q || ca || mergedC || mergedS) {
+      console.info('[BTD] Yerel orphan senkron', { customers: c, suppliers: s, orders: o, quotes: q, costAnalyses: ca, mergedCustomers: mergedC, mergedSuppliers: mergedS });
     }
   }
 
