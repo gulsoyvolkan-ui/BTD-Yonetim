@@ -601,6 +601,129 @@
     return { ok: true };
   }
 
+  function normalizeMatchName(s) {
+    return String(s || '')
+      .toLocaleUpperCase('tr-TR')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  /** Cari hareket anahtarı: yalnızca vergi no. Unvan yalnızca etiket. */
+  function resolveTaxNoForPartyName(company, partyName, customers, suppliers) {
+    const want = normalizeMatchName(partyName);
+    if (!want || !company) return '';
+    const fromCust = (customers || []).find((c) => {
+      if (!c || c.company !== company) return false;
+      if (normalizeMatchName(c.name) === want) return true;
+      const shorts = String(c.shortName || '').split(';').map((x) => normalizeMatchName(x)).filter(Boolean);
+      return shorts.includes(want);
+    });
+    if (fromCust && isCheckableTaxNo(fromCust.taxNo)) return digitsOnly(fromCust.taxNo);
+    const fromSup = (suppliers || []).find((s) => {
+      if (!s || s.company !== company) return false;
+      if (normalizeMatchName(s.name) === want) return true;
+      const shorts = String(s.shortName || '').split(';').map((x) => normalizeMatchName(x)).filter(Boolean);
+      return shorts.includes(want);
+    });
+    if (fromSup && isCheckableTaxNo(fromSup.taxNo)) return digitsOnly(fromSup.taxNo);
+    return '';
+  }
+
+  function upsertByExternalKey(movements, movement) {
+    if (!movement || !movement.externalKey) return { created: false, movement: null };
+    const hit = (movements || []).find((m) => m.externalKey === movement.externalKey);
+    if (hit) return { created: false, movement: hit };
+    movements.push(movement);
+    return { created: true, movement };
+  }
+
+  /**
+   * Faturalandırma → cari defter (vergi no anahtar).
+   * Kesildi/Gecikmiş: satış faturası (borç)
+   * Ödendi: + tahsilat (alacak); kesildi hareketi yoksa önce onu yazar
+   */
+  function syncInvoiceToLedger(inv, customers, suppliers, movements) {
+    if (!inv || !inv.company) return { ok: false, reason: 'no-invoice', created: 0 };
+    const amount = Math.abs(Number(inv.totalWithVat) || 0);
+    if (!(amount > 0)) return { ok: false, reason: 'no-amount', created: 0 };
+
+    let dig = isCheckableTaxNo(inv.taxNo);
+    if (!dig) dig = resolveTaxNoForPartyName(inv.company, inv.customer, customers, suppliers);
+    if (!dig) {
+      return {
+        ok: false,
+        reason: 'no-tax',
+        created: 0,
+        message: `“${inv.customer || 'Cari'}” için vergi no yok — Muhasebe’ye yazılmadı. Müşteri kartına vergi no ekleyin.`,
+      };
+    }
+
+    const hit = findPartyByTaxNo(inv.company, dig, customers, suppliers);
+    const partyName = hit.customer?.name || hit.supplier?.name || inv.customer || dig;
+    let side = 'customer';
+    if (hit.customer && hit.supplier) side = 'both';
+    else if (hit.supplier && !hit.customer) side = 'supplier';
+
+    inv.taxNo = dig;
+    const date = inv.date || new Date().toISOString().slice(0, 10);
+    let created = 0;
+    const st = inv.status || 'Kesildi';
+
+    if (st === 'Kesildi' || st === 'Ödendi' || st === 'Gecikmiş') {
+      const key = `inv|${inv.id}|kesildi`;
+      const r = upsertByExternalKey(movements, {
+        id: uid('CM'),
+        company: inv.company,
+        taxNo: dig,
+        partyKey: hit.customer?.partyKey || hit.supplier?.partyKey || '',
+        partyName,
+        side,
+        date,
+        docNo: inv.id,
+        docType: 'invoice_sales',
+        description: `Fatura ${inv.id}${inv.orderId ? ` · Sipariş ${inv.orderId}` : ''}`,
+        debit: amount,
+        credit: 0,
+        currency: inv.currency === '€' ? 'EUR' : inv.currency === '$' ? 'USD' : 'TRY',
+        source: 'invoice_sync',
+        externalKey: key,
+        importBatchId: null,
+        approvalStatus: 'linked',
+        invoiceId: inv.id,
+        createdAt: new Date().toISOString(),
+      });
+      if (r.created) created += 1;
+    }
+
+    if (st === 'Ödendi') {
+      const key = `inv|${inv.id}|odendi`;
+      const r = upsertByExternalKey(movements, {
+        id: uid('CM'),
+        company: inv.company,
+        taxNo: dig,
+        partyKey: hit.customer?.partyKey || hit.supplier?.partyKey || '',
+        partyName,
+        side,
+        date: new Date().toISOString().slice(0, 10),
+        docNo: inv.id,
+        docType: 'collection',
+        description: `Tahsilat · Fatura ${inv.id}`,
+        debit: 0,
+        credit: amount,
+        currency: inv.currency === '€' ? 'EUR' : inv.currency === '$' ? 'USD' : 'TRY',
+        source: 'invoice_sync',
+        externalKey: key,
+        importBatchId: null,
+        approvalStatus: 'linked',
+        invoiceId: inv.id,
+        createdAt: new Date().toISOString(),
+      });
+      if (r.created) created += 1;
+    }
+
+    return { ok: true, created, taxNo: dig, partyName };
+  }
+
   global.BtdAccounting = {
     DOC_TYPES,
     digitsOnly,
@@ -620,6 +743,8 @@
     applyPreviewImport,
     approvePendingCari,
     rejectPendingCari,
+    resolveTaxNoForPartyName,
+    syncInvoiceToLedger,
     uid,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
