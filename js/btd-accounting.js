@@ -111,17 +111,17 @@
   }
 
   /** Aynı vergi no + firma için hareket bakiyesi (borç − alacak) */
-  function balanceForTaxNo(movements, company, taxNo) {
+  function balanceForTaxNo(movements, company, taxNo, opts) {
     const dig = digitsOnly(taxNo);
     if (!dig) return 0;
+    const includePending = !!(opts && opts.includePending);
     return (movements || [])
-      .filter((m) =>
-        m &&
-        m.company === company &&
-        digitsOnly(m.taxNo) === dig &&
-        m.approvalStatus !== 'orphan_rejected' &&
-        m.approvalStatus !== 'pending'
-      )
+      .filter((m) => {
+        if (!m || m.company !== company || digitsOnly(m.taxNo) !== dig) return false;
+        if (m.approvalStatus === 'orphan_rejected') return false;
+        if (!includePending && m.approvalStatus === 'pending') return false;
+        return true;
+      })
       .reduce((sum, m) => sum + movementNet(m), 0);
   }
 
@@ -470,7 +470,7 @@
         exists.movementCount = (movements || []).filter(
           (m) => m.company === company && digitsOnly(m.taxNo) === dig && m.approvalStatus === 'pending'
         ).length;
-        exists.sampleBalance = balanceForTaxNo(movements, company, dig);
+        exists.sampleBalance = balanceForTaxNo(movements, company, dig, { includePending: true });
         return;
       }
       const sample = selected.find((r) => r.taxNo === dig);
@@ -484,7 +484,7 @@
         movementCount: (movements || []).filter(
           (m) => m.company === company && digitsOnly(m.taxNo) === dig && m.approvalStatus === 'pending'
         ).length,
-        sampleBalance: balanceForTaxNo(movements, company, dig),
+        sampleBalance: balanceForTaxNo(movements, company, dig, { includePending: true }),
         status: 'pending',
         createdAt: new Date().toISOString(),
         importBatchId: batch,

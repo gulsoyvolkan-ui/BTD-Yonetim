@@ -19,7 +19,7 @@
 <script src="js/btd-supabase.js?v=datafix1"></script>
 <script src="js/btd-cloud.js?v=datafix1"></script>
 <script src="js/btd-parasut.js?v=datafix1"></script>
-<script src="js/btd-accounting.js?v=acct1"></script>
+<script src="js/btd-accounting.js?v=acct2"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -8548,6 +8548,7 @@ ${vadeLine}`;
     safeRender(renderQualityPage);
     safeRender(renderShippingPage);
     safeRender(renderInvoicingPage);
+    safeRender(renderAccountingPage);
     if (document.getElementById('page-settings') && !document.getElementById('page-settings').classList.contains('hidden')) {
       safeRender(renderSettingsPage);
     }
