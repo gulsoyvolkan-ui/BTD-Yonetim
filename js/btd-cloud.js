@@ -80,6 +80,52 @@
     (rows || []).forEach((r) => target.push(r));
   }
   /**
+   * Canlı modda bulut hydrate yerel/cache kayıtlarını silmesin.
+   */
+  function hydrateInto(target, rows, keyFn) {
+    if (!Array.isArray(target)) return;
+    const remote = Array.isArray(rows) ? rows : [];
+    if (!alreadySeeded()) {
+      replaceArray(target, remote);
+      return;
+    }
+    if (!remote.length) return;
+    if (!target.length) {
+      replaceArray(target, remote);
+      return;
+    }
+    const kf = typeof keyFn === 'function'
+      ? keyFn
+      : ((x) => (x && (x.id || x.dbId || x.username || x.name || x.sku)) || '');
+    const map = new Map();
+    for (const row of target) {
+      const k = String(kf(row) || '');
+      map.set(k || `__l${map.size}`, row);
+    }
+    for (const row of remote) {
+      const k = String(kf(row) || '');
+      if (!k) {
+        map.set(`__r${map.size}`, row);
+        continue;
+      }
+      const local = map.get(k);
+      if (!local) {
+        map.set(k, row);
+        continue;
+      }
+      map.set(k, Object.assign({}, local, row, {
+        photo: (row.photo != null && row.photo !== '') ? row.photo : local.photo,
+        perms: row.perms || local.perms,
+        shortName: row.shortName || local.shortName,
+        password: row.password || local.password,
+        contacts: (Array.isArray(row.contacts) && row.contacts.length) ? row.contacts : local.contacts,
+        items: (Array.isArray(row.items) && row.items.length) ? row.items : local.items,
+        parts: (Array.isArray(row.parts) && row.parts.length) ? row.parts : local.parts,
+      }));
+    }
+    replaceArray(target, Array.from(map.values()));
+  }
+  /**
    * İlk seed sonrası boş tabloları tekrar demo veriyle doldurmayı engeller.
    * Diziyi silmez — yerel/cache kayıtları (yeni eklenen, henüz buluta yazılamayan) korunur.
    */
@@ -356,7 +402,7 @@
     }
     progress(ctx, 'Müşteriler hydrate…');
     const rows = await selectAll(client, 'musteriler', '*, musteri_kisiler(*)');
-    replaceArray(ctx.customers, rows.map((r) => customerFromRow(r, ctx.companies)));
+    hydrateInto(ctx.customers, rows.map((r) => customerFromRow(r, ctx.companies)));
   }
 
   // ─── CRM · Suppliers ───────────────────────────────────────────────────────
@@ -524,7 +570,7 @@
       'tedarikciler',
       '*, tedarikci_kisiler(*), tedarikci_fason_hizmetleri(*), tedarikci_malzeme_gruplari(malzeme_grup_id, malzeme_gruplari(ad))'
     );
-    replaceArray(ctx.suppliers, rows.map((r) => supplierFromRow(r, ctx.companies)));
+    hydrateInto(ctx.suppliers, rows.map((r) => supplierFromRow(r, ctx.companies)));
   }
 
   async function saveSupplierGroupPriorities(company, prioritiesObj, companies, suppliers) {
@@ -671,7 +717,7 @@
     }
     progress(ctx, 'Personel hydrate…');
     const rows = await selectAll(client, 'personel', '*');
-    replaceArray(ctx.personnel, rows.map((r) => {
+    hydrateInto(ctx.personnel, rows.map((r) => {
       const mobile = r.whatsapp || r.telefon || '';
       return {
         dbId: r.id,
@@ -744,7 +790,7 @@
       } else if (count) {
         const rows = await selectAll(client, 'personel_devam', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
-        replaceArray(ctx.attendanceLogs, rows.map((r) => ({
+        hydrateInto(ctx.attendanceLogs, rows.map((r) => ({
           dbId: r.id,
           id: `A-${r.id.slice(0, 8)}`,
           personnelId: byDb[r.personel_id]?.id || r.personel_id,
@@ -787,7 +833,7 @@
       } else if (count) {
         const rows = await selectAll(client, 'personel_izin', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
-        replaceArray(ctx.leaveRequests, rows.map((r) => ({
+        hydrateInto(ctx.leaveRequests, rows.map((r) => ({
           dbId: r.id,
           id: `L-${r.id.slice(0, 8)}`,
           personnelId: byDb[r.personel_id]?.id || r.personel_id,
@@ -938,7 +984,7 @@
       if (local.collar) row.collar = local.collar;
       if (local.perms) row.perms = local.perms;
     });
-    replaceArray(ctx.users, mapped);
+    hydrateInto(ctx.users, mapped);
   }
 
   // ─── Cost analyses ─────────────────────────────────────────────────────────
@@ -1126,7 +1172,7 @@
     }
     progress(ctx, 'Maliyet hydrate…');
     const rows = await selectAll(client, 'maliyet_analizleri', '*, maliyet_kalemleri(*)');
-    replaceArray(ctx.costAnalyses, rows.map((r) => ({
+    hydrateInto(ctx.costAnalyses, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1262,7 +1308,7 @@
       if (mErr) throw mErr;
       (mrows || []).forEach((m) => { maliyetBelge[m.id] = m.belge_no; });
     }
-    replaceArray(ctx.quotes, rows.map((r) => ({
+    hydrateInto(ctx.quotes, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1436,7 +1482,7 @@
           })),
       };
     });
-    replaceArray(ctx.orders, mapped);
+    hydrateInto(ctx.orders, mapped);
     if (ctx.orderRevisionLog) assignObject(ctx.orderRevisionLog, revLog);
   }
 
@@ -1548,7 +1594,7 @@
       'is_emirleri',
       '*, is_emri_parcalari(*, is_emri_cam_adimlari(*)), siparisler(belge_no), teklifler(belge_no)'
     );
-    replaceArray(ctx.workOrders, rows.map((r) => ({
+    hydrateInto(ctx.workOrders, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1666,7 +1712,7 @@
     }
     progress(ctx, 'Tedarik hydrate…');
     const rows = await selectAll(client, 'tedarik_kalemleri', '*, is_emirleri(belge_no)');
-    replaceArray(ctx.procurementItems, rows.map((r) => ({
+    hydrateInto(ctx.procurementItems, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1793,7 +1839,7 @@
       'rfq_paketleri',
       '*, rfq_gruplari(*, rfq_grup_kalemleri(*), rfq_grup_tedarikcileri(*)), rfq_yanitlari(*)'
     );
-    replaceArray(ctx.materialRfqs, rows.map((r) => ({
+    hydrateInto(ctx.materialRfqs, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1914,7 +1960,7 @@
         }
       } else if (n) {
         const rows = await selectAll(client, 'yeniden_tedarik_talepleri', '*');
-        replaceArray(ctx.reprocRequests, rows.map((r) => ({
+        hydrateInto(ctx.reprocRequests, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1939,7 +1985,7 @@
         }
       } else if (n) {
         const rows = await selectAll(client, 'beklenmeyen_giderler', '*');
-        replaceArray(ctx.unforeseenCosts, rows.map((r) => ({
+        hydrateInto(ctx.unforeseenCosts, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2203,7 +2249,7 @@
       } else if (n) {
         progress(ctx, 'Fason hydrate…');
         const rows = await selectAll(client, 'fason_isler', '*, fason_log(*)');
-        replaceArray(ctx.fasonJobs, rows.map((r) => ({
+        hydrateInto(ctx.fasonJobs, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2234,7 +2280,7 @@
         }
       } else if (n) {
         const rows = await selectAll(client, 'kalite_kayitlari', '*');
-        replaceArray(ctx.qcRecords, rows.map((r) => ({
+        hydrateInto(ctx.qcRecords, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2255,7 +2301,7 @@
         }
       } else if (count) {
         const rows = await selectAll(client, 'sevkiyatlar', '*, siparisler(belge_no)');
-        replaceArray(ctx.shipments, rows.map((r) => ({
+        hydrateInto(ctx.shipments, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no || r.id,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2280,7 +2326,7 @@
         }
       } else if (n) {
         const rows = await selectAll(client, 'faturalar', '*, siparisler(belge_no), maliyet_analizleri(belge_no)');
-        replaceArray(ctx.invoices, rows.map((r) => ({
+        hydrateInto(ctx.invoices, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2312,7 +2358,7 @@
       } else if (n) {
         progress(ctx, 'Stok hydrate…');
         const rows = await selectAll(client, 'stok_kartlari', '*');
-        replaceArray(ctx.stockItems, rows.map((r) => ({
+        hydrateInto(ctx.stockItems, rows.map((r) => ({
           dbId: r.id,
           id: r.sku,
           sku: r.sku,
@@ -2338,7 +2384,7 @@
         for (const m of ctx.stockMoves) await saveStockMove(m, ctx.companies);
       } else if (count) {
         const rows = await selectAll(client, 'stok_hareketleri', '*');
-        replaceArray(ctx.stockMoves, rows.map((r) => ({
+        hydrateInto(ctx.stockMoves, rows.map((r) => ({
           dbId: r.id,
           id: `MV-${r.id.slice(0, 8)}`,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2601,7 +2647,8 @@
       const n = await countTable(client, 'malzemeler');
       if (!n) {
         if (alreadySeeded()) {
-          assignObject(ctx.procMaterialCatalog, {});
+          // Canlı: boş bulut → yerel malzeme katalogunu silme
+          progress(ctx, 'Malzeme katalogu boş (yerel korunuyor)');
         } else {
         progress(ctx, 'Malzeme katalogu seed…');
         const groups = await ensureMaterialGroups(client, Object.keys(ctx.procMaterialCatalog));
@@ -2668,7 +2715,7 @@
         ctx.productShapes.forEach((s) => {
           if (!merged.some((m) => m.id === s.id)) merged.push(s);
         });
-        replaceArray(ctx.productShapes, merged);
+        hydrateInto(ctx.productShapes, merged);
       }
     }
 
@@ -2738,7 +2785,7 @@
       } else {
         progress(ctx, 'Operasyon katalogu hydrate…');
         const rows = await selectAll(client, 'operasyon_kategorileri', '*, operasyon_adimlari(*)');
-        replaceArray(ctx.operationCatalog, rows
+        hydrateInto(ctx.operationCatalog, rows
           .sort((a, b) => (a.sira || 0) - (b.sira || 0))
           .map((r) => ({
             dbId: r.id,
@@ -2784,7 +2831,7 @@
           'atolyeler',
           '*, makineler(*), atolye_firmalar(firma_id, firmalar(ad))'
         );
-        replaceArray(ctx.machinePark, rows.map((r) => ({
+        hydrateInto(ctx.machinePark, rows.map((r) => ({
           dbId: r.id,
           workshop: r.ad,
           companies: (r.atolye_firmalar || []).map((af) => af.firmalar?.ad).filter(Boolean),
@@ -2866,6 +2913,8 @@
       return ok({ date: d });
     } catch (e) { return fail(e, 'saveFxRates'); }
   }
+
+  async function boot(ctx) {
     const client = sb();
     if (!client) {
       console.warn('[BtdCloud] boot: Supabase istemcisi yok — yerel veri kullanılacak');

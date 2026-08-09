@@ -95,21 +95,26 @@
           ...chrome,
           dbId: f.id,
           kod: f.kod,
-          logo: f.logo_url || prev.logo || '',
-          legal: f.unvan || prev.legal || name,
-          address: f.adres || prev.address || '',
-          taxOffice: f.vergi_dairesi || prev.taxOffice || '',
-          taxNo: f.vergi_no || prev.taxNo || '',
-          phone: f.telefon || prev.phone || '',
-          website: f.website || prev.website || '',
-          email: f.eposta || prev.email || '',
-          signatory: f.imza_yetkilisi || prev.signatory || '',
-          deliveryPlace: f.teslim_yeri || prev.deliveryPlace || '',
-          warranty: f.garanti_metni || prev.warranty || '',
-          defaultPaymentType: f.varsayilan_odeme || prev.defaultPaymentType || '',
+          // Yerel/ayarlar cache doluysa bulut demosu üzerine yazmasın
+          logo: prev.logo || f.logo_url || '',
+          legal: prev.legal || f.unvan || name,
+          address: prev.address || f.adres || '',
+          taxOffice: prev.taxOffice || f.vergi_dairesi || '',
+          taxNo: prev.taxNo || f.vergi_no || '',
+          phone: prev.phone || f.telefon || '',
+          website: prev.website || f.website || '',
+          email: prev.email || f.eposta || '',
+          signatory: prev.signatory || f.imza_yetkilisi || '',
+          deliveryPlace: prev.deliveryPlace || f.teslim_yeri || '',
+          warranty: prev.warranty || f.garanti_metni || '',
+          defaultPaymentType: prev.defaultPaymentType || f.varsayilan_odeme || '',
           quoteBankMode: prev.quoteBankMode || 'auto',
-          quoteBankSelected: selectedIds.length ? selectedIds : (prev.quoteBankSelected || []),
-          bankAccounts: bankAccounts.length ? bankAccounts : (prev.bankAccounts || []),
+          quoteBankSelected: (Array.isArray(prev.quoteBankSelected) && prev.quoteBankSelected.length)
+            ? prev.quoteBankSelected
+            : (selectedIds.length ? selectedIds : []),
+          bankAccounts: (Array.isArray(prev.bankAccounts) && prev.bankAccounts.length)
+            ? prev.bankAccounts
+            : (bankAccounts.length ? bankAccounts : []),
         };
       });
 

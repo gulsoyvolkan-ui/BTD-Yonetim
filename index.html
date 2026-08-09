@@ -15,10 +15,10 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabase-config.js?v=89f72ed"></script>
-<script src="js/btd-supabase.js?v=89f72ed"></script>
-<script src="js/btd-cloud.js?v=cloudflush1"></script>
-<script src="js/btd-parasut.js?v=89f72ed"></script>
+<script src="js/supabase-config.js?v=datafix1"></script>
+<script src="js/btd-supabase.js?v=datafix1"></script>
+<script src="js/btd-cloud.js?v=datafix1"></script>
+<script src="js/btd-parasut.js?v=datafix1"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -5675,45 +5675,51 @@ ${vadeLine}`;
     try {
       await ensureLocalFirmasReady();
       const trySave = async (method, row) => {
-        if (!row) return;
+        if (!row) return false;
         const fn = window.BtdCloud?.[method];
-        if (typeof fn !== 'function') return;
+        if (typeof fn !== 'function') return false;
         const r = await fn(row, companies);
         if (r && r.ok !== false) {
           okN += 1;
           schedulePersistEntityCache();
+          return true;
         }
+        return false;
       };
       const box = readCloudOutbox();
+      const remaining = [];
       for (const item of box) {
         const id = item?.hint?.id;
         if (!id || !item.method) continue;
-        if (item.method === 'saveOrder') await trySave('saveOrder', (orders || []).find((x) => x.id === id));
-        else if (item.method === 'saveQuote') await trySave('saveQuote', (quotes || []).find((x) => x.id === id));
-        else if (item.method === 'saveCustomer') await trySave('saveCustomer', (customers || []).find((x) => x.id === id || x.name === id));
-        else if (item.method === 'saveSupplier') await trySave('saveSupplier', (suppliers || []).find((x) => x.id === id || x.name === id));
-        else if (item.method === 'savePersonnel') await trySave('savePersonnel', (personnel || []).find((x) => x.id === id));
-        else if (item.method === 'saveUser') await trySave('saveUser', (users || []).find((x) => (x.username || '').toLowerCase() === String(id).toLowerCase()));
+        let done = false;
+        if (item.method === 'saveOrder') done = await trySave('saveOrder', (orders || []).find((x) => x.id === id));
+        else if (item.method === 'saveQuote') done = await trySave('saveQuote', (quotes || []).find((x) => x.id === id));
+        else if (item.method === 'saveCustomer') done = await trySave('saveCustomer', (customers || []).find((x) => x.id === id || x.name === id));
+        else if (item.method === 'saveSupplier') done = await trySave('saveSupplier', (suppliers || []).find((x) => x.id === id || x.name === id));
+        else if (item.method === 'savePersonnel') done = await trySave('savePersonnel', (personnel || []).find((x) => x.id === id));
+        else if (item.method === 'saveUser') done = await trySave('saveUser', (users || []).find((x) => (x.username || '').toLowerCase() === String(id).toLowerCase()));
         else if (item.method === 'deleteSupplier') {
           const s = { name: id, company: item.hint?.company, dbId: item.hint?.dbId };
-          await window.BtdCloud.deleteSupplier?.(s, companies);
+          const r = await window.BtdCloud.deleteSupplier?.(s, companies);
+          done = !!(r && r.ok !== false);
         } else if (item.method === 'deleteCustomer') {
           const c = { name: id, company: item.hint?.company, dbId: item.hint?.dbId };
-          await window.BtdCloud.deleteCustomer?.(c, companies);
+          const r = await window.BtdCloud.deleteCustomer?.(c, companies);
+          done = !!(r && r.ok !== false);
         } else if (item.method === 'deleteOrder') {
           const o = { id, company: item.hint?.company, dbId: item.hint?.dbId };
-          await window.BtdCloud.deleteOrder?.(o, companies);
+          const r = await window.BtdCloud.deleteOrder?.(o, companies);
+          done = !!(r && r.ok !== false);
+        } else {
+          remaining.push(item);
+          continue;
         }
+        if (!done) remaining.push(item);
       }
-      for (const o of (orders || [])) if (!o.dbId) await trySave('saveOrder', o);
-      for (const q of (quotes || [])) if (!q.dbId) await trySave('saveQuote', q);
-      for (const c of (customers || [])) if (!c.dbId) await trySave('saveCustomer', c);
-      for (const s of (suppliers || [])) if (!s.dbId) await trySave('saveSupplier', s);
-      for (const p of (personnel || [])) if (!p.dbId) await trySave('savePersonnel', p);
-      for (const u of (users || [])) if (!u.dbId) await trySave('saveUser', u);
+      // NOT: dbId’siz tüm kayıtları toptan buluta basma — demo yeniden enjekte ederdi
+      writeCloudOutbox(remaining);
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
-      writeCloudOutbox([]);
-      if (okN) console.info('[BTD] Bekleyen bulut yazmaları işlendi:', okN);
+      if (okN) console.info('[BTD] Outbox işlendi:', okN, 'kalan:', remaining.length);
     } catch (e) {
       console.warn('[BTD] flushPendingCloudWrites', e);
     } finally {
@@ -5839,9 +5845,74 @@ ${vadeLine}`;
     }
   }
 
+  /** Önbellek bellekten zenginse geri al (hydrate sonrası yanlış silinmeye karşı) */
+  function reapplyRicherEntityCache() {
+    try {
+      const raw = localStorage.getItem(ENTITY_CACHE_KEY);
+      if (!raw) return false;
+      const c = JSON.parse(raw);
+      if (!c || !c.at) return false;
+      let touched = false;
+      const enrich = (arr, cached, keyFn) => {
+        if (!Array.isArray(arr) || !Array.isArray(cached) || !cached.length) return;
+        if (cached.length <= arr.length) return;
+        const kf = keyFn || ((x) => x?.id || x?.dbId || x?.name || '');
+        const map = new Map();
+        cached.forEach((row) => {
+          const k = String(kf(row) || '');
+          if (k) map.set(k, row);
+        });
+        arr.forEach((row) => {
+          const k = String(kf(row) || '');
+          if (!k) return;
+          const prev = map.get(k);
+          map.set(k, prev ? Object.assign({}, prev, row) : row);
+        });
+        mutateLocalArray(arr, Array.from(map.values()));
+        touched = true;
+      };
+      enrich(quotes, c.quotes);
+      enrich(orders, c.orders);
+      enrich(costAnalyses, c.costAnalyses);
+      enrich(customers, c.customers, (x) => x.dbId || x.partyKey || x.name);
+      enrich(suppliers, c.suppliers, (x) => x.dbId || x.partyKey || x.name);
+      enrich(procurementItems, c.procurementItems);
+      enrich(fasonJobs, c.fasonJobs);
+      enrich(qcRecords, c.qcRecords);
+      enrich(shipments, c.shipments);
+      enrich(invoices, c.invoices);
+      enrich(workOrders, c.workOrders);
+      enrich(personnel, c.personnel);
+      enrich(users, c.users, (x) => (x.username || '').toLowerCase());
+      enrich(materialRfqs, c.materialRfqs);
+      enrich(reprocRequests, c.reprocRequests);
+      enrich(unforeseenCosts, c.unforeseenCosts);
+      if (touched) console.info('[BTD] Yerel cache daha zengindi — geri yüklendi');
+      return touched;
+    } catch (e) {
+      console.warn('[BTD] reapplyRicherEntityCache', e);
+      return false;
+    }
+  }
+
   function persistEntityCache() {
     markCloudSeededLocal();
     try {
+      // Boş bellek ile dolu cache’i ezme (yanlış wipe sonrası veri kaybı)
+      try {
+        const prevRaw = localStorage.getItem(ENTITY_CACHE_KEY);
+        if (prevRaw) {
+          const prev = JSON.parse(prevRaw);
+          const prevCount = ['orders', 'quotes', 'customers', 'suppliers', 'personnel']
+            .reduce((n, k) => n + (Array.isArray(prev?.[k]) ? prev[k].length : 0), 0);
+          const nowCount = [orders, quotes, customers, suppliers, personnel]
+            .reduce((n, a) => n + (Array.isArray(a) ? a.length : 0), 0);
+          if (prevCount >= 3 && nowCount === 0) {
+            console.warn('[BTD] Entity cache yazımı iptal: bellek boş, önceki cache korunuyor');
+            return;
+          }
+        }
+      } catch (_) { /* ignore */ }
       const payload = {
         at: Date.now(),
         quotes,
@@ -22070,9 +22141,8 @@ Teşekkürler.`;
 
   (async function btdCloudBoot() {
     try {
-      // Canlı kurulum: gömülü demo’yu boşalt, cache + bulut doldurur
-      if (typeof clearDemoEntitiesForLive === 'function') clearDemoEntitiesForLive();
-      // Canlı kurulumda son bilinen yerel snapshot (demo üstüne yazma)
+      // Önce yerel cache — demo wipe YOK (cache kaçarsa veriyi silerdi)
+      if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
       if (typeof restoreEntityCache === 'function') restoreEntityCache();
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
       const localSnapshot = typeof snapshotPersistArrays === 'function' ? snapshotPersistArrays() : null;
@@ -22085,8 +22155,9 @@ Teşekkürler.`;
         const hr = await window.BtdSupabase.hydrateCompanies(companies);
         if (hr?.ok && typeof refreshCompanyChromeClasses === 'function') refreshCompanyChromeClasses();
       }
+      // Firma hydrate sonrası ayarları tekrar uygula (yerel üstün)
+      if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
       if (!window.BtdCloud?.boot) {
-        if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
         return;
       }
       const fxManualRef = { value: false };
@@ -22130,10 +22201,11 @@ Teşekkürler.`;
       _firmasReady = Object.values(companies || {}).some((c) => c && c.dbId);
       // Silinenleri tekrar enjekte etme; bulutta olmayan yerelleri geri yaz
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
+      if (typeof reapplyRicherEntityCache === 'function') reapplyRicherEntityCache();
       if (typeof repairDuplicatePersonnelIds === 'function') repairDuplicatePersonnelIds();
       if (typeof reconcileLocalOrphans === 'function') await reconcileLocalOrphans(localSnapshot);
       if (typeof flushPendingCloudWrites === 'function') await flushPendingCloudWrites();
-      // Ayarlar: bulut hydrate sonrası yerel kaydı üstüne yaz (son kaydedilen ayarlar geçerli)
+      // Ayarlar: son yerel kayıt geçerli
       if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
       if (typeof persistEntityCache === 'function') persistEntityCache();
       if (typeof persistSettingsCache === 'function') persistSettingsCache();
