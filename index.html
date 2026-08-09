@@ -15,10 +15,10 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabase-config.js"></script>
-<script src="js/btd-supabase.js"></script>
-<script src="js/btd-cloud.js"></script>
-<script src="js/btd-parasut.js"></script>
+<script src="js/supabase-config.js?v=421bfac"></script>
+<script src="js/btd-supabase.js?v=421bfac"></script>
+<script src="js/btd-cloud.js?v=421bfac2"></script>
+<script src="js/btd-parasut.js?v=421bfac"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -21305,10 +21305,23 @@ Teşekkürler.`;
     document.getElementById('hrDetailView')?.classList.add('hidden');
     viewingHrId = null;
   }
+  /** Satır tıklamasında son render’daki nesneyi kullan (id çakışması / hydrate yarışı) */
+  let _hrListByKey = new Map();
+  function resolveHrPerson(key) {
+    if (key == null || key === '') return null;
+    const k = String(key);
+    if (_hrListByKey.has(k)) return _hrListByKey.get(k);
+    return findPersonnel(k);
+  }
+  function hrRowKey(p, idx) {
+    return `hrrow-${idx}`;
+  }
   function openHrDetail(id) {
-    const p = findPersonnel(id);
+    const p = resolveHrPerson(id);
     if (!p) return;
-    viewingHrId = personnelKey(p);
+    viewingHrId = String(id);
+    _hrListByKey.set(viewingHrId, p);
+    if (personnelKey(p)) _hrListByKey.set(personnelKey(p), p);
     document.getElementById('hrListView')?.classList.add('hidden');
     document.getElementById('hrDetailView')?.classList.remove('hidden');
     const ym = new Date().toISOString().slice(0, 7);
@@ -21642,18 +21655,25 @@ Teşekkürler.`;
       tbody.innerHTML = `<tr><td colspan="9" class="px-5 py-10 text-center text-steel-400 text-sm">Personel kaydı yok.</td></tr>`;
       return;
     }
-    tbody.innerHTML = list.map(p => {
+    _hrListByKey = new Map();
+    tbody.innerHTML = list.map((p, idx) => {
       const pay = personnelMonthPay(p, ym);
       const att = personnelAttendancePct(p);
       const leaveDays = leaveRequests.filter(l => l.personnelId === p.id).reduce((s, l) => s + (Number(l.days) || 0), 0);
       const hasUser = users.some(u => u.personnelId === p.id || (p.userId && u.username === p.userId));
       const collar = normalizeCollar(p.collar);
-      const pkey = personnelKey(p);
+      const pkey = hrRowKey(p, idx);
+      _hrListByKey.set(pkey, p);
+      if (personnelKey(p)) _hrListByKey.set(personnelKey(p), p);
+      const esc = (s) => String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;');
       const av = p.photo
-        ? `<img src="${String(p.photo).replace(/"/g, '&quot;')}" alt="" class="w-9 h-9 rounded-lg object-cover border border-steel-200 shrink-0" />`
-        : `<div class="w-9 h-9 rounded-lg bg-navy/10 text-navy flex items-center justify-center text-xs font-bold shrink-0">${(p.name || '?').charAt(0).toUpperCase()}</div>`;
+        ? `<img src="${esc(p.photo)}" alt="" class="w-9 h-9 rounded-lg object-cover border border-steel-200 shrink-0" />`
+        : `<div class="w-9 h-9 rounded-lg bg-navy/10 text-navy flex items-center justify-center text-xs font-bold shrink-0">${esc((p.name || '?').charAt(0).toUpperCase())}</div>`;
       return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-hr-open="${pkey}">
-        <td class="px-5 py-3.5"><div class="flex items-center gap-2.5">${av}<div><p class="font-semibold text-steel-800">${p.name}</p><p class="text-[11px] text-steel-400">${p.dept || '—'} · <span class="price-sensitive">${pay.hourly.toFixed(0)} ₺/sa</span></p></div></div></td>
+        <td class="px-5 py-3.5"><div class="flex items-center gap-2.5">${av}<div><p class="font-semibold text-steel-800">${esc(p.name)}</p><p class="text-[11px] text-steel-400">${esc(p.dept || '—')} · <span class="price-sensitive">${pay.hourly.toFixed(0)} ₺/sa</span></p></div></div></td>
         <td class="px-4 py-3.5"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${collarBadgeClass(collar)}">${collarLabel(collar)}</span></td>
         <td class="px-4 py-3.5 text-steel-500 text-xs">${fmtDate(p.startDate)}</td>
         <td class="px-4 py-3.5 mono text-steel-700 price-sensitive">${Number(p.salary).toLocaleString('tr-TR')} ₺</td>
@@ -21662,36 +21682,39 @@ Teşekkürler.`;
         <td class="px-4 py-3.5 text-steel-600 text-xs">${leaveDays}</td>
         <td class="px-4 py-3.5 font-bold text-emerald-700 mono text-xs price-sensitive">${pay.total.toLocaleString('tr-TR')} ₺</td>
         <td class="px-4 py-3.5 text-right whitespace-nowrap" onclick="event.stopPropagation()">
-          ${!hasUser ? `<button data-hr-user="${pkey}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2 py-1 rounded-lg">Kullanıcı</button>` : `<span class="text-[10px] text-emerald-600 font-semibold">${p.userId || 'Hesaplı'}</span>`}
-          <button data-hr-card="${pkey}" class="text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg" title="Kimlik kartı yazdır">Kart</button>
-          <button data-edit-hr="${pkey}" class="text-navy hover:bg-navy/5 text-[11px] font-semibold px-2 py-1 rounded-lg">Düzenle</button>
-          <button data-del-hr="${pkey}" class="text-steel-300 hover:text-red-500 p-1.5 rounded-lg" title="Sil">✕</button>
+          ${!hasUser ? `<button type="button" data-hr-user="${pkey}" class="text-[11px] font-semibold text-navy bg-navy/5 hover:bg-navy/10 px-2 py-1 rounded-lg">Kullanıcı</button>` : `<span class="text-[10px] text-emerald-600 font-semibold">${p.userId || 'Hesaplı'}</span>`}
+          <button type="button" data-hr-card="${pkey}" class="text-[11px] font-semibold text-violet-700 bg-violet-50 hover:bg-violet-100 px-2 py-1 rounded-lg" title="Kimlik kartı yazdır">Kart</button>
+          <button type="button" data-edit-hr="${pkey}" class="text-navy hover:bg-navy/5 text-[11px] font-semibold px-2 py-1 rounded-lg">Düzenle</button>
+          <button type="button" data-del-hr="${pkey}" class="text-steel-300 hover:text-red-500 p-1.5 rounded-lg" title="Sil">✕</button>
         </td>
       </tr>`;
     }).join('');
     tbody.querySelectorAll('[data-hr-open]').forEach(tr => {
-      tr.addEventListener('click', () => openHrDetail(tr.dataset.hrOpen));
+      tr.addEventListener('click', () => openHrDetail(tr.getAttribute('data-hr-open')));
     });
     tbody.querySelectorAll('[data-hr-user]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openUserCreateFromPersonnel(btn.dataset.hrUser);
+        openUserCreateFromPersonnel(btn.getAttribute('data-hr-user'));
       });
     });
     tbody.querySelectorAll('[data-hr-card]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const p = findPersonnel(btn.dataset.hrCard);
+        const p = resolveHrPerson(btn.getAttribute('data-hr-card'));
         if (p) printPersonnelIdCard(p);
       });
     });
     tbody.querySelectorAll('[data-edit-hr]').forEach(btn => {
-      btn.addEventListener('click', (e) => { e.stopPropagation(); openHrModal(btn.dataset.editHr); });
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openHrModal(btn.getAttribute('data-edit-hr'));
+      });
     });
     tbody.querySelectorAll('[data-del-hr]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const p = findPersonnel(btn.dataset.delHr);
+        const p = resolveHrPerson(btn.getAttribute('data-del-hr'));
         if (!p) return;
         if (!confirmDelete(`Personel “${p.name}” silinecek.`)) return;
         const idx = personnel.indexOf(p);
@@ -21707,7 +21730,7 @@ Teşekkürler.`;
   }
 
   function openUserCreateFromPersonnel(personnelId) {
-    const p = findPersonnel(personnelId);
+    const p = resolveHrPerson(personnelId);
     if (!p) return;
     if (!userCanAccessPage(currentUser, 'settings')) {
       showToast('Kullanıcı oluşturmak için Ayarlar yetkisi gerekir.', 'error');
@@ -21751,8 +21774,9 @@ Teşekkürler.`;
     if (clearBtn) clearBtn.classList.toggle('hidden', !dataUrl);
   }
   function openHrModal(editId) {
-    const p = editId ? findPersonnel(editId) : null;
-    editingHrId = p ? personnelKey(p) : null;
+    const p = editId ? resolveHrPerson(editId) : null;
+    editingHrId = p ? (editId || personnelKey(p)) : null;
+    if (p && editingHrId) _hrListByKey.set(String(editingHrId), p);
     document.querySelector('#newHrModalOverlay h3').textContent = p ? 'Personel Düzenle' : 'Personel Kaydı';
     document.getElementById('hrName').value = p ? p.name : '';
     setHrPhotoUi(p ? (p.photo || null) : null);
@@ -21798,7 +21822,7 @@ Teşekkürler.`;
   document.getElementById('hrDetailBackBtn')?.addEventListener('click', () => { viewingHrId = null; renderHrPage(); });
   document.getElementById('hrDetailEditBtn')?.addEventListener('click', () => { if (viewingHrId) openHrModal(viewingHrId); });
   document.getElementById('hrDetailPrintCardBtn')?.addEventListener('click', () => {
-    const p = viewingHrId ? findPersonnel(viewingHrId) : null;
+    const p = viewingHrId ? resolveHrPerson(viewingHrId) : null;
     if (p) printPersonnelIdCard(p);
   });
   document.getElementById('hrDetailCardBtn')?.addEventListener('click', () => {
@@ -21841,7 +21865,7 @@ Teşekkürler.`;
     const leaveEntitle = Math.max(0, Number(document.getElementById('hrLeaveEntitle')?.value) || 0);
     const leavePlanned = Math.max(0, Number(document.getElementById('hrLeavePlanned')?.value) || 0);
     if (editingHrId) {
-      const p = findPersonnel(editingHrId);
+      const p = resolveHrPerson(editingHrId);
       if (p) {
         p.name = name;
         p.dept = dept;
@@ -21993,6 +22017,11 @@ Teşekkürler.`;
       if (typeof persistSettingsCache === 'function') persistSettingsCache();
       if (typeof syncFxRatesInputs === 'function') syncFxRatesInputs();
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
+      // Bulut sonrası Personel listesini tazele (eski satır anahtarları yanlış kişi açmasın)
+      try {
+        const hrActive = document.querySelector('.sidebar-item.active')?.dataset?.page === 'hr';
+        if (hrActive && typeof renderHrPage === 'function') renderHrPage();
+      } catch (_) { /* ignore */ }
       // Hidrate sonrası katalog UI (select/liste) yenile
       try {
         if (typeof renderCostMaterialSelects === 'function') renderCostMaterialSelects();
