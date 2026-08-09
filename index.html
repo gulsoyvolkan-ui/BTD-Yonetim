@@ -3925,19 +3925,19 @@
         <div class="space-y-2" id="cariRoleOptions">
           <label class="flex items-start gap-3 rounded-xl border border-steel-200 px-3.5 py-3 cursor-pointer hover:bg-steel-50 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/50">
             <input type="radio" name="cariRolePick" value="customer" class="mt-0.5" />
-            <span><span class="block text-sm font-semibold text-steel-800">Müşteri</span><span class="block text-[11px] text-steel-400 mt-0.5">Sadece müşteri listesinde görünür</span></span>
+            <span><span class="block text-sm font-semibold text-steel-800">Müşteri</span><span class="block text-[11px] text-steel-400 mt-0.5">Sadece <strong>Müşteriler</strong> menüsünde · satış / fatura</span></span>
           </label>
           <label class="flex items-start gap-3 rounded-xl border border-steel-200 px-3.5 py-3 cursor-pointer hover:bg-steel-50 has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40">
             <input type="radio" name="cariRolePick" value="supplier" class="mt-0.5" />
-            <span><span class="block text-sm font-semibold text-steel-800">Tedarikçi</span><span class="block text-[11px] text-steel-400 mt-0.5">Sadece tedarikçi listesinde görünür</span></span>
+            <span><span class="block text-sm font-semibold text-steel-800">Tedarikçi</span><span class="block text-[11px] text-steel-400 mt-0.5">Sadece <strong>Tedarikçiler</strong> menüsünde · satın alma / fason (tür ayrı)</span></span>
           </label>
           <label class="flex items-start gap-3 rounded-xl border border-steel-200 px-3.5 py-3 cursor-pointer hover:bg-steel-50 has-[:checked]:border-sky-500 has-[:checked]:bg-sky-50/50">
             <input type="radio" name="cariRolePick" value="both" class="mt-0.5" />
-            <span><span class="block text-sm font-semibold text-steel-800">Çift yönlü</span><span class="block text-[11px] text-steel-400 mt-0.5">Hem müşteri hem tedarikçi — bağlı kart çifti</span></span>
+            <span><span class="block text-sm font-semibold text-steel-800">Çift yönlü</span><span class="block text-[11px] text-steel-400 mt-0.5">Her iki menüde · karşılıklı fatura, iade faturası, bağlı kart çifti</span></span>
           </label>
         </div>
       </div>
-      <p class="text-[11px] text-steel-400 leading-relaxed">Rol değiştirince karşı listedeki kart senkronlanır (gerekirse oluşturulur / kaldırılır). Aynı vergi no mükerrer açılmaz.</p>
+      <p class="text-[11px] text-steel-400 leading-relaxed">Rol menü görünürlüğünü belirler. Tedarikçi türü (fasoncu, hammadde vb.) Tedarikçiler listesindeki kategori alanından ayarlanır. Rol değişince karşı listedeki kart senkronlanır.</p>
     </div>
     <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
       <button type="button" id="cariRoleCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
@@ -3959,14 +3959,28 @@
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
-    <div class="px-5 py-3 border-b border-steel-100 text-sm text-steel-600" id="parasutCrmImportMeta">—</div>
+    <div class="px-5 py-3 border-b border-steel-100 space-y-2" id="parasutCrmImportMetaWrap">
+      <div class="text-sm text-steel-600" id="parasutCrmImportMeta">—</div>
+      <div class="flex flex-wrap items-center gap-2 text-[11px]">
+        <span class="font-semibold text-steel-500 uppercase tracking-wide">Seçili satırlara uygula:</span>
+        <button type="button" data-parasut-bulk-role="customer" class="px-2.5 py-1 rounded-lg font-semibold bg-emerald-50 text-emerald-800 hover:bg-emerald-100">Müşteri</button>
+        <button type="button" data-parasut-bulk-role="supplier" class="px-2.5 py-1 rounded-lg font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100">Tedarikçi</button>
+        <button type="button" data-parasut-bulk-role="both" class="px-2.5 py-1 rounded-lg font-semibold bg-sky-50 text-sky-800 hover:bg-sky-100">Çift yönlü</button>
+        <span class="text-steel-300 mx-1">|</span>
+        <button type="button" data-parasut-bulk-cat="Fason İmalatçı" class="px-2.5 py-1 rounded-lg font-semibold bg-amber-50/80 text-amber-900 hover:bg-amber-100">Tür: Fason İmalatçı</button>
+        <button type="button" data-parasut-bulk-cat="Fason Dış Hizmet" class="px-2.5 py-1 rounded-lg font-semibold bg-violet-50 text-violet-800 hover:bg-violet-100">Tür: Fason Dış Hizmet</button>
+        <button type="button" data-parasut-bulk-cat="Hammadde" class="px-2.5 py-1 rounded-lg font-semibold bg-navy/10 text-navy hover:bg-navy/15">Tür: Hammadde</button>
+      </div>
+      <p class="text-[11px] text-steel-400 leading-relaxed">Genel rol menüyü belirler (Müşteriler / Tedarikçiler / ikisi). <strong>Çift yönlü</strong> karşılıklı fatura ve iade için. Tür yalnızca tedarikçi tarafını sınıflandırır (fasoncu, hammadde vb.).</p>
+    </div>
     <div class="flex-1 overflow-auto">
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-steel-50 text-[11px] uppercase text-steel-400 font-semibold">
           <tr>
             <th class="px-3 py-2.5 text-left">Aktar</th>
             <th class="px-3 py-2.5 text-left">Unvan</th>
-            <th class="px-3 py-2.5 text-left">Rol</th>
+            <th class="px-3 py-2.5 text-left min-w-[8.5rem]">Genel rol</th>
+            <th class="px-3 py-2.5 text-left min-w-[9rem]">Tür (tedarik)</th>
             <th class="px-3 py-2.5 text-left">Vergi No</th>
             <th class="px-3 py-2.5 text-right">TL Bakiye</th>
             <th class="px-3 py-2.5 text-left">Durum</th>
@@ -19978,6 +19992,12 @@ Teşekkürler.`;
 
   // ─── Paraşüt CRM Excel → Technomac müşteri/tedarikçi ─────────────────────
   const PARASUT_CRM_TARGET = 'Technomac';
+  const PARASUT_SUPPLIER_CATS = [
+    'Hammadde', 'Yedek Parça', 'Fason İmalatçı', 'Fason Dış Hizmet',
+    'Hırdavat', 'Takım', 'Lojistik', 'Diğer',
+  ];
+  /** Hangi menüden Excel açıldı: customers | suppliers — varsayılan genel rolü belirler */
+  let parasutCrmImportSource = 'customers';
   let parasutCrmPreviewRows = [];
 
   function parasutPickCol(row, aliases) {
@@ -20002,15 +20022,24 @@ Teşekkürler.`;
     if (role === 'supplier') return 'Tedarikçi';
     return 'Çift yönlü';
   }
+  function parasutDefaultRoleFromMenu() {
+    return parasutCrmImportSource === 'suppliers' ? 'supplier' : 'customer';
+  }
   function parasutFormatTl(n) {
     const v = Number(n) || 0;
     return v.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' ₺';
+  }
+  function parasutCategoryOptionsHtml(selected) {
+    const sel = selected && PARASUT_SUPPLIER_CATS.includes(selected) ? selected : (selected || 'Diğer');
+    const opts = PARASUT_SUPPLIER_CATS.includes(sel) ? PARASUT_SUPPLIER_CATS : [sel, ...PARASUT_SUPPLIER_CATS];
+    return opts.map((c) => `<option value="${escapeHtml(c)}" ${c === sel ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
   }
   function buildParasutCrmPreview(wb) {
     const sheetName = wb.SheetNames.find((n) => /müşteri|musteri|tedarik/i.test(n)) || wb.SheetNames[0];
     const ws = wb.Sheets[sheetName];
     const raw = XLSX.utils.sheet_to_json(ws, { defval: '', raw: true });
     const byKey = new Map();
+    const menuDefault = parasutDefaultRoleFromMenu();
     raw.forEach((row, idx) => {
       const name = String(parasutPickCol(row, ['Müşteri/tedarikçi ismi', 'unvan', 'isim', 'adı', 'adi']) || '').trim();
       if (!name) return;
@@ -20047,7 +20076,8 @@ Teşekkürler.`;
         phone,
         address,
         tlBalance: tl,
-        role: 'both',
+        role: menuDefault,
+        suggestedRole: parasutRoleFromBalance(tl),
         intercompany: isIntercompanyPartyName(name),
         category: guessSupplierCategoryFromName(name),
         company: PARASUT_CRM_TARGET,
@@ -20057,11 +20087,14 @@ Teşekkürler.`;
       });
     });
     const list = [...byKey.values()];
-    list.forEach((r) => { r.role = parasutRoleFromBalance(r.tlBalance); });
     list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'tr'));
     return list.map((r) => {
       const existCust = findCustomerByPartyKey(r.company, r.partyKey, r.taxNo, r.name);
       const existSupp = findSupplierByPartyKey(r.company, r.partyKey, r.taxNo, r.name);
+      if (existCust && existSupp) r.role = 'both';
+      else if (existCust && !existSupp) r.role = 'customer';
+      else if (existSupp && !existCust) r.role = 'supplier';
+      if (existSupp && existSupp.category) r.category = existSupp.category;
       let status = 'Yeni';
       const bits = [];
       if (existCust) bits.push('müşteri var');
@@ -20069,6 +20102,9 @@ Teşekkürler.`;
       if (bits.length) status = 'Güncelle · ' + bits.join(' + ');
       if (r.intercompany) status += (status === 'Yeni' ? '' : ' · ') + 'grup firması';
       if (r.dupCount > 1) status += ` · ${r.dupCount} satır birleşti`;
+      if (r.suggestedRole && r.suggestedRole !== r.role) {
+        status += ` · bakiye ipucu: ${parasutRoleLabel(r.suggestedRole)}`;
+      }
       return { ...r, status, existCust, existSupp };
     });
   }
@@ -20076,12 +20112,11 @@ Teşekkürler.`;
     parasutCrmPreviewRows = [];
     document.getElementById('parasutCrmImportOverlay')?.classList.add('hidden');
   }
-  function renderParasutCrmImportPreview() {
-    const body = document.getElementById('parasutCrmImportBody');
+  function updateParasutCrmImportMeta() {
     const meta = document.getElementById('parasutCrmImportMeta');
     const targetEl = document.getElementById('parasutCrmTargetCompany');
     if (targetEl) targetEl.textContent = PARASUT_CRM_TARGET;
-    if (!body) return;
+    if (!meta) return;
     const n = parasutCrmPreviewRows.length;
     const sel = parasutCrmPreviewRows.filter((r) => r.selected).length;
     const roles = {
@@ -20089,10 +20124,18 @@ Teşekkürler.`;
       supplier: parasutCrmPreviewRows.filter((r) => r.role === 'supplier').length,
       both: parasutCrmPreviewRows.filter((r) => r.role === 'both').length,
     };
-    if (meta) {
-      meta.innerHTML = `<strong>${n}</strong> cari (çiftler birleşik) · seçili <strong>${sel}</strong> · müşteri ${roles.customer} · tedarikçi ${roles.supplier} · çift yönlü ${roles.both} · hedef <span class="font-semibold text-navy">${PARASUT_CRM_TARGET}</span>`;
-    }
-    body.innerHTML = parasutCrmPreviewRows.map((r, i) => `
+    const srcLabel = parasutCrmImportSource === 'suppliers' ? 'Tedarikçiler menüsü' : 'Müşteriler menüsü';
+    meta.innerHTML = `<strong>${n}</strong> cari · seçili <strong>${sel}</strong> · müşteri ${roles.customer} · tedarikçi ${roles.supplier} · çift yönlü ${roles.both}`
+      + ` · açılış: <span class="font-semibold text-navy">${srcLabel}</span>`
+      + ` · hedef <span class="font-semibold text-navy">${PARASUT_CRM_TARGET}</span>`;
+  }
+  function renderParasutCrmImportPreview() {
+    const body = document.getElementById('parasutCrmImportBody');
+    if (!body) return;
+    updateParasutCrmImportMeta();
+    body.innerHTML = parasutCrmPreviewRows.map((r, i) => {
+      const needCat = r.role === 'supplier' || r.role === 'both';
+      return `
       <tr class="hover:bg-steel-50/70 ${r.intercompany ? 'bg-violet-50/40' : ''}">
         <td class="px-3 py-2.5"><input type="checkbox" data-parasut-sel="${i}" ${r.selected ? 'checked' : ''} class="rounded border-steel-300" /></td>
         <td class="px-3 py-2.5">
@@ -20101,27 +20144,44 @@ Teşekkürler.`;
           ${r.email ? `<p class="text-[10px] text-steel-400">${escapeHtml(r.email)}</p>` : ''}
         </td>
         <td class="px-3 py-2.5">
-          <span class="inline-flex text-[10px] font-bold px-1.5 py-0.5 rounded ${r.role === 'both' ? 'bg-sky-50 text-sky-700' : r.role === 'supplier' ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-700'}">${parasutRoleLabel(r.role)}</span>
-          ${r.role !== 'customer' ? `<p class="text-[10px] text-steel-400 mt-0.5">${escapeHtml(r.category)}</p>` : ''}
+          <select data-parasut-role="${i}" class="w-full rounded-lg border border-steel-200 px-2 py-1.5 text-xs font-semibold ${r.role === 'both' ? 'bg-sky-50 text-sky-800' : r.role === 'supplier' ? 'bg-amber-50 text-amber-900' : 'bg-emerald-50 text-emerald-800'}">
+            <option value="customer" ${r.role === 'customer' ? 'selected' : ''}>Müşteri</option>
+            <option value="supplier" ${r.role === 'supplier' ? 'selected' : ''}>Tedarikçi</option>
+            <option value="both" ${r.role === 'both' ? 'selected' : ''}>Çift yönlü</option>
+          </select>
+        </td>
+        <td class="px-3 py-2.5">
+          ${needCat
+            ? `<select data-parasut-cat="${i}" class="w-full rounded-lg border border-steel-200 px-2 py-1.5 text-xs">${parasutCategoryOptionsHtml(r.category)}</select>`
+            : `<span class="text-[10px] text-steel-300">— (yalnız müşteri)</span>`}
         </td>
         <td class="px-3 py-2.5 mono text-xs">${escapeHtml(r.taxNo || '—')}</td>
         <td class="px-3 py-2.5 text-right mono text-xs ${Number(r.tlBalance) < 0 ? 'text-rose-600' : Number(r.tlBalance) > 0 ? 'text-emerald-700' : 'text-steel-500'}">${parasutFormatTl(r.tlBalance)}</td>
         <td class="px-3 py-2.5 text-[11px] text-steel-500">${escapeHtml(r.status)}</td>
-      </tr>
-    `).join('') || `<tr><td colspan="6" class="px-3 py-8 text-center text-steel-400">Satır yok.</td></tr>`;
+      </tr>`;
+    }).join('') || `<tr><td colspan="7" class="px-3 py-8 text-center text-steel-400">Satır yok.</td></tr>`;
+
     body.querySelectorAll('[data-parasut-sel]').forEach((cb) => {
       cb.addEventListener('change', () => {
         const idx = Number(cb.dataset.parasutSel);
         if (parasutCrmPreviewRows[idx]) parasutCrmPreviewRows[idx].selected = cb.checked;
-        const s = parasutCrmPreviewRows.filter((r) => r.selected).length;
-        if (meta) {
-          const roles = {
-            customer: parasutCrmPreviewRows.filter((r) => r.role === 'customer').length,
-            supplier: parasutCrmPreviewRows.filter((r) => r.role === 'supplier').length,
-            both: parasutCrmPreviewRows.filter((r) => r.role === 'both').length,
-          };
-          meta.innerHTML = `<strong>${n}</strong> cari (çiftler birleşik) · seçili <strong>${s}</strong> · müşteri ${roles.customer} · tedarikçi ${roles.supplier} · çift yönlü ${roles.both} · hedef <span class="font-semibold text-navy">${PARASUT_CRM_TARGET}</span>`;
-        }
+        updateParasutCrmImportMeta();
+      });
+    });
+    body.querySelectorAll('[data-parasut-role]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const idx = Number(sel.dataset.parasutRole);
+        const row = parasutCrmPreviewRows[idx];
+        if (!row) return;
+        row.role = sel.value;
+        renderParasutCrmImportPreview();
+      });
+    });
+    body.querySelectorAll('[data-parasut-cat]').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        const idx = Number(sel.dataset.parasutCat);
+        if (parasutCrmPreviewRows[idx]) parasutCrmPreviewRows[idx].category = sel.value;
+        updateParasutCrmImportMeta();
       });
     });
   }
@@ -20130,6 +20190,7 @@ Teşekkürler.`;
     renderParasutCrmImportPreview();
     document.getElementById('parasutCrmImportOverlay')?.classList.remove('hidden');
   }
+
   async function handleParasutCrmFile(file) {
     if (!file) return;
     if (typeof XLSX === 'undefined') {
@@ -20283,7 +20344,8 @@ Teşekkürler.`;
       if (btn) { btn.disabled = false; btn.textContent = 'Seçilenleri Kaydet'; }
     }
   }
-  function triggerParasutCrmFilePick() {
+  function triggerParasutCrmFilePick(source) {
+    parasutCrmImportSource = source === 'suppliers' ? 'suppliers' : 'customers';
     if (activeCompany !== PARASUT_CRM_TARGET) {
       const ok = window.confirm(
         `Paraşüt Excel şu an yalnızca ${PARASUT_CRM_TARGET} carilerine yazılır.\n\n` +
@@ -20295,14 +20357,34 @@ Teşekkürler.`;
     const inp = document.getElementById('parasutCrmFileInput');
     if (inp) { inp.value = ''; inp.click(); }
   }
-  document.getElementById('parasutCrmImportBtnCustomers')?.addEventListener('click', triggerParasutCrmFilePick);
-  document.getElementById('parasutCrmImportBtnSuppliers')?.addEventListener('click', triggerParasutCrmFilePick);
+  document.getElementById('parasutCrmImportBtnCustomers')?.addEventListener('click', () => triggerParasutCrmFilePick('customers'));
+  document.getElementById('parasutCrmImportBtnSuppliers')?.addEventListener('click', () => triggerParasutCrmFilePick('suppliers'));
   document.getElementById('parasutCrmFileInput')?.addEventListener('change', (e) => {
     const f = e.target.files && e.target.files[0];
     if (f) handleParasutCrmFile(f);
   });
   document.getElementById('parasutCrmImportCloseBtn')?.addEventListener('click', closeParasutCrmImport);
   document.getElementById('parasutCrmImportCancelBtn')?.addEventListener('click', closeParasutCrmImport);
+  document.querySelectorAll('[data-parasut-bulk-role]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const role = btn.getAttribute('data-parasut-bulk-role');
+      if (!['customer', 'supplier', 'both'].includes(role)) return;
+      parasutCrmPreviewRows.forEach((r) => {
+        if (r.selected) r.role = role;
+      });
+      renderParasutCrmImportPreview();
+    });
+  });
+  document.querySelectorAll('[data-parasut-bulk-cat]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cat = btn.getAttribute('data-parasut-bulk-cat');
+      if (!cat) return;
+      parasutCrmPreviewRows.forEach((r) => {
+        if (r.selected && (r.role === 'supplier' || r.role === 'both')) r.category = cat;
+      });
+      renderParasutCrmImportPreview();
+    });
+  });
   document.getElementById('parasutCrmImportConfirmBtn')?.addEventListener('click', confirmParasutCrmImport);
   document.getElementById('parasutCrmImportOverlay')?.addEventListener('click', (e) => {
     if (e.target.id === 'parasutCrmImportOverlay') closeParasutCrmImport();
