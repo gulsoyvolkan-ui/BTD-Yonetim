@@ -200,6 +200,33 @@
       }),
     };
   }
+  function stripOptionalCrmCols(row) {
+    const next = { ...row };
+    delete next.cari_rol;
+    delete next.tl_bakiye;
+    delete next.kaynak;
+    delete next.party_key;
+    delete next.intercompany;
+    delete next.linked_tedarikci_id;
+    delete next.linked_musteri_id;
+    return next;
+  }
+  async function upsertCrmRow(client, table, row, onConflict) {
+    let { data, error } = await client.from(table).upsert(row, { onConflict }).select('id').single();
+    if (error && /column|schema cache|does not exist/i.test(error.message || '')) {
+      const slim = stripOptionalCrmCols(row);
+      ({ data, error } = await client.from(table).upsert(slim, { onConflict }).select('id').single());
+    }
+    return { data, error };
+  }
+  async function updateCrmRow(client, table, row, dbId) {
+    let { error } = await client.from(table).update(row).eq('id', dbId);
+    if (error && /column|schema cache|does not exist/i.test(error.message || '')) {
+      const slim = stripOptionalCrmCols(row);
+      ({ error } = await client.from(table).update(slim).eq('id', dbId));
+    }
+    return { error };
+  }
   async function saveCustomer(c, companies) {
     try {
       const client = sb();
@@ -209,14 +236,10 @@
       const row = customerToRow(c, fid);
       let dbId = c.dbId;
       if (dbId) {
-        const { error } = await client.from('musteriler').update(row).eq('id', dbId);
+        const { error } = await updateCrmRow(client, 'musteriler', row, dbId);
         if (error) throw error;
       } else {
-        const { data, error } = await client
-          .from('musteriler')
-          .upsert(row, { onConflict: 'firma_id,unvan' })
-          .select('id')
-          .single();
+        const { data, error } = await upsertCrmRow(client, 'musteriler', row, 'firma_id,unvan');
         if (error) throw error;
         dbId = data.id;
         c.dbId = dbId;
@@ -358,14 +381,10 @@
       const row = supplierToRow(s, fid);
       let dbId = s.dbId;
       if (dbId) {
-        const { error } = await client.from('tedarikciler').update(row).eq('id', dbId);
+        const { error } = await updateCrmRow(client, 'tedarikciler', row, dbId);
         if (error) throw error;
       } else {
-        const { data, error } = await client
-          .from('tedarikciler')
-          .upsert(row, { onConflict: 'firma_id,unvan' })
-          .select('id')
-          .single();
+        const { data, error } = await upsertCrmRow(client, 'tedarikciler', row, 'firma_id,unvan');
         if (error) throw error;
         dbId = data.id;
         s.dbId = dbId;

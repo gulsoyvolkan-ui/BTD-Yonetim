@@ -5592,7 +5592,9 @@ ${vadeLine}`;
     try {
       const fn = window.BtdCloud?.[method];
       if (typeof fn !== 'function') return { ok: false, reason: 'no-fn' };
-      return await fn(...args);
+      const r = await fn(...args);
+      if (r && r.ok !== false) schedulePersistEntityCache();
+      return r || { ok: true };
     } catch (e) {
       console.warn('[BTD cloud await]', method, e);
       return { ok: false, reason: e?.message || String(e) };
@@ -5602,6 +5604,9 @@ ${vadeLine}`;
   /** İlk bulut senkronundan sonra demo veriyi tekrar enjekte etme */
   function isCloudSeeded() {
     try { return localStorage.getItem('btd_cloud_seeded_v1') === '1'; } catch (_) { return false; }
+  }
+  function markCloudSeededLocal() {
+    try { localStorage.setItem('btd_cloud_seeded_v1', '1'); } catch (_) { /* ignore */ }
   }
   function mutateLocalArray(arr, rows) {
     if (!Array.isArray(arr)) return;
@@ -5616,10 +5621,58 @@ ${vadeLine}`;
     arr.splice(i, 1);
     return true;
   }
+  function partyEntityKey(row) {
+    if (!row) return '';
+    const company = row.company || '';
+    const pk = row.partyKey || (typeof buildPartyKey === 'function' ? buildPartyKey(row.taxNo, row.name) : '');
+    return `${company}||${pk || row.name || ''}`.toLowerCase();
+  }
+
   const ENTITY_CACHE_KEY = 'btd_entity_cache_v1';
+  const TOMBSTONE_KEY = 'btd_tombstones_v1';
   let _entityCacheTimer = null;
+
+  function readTombstones() {
+    try { return JSON.parse(localStorage.getItem(TOMBSTONE_KEY) || '{}') || {}; }
+    catch (_) { return {}; }
+  }
+  function writeTombstones(map) {
+    try { localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(map || {})); } catch (_) { /* ignore */ }
+  }
+  function addTombstone(kind, key) {
+    if (!kind || !key) return;
+    const t = readTombstones();
+    (t[kind] ||= {})[String(key)] = Date.now();
+    writeTombstones(t);
+  }
+  function clearTombstone(kind, key) {
+    if (!kind || !key) return;
+    const t = readTombstones();
+    if (!t[kind]) return;
+    delete t[kind][String(key)];
+    writeTombstones(t);
+  }
+  /** Hydrate sonrası silinenleri listeden çıkar; buluta silme tekrarını dene */
+  function applyTombstones(kind, arr, keyFn, deleteMethod) {
+    if (!Array.isArray(arr)) return;
+    const map = readTombstones()[kind] || {};
+    const keys = Object.keys(map);
+    if (!keys.length) return;
+    const removed = [];
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const k = keyFn(arr[i]);
+      if (k && map[k]) {
+        removed.push(arr[i]);
+        arr.splice(i, 1);
+      }
+    }
+    if (deleteMethod && removed.length && typeof cloudSave === 'function') {
+      removed.forEach((row) => cloudSave(deleteMethod, row, companies));
+    }
+  }
+
   function persistEntityCache() {
-    if (!isCloudSeeded()) return;
+    markCloudSeededLocal();
     try {
       const payload = {
         at: Date.now(),
@@ -5641,15 +5694,37 @@ ${vadeLine}`;
       };
       localStorage.setItem(ENTITY_CACHE_KEY, JSON.stringify(payload));
     } catch (e) {
-      console.warn('[BTD] entity cache yazılamadı (kota?)', e?.message || e);
+      // Kota dolunca ağır alanları düşürerek tekrar dene
+      try {
+        const slim = {
+          at: Date.now(),
+          quotes: (quotes || []).map((q) => ({ ...q, qrPayload: null })),
+          orders: orders || [],
+          costAnalyses: (costAnalyses || []).map((a) => ({ ...a, items: a.items || [] })),
+          customers: (customers || []).map((c) => ({ ...c, contacts: (c.contacts || []).slice(0, 8) })),
+          suppliers: (suppliers || []).map((s) => ({ ...s, contacts: (s.contacts || []).slice(0, 8) })),
+          procurementItems,
+          fasonJobs,
+          qcRecords,
+          shipments,
+          invoices,
+          workOrders: Array.isArray(workOrders) ? workOrders.map((w) => ({ ...w })) : [],
+          personnel: (personnel || []).map((p) => ({ ...p, photo: '' })),
+          materialRfqs,
+          reprocRequests,
+          unforeseenCosts,
+        };
+        localStorage.setItem(ENTITY_CACHE_KEY, JSON.stringify(slim));
+      } catch (e2) {
+        console.warn('[BTD] entity cache yazılamadı (kota?)', e2?.message || e?.message || e);
+      }
     }
   }
   function schedulePersistEntityCache() {
     try { clearTimeout(_entityCacheTimer); } catch (_) { /* ignore */ }
-    _entityCacheTimer = setTimeout(persistEntityCache, 450);
+    _entityCacheTimer = setTimeout(persistEntityCache, 250);
   }
   function restoreEntityCache() {
-    if (!isCloudSeeded()) return false;
     try {
       const raw = localStorage.getItem(ENTITY_CACHE_KEY);
       if (!raw) return false;
@@ -5676,6 +5751,62 @@ ${vadeLine}`;
       console.warn('[BTD] entity cache okunamadı', e);
       return false;
     }
+  }
+
+  function snapshotPersistArrays() {
+    return {
+      customers: (customers || []).slice(),
+      suppliers: (suppliers || []).slice(),
+      orders: (orders || []).slice(),
+      quotes: (quotes || []).slice(),
+      costAnalyses: (costAnalyses || []).slice(),
+      procurementItems: (procurementItems || []).slice(),
+      fasonJobs: (fasonJobs || []).slice(),
+      qcRecords: (qcRecords || []).slice(),
+      shipments: (shipments || []).slice(),
+      invoices: (invoices || []).slice(),
+    };
+  }
+
+  /** Bulutta olmayan yerel kayıtları geri yükle ve tekrar yaz (Excel import kaybını önler) */
+  async function reconcileLocalOrphans(snapshot) {
+    if (!snapshot) return;
+    const pushMissing = async (localList, liveArr, keyFn, saveMethod) => {
+      if (!Array.isArray(localList) || !Array.isArray(liveArr)) return 0;
+      const have = new Set(liveArr.map(keyFn).filter(Boolean));
+      let n = 0;
+      for (const row of localList) {
+        const k = keyFn(row);
+        if (!k || have.has(k)) continue;
+        liveArr.push(row);
+        have.add(k);
+        n += 1;
+        if (saveMethod) await cloudSaveAwait(saveMethod, row, companies);
+      }
+      return n;
+    };
+    const c = await pushMissing(snapshot.customers, customers, partyEntityKey, 'saveCustomer');
+    const s = await pushMissing(snapshot.suppliers, suppliers, partyEntityKey, 'saveSupplier');
+    const o = await pushMissing(snapshot.orders, orders, (x) => x?.id, 'saveOrder');
+    const q = await pushMissing(snapshot.quotes, quotes, (x) => x?.id, 'saveQuote');
+    const ca = await pushMissing(snapshot.costAnalyses, costAnalyses, (x) => x?.id, 'saveCostAnalysis');
+    if (c || s || o || q || ca) {
+      console.info('[BTD] Yerel orphan senkron', { customers: c, suppliers: s, orders: o, quotes: q, costAnalyses: ca });
+    }
+  }
+
+  function applyAllTombstones() {
+    applyTombstones('orders', orders, (x) => x?.id, 'deleteOrder');
+    applyTombstones('quotes', quotes, (x) => x?.id, 'deleteQuote');
+    applyTombstones('costAnalyses', costAnalyses, (x) => x?.id, 'deleteCostAnalysis');
+    applyTombstones('customers', customers, partyEntityKey, 'deleteCustomer');
+    applyTombstones('suppliers', suppliers, partyEntityKey, 'deleteSupplier');
+    applyTombstones('procurementItems', procurementItems, (x) => x?.id, 'deleteProcurementItem');
+    applyTombstones('fasonJobs', fasonJobs, (x) => x?.id, 'deleteFason');
+    applyTombstones('qcRecords', qcRecords, (x) => x?.id, 'deleteQc');
+    applyTombstones('shipments', shipments, (x) => x?.id, 'deleteShipment');
+    applyTombstones('invoices', invoices, (x) => x?.id, 'deleteInvoice');
+    applyTombstones('personnel', personnel, (x) => x?.id, 'deletePersonnel');
   }
 
   function formatTlBalance(n) {
@@ -6442,7 +6573,7 @@ ${vadeLine}`;
     return base + itemExtras + (Number(order.unforeseenTotal) || 0);
   }
 
-  function convertQuoteToOrder(quote, { poNumber, leadTimeDays, approvalDate }) {
+  async function convertQuoteToOrder(quote, { poNumber, leadTimeDays, approvalDate }) {
     const existing = orders.find(o => o.quoteId === quote.id || o.id === quote.id);
     if (existing) {
       showToast(`${existing.id} zaten sipariş olarak kayıtlı. Önce iptal edin.`, 'error');
@@ -6468,7 +6599,12 @@ ${vadeLine}`;
     };
     orders.push(order);
     orderRevisionLog[order.id] = [{ date: approvalDate, note: 'Sipariş oluşturuldu.' }];
-    cloudSave('saveOrder', order, companies);
+    clearTombstone('orders', order.id);
+    persistEntityCache();
+    const saved = await cloudSaveAwait('saveOrder', order, companies);
+    if (saved && saved.ok === false) {
+      showToast(`Sipariş yerel kaydedildi ama buluta yazılamadı: ${saved.reason || 'hata'}. Yenilemede kaybolabilir.`, 'error');
+    }
     return order;
   }
 
@@ -6528,19 +6664,25 @@ ${vadeLine}`;
     const removed = order;
     const idx = orders.indexOf(order);
     if (idx >= 0) orders.splice(idx, 1);
-    else orders = orders.filter(o => o.id !== removed.id);
     if (orderRevisionLog[removed.id]) delete orderRevisionLog[removed.id];
     try { if (typeof expandedOrders !== 'undefined') expandedOrders.delete(removed.id); } catch (_) { /* ignore */ }
 
+    addTombstone('orders', removed.id);
+    persistEntityCache();
+
     const del = await cloudSaveAwait('deleteOrder', removed, companies);
-    if (del && del.ok === false) {
+    // Bulutta hiç oluşmamış (local-only) veya zaten yoksa silmeyi kabul et
+    const softOk = !del || del.ok !== false
+      || /no-id|no-client|not found|0 rows/i.test(String(del.reason || ''));
+    if (!softOk) {
       orders.push(removed);
+      clearTombstone('orders', removed.id);
+      persistEntityCache();
       showToast('Sipariş buluttan silinemedi — iptal geri alındı. Bağlantıyı kontrol edin.', 'error');
       if (typeof renderQuotesPage === 'function') renderQuotesPage();
       if (typeof renderOrdersPage === 'function') renderOrdersPage();
       return false;
     }
-    schedulePersistEntityCache();
 
     if (typeof renderQuotesPage === 'function') renderQuotesPage();
     if (typeof renderOrdersPage === 'function') renderOrdersPage();
@@ -11132,14 +11274,23 @@ ${vadeLine}`;
     }).join('');
 
     tbody.querySelectorAll('[data-del-customer]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const target = list[Number(btn.dataset.delCustomer)];
         if (!target) return;
         if (!confirmDelete(`Müşteri “${target.name}” silinecek.`)) return;
         const ci = customers.indexOf(target);
         if (ci >= 0) customers.splice(ci, 1);
-        cloudSave('deleteCustomer', target, companies);
-        schedulePersistEntityCache();
+        addTombstone('customers', partyEntityKey(target));
+        persistEntityCache();
+        const r = await cloudSaveAwait('deleteCustomer', target, companies);
+        if (r && r.ok === false && !/no-id|no-client/i.test(String(r.reason || ''))) {
+          customers.push(target);
+          clearTombstone('customers', partyEntityKey(target));
+          persistEntityCache();
+          showToast(`Müşteri buluttan silinemedi: ${r.reason || 'hata'}`, 'error');
+          renderCustomersPage();
+          return;
+        }
         renderCustomersPage();
         showToast(`${target.name} müşteri listesinden kaldırıldı.`, 'info');
       });
@@ -11249,14 +11400,23 @@ ${vadeLine}`;
       btn.addEventListener('click', () => openSupplierModal(list[Number(btn.dataset.editSupplier)]));
     });
     tbody.querySelectorAll('[data-del-supplier]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const target = list[Number(btn.dataset.delSupplier)];
         if (!target) return;
         if (!confirmDelete(`Tedarikçi “${target.name}” silinecek.`)) return;
         const si = suppliers.indexOf(target);
         if (si >= 0) suppliers.splice(si, 1);
-        cloudSave('deleteSupplier', target, companies);
-        schedulePersistEntityCache();
+        addTombstone('suppliers', partyEntityKey(target));
+        persistEntityCache();
+        const r = await cloudSaveAwait('deleteSupplier', target, companies);
+        if (r && r.ok === false && !/no-id|no-client/i.test(String(r.reason || ''))) {
+          suppliers.push(target);
+          clearTombstone('suppliers', partyEntityKey(target));
+          persistEntityCache();
+          showToast(`Tedarikçi buluttan silinemedi: ${r.reason || 'hata'}`, 'error');
+          renderSuppliersPage();
+          return;
+        }
         renderSuppliersPage();
         showToast(`${target.name} tedarikçi listesinden kaldırıldı.`, 'info');
       });
@@ -11572,7 +11732,7 @@ ${vadeLine}`;
     if (e.key === 'Escape' && newSupplierModalOverlay && !newSupplierModalOverlay.classList.contains('hidden')) closeNewSupplierModal();
   });
 
-  document.getElementById('newSupplierSubmitBtn')?.addEventListener('click', () => {
+  document.getElementById('newSupplierSubmitBtn')?.addEventListener('click', async () => {
     const name = document.getElementById('newSupplierName').value.trim();
     if (!name) return;
     const cleanContacts = supplierModalContacts
@@ -11612,16 +11772,22 @@ ${vadeLine}`;
     };
     if (supplierModalEditingTarget) {
       Object.assign(supplierModalEditingTarget, payload);
-      cloudSave('saveSupplier', supplierModalEditingTarget, companies);
+      persistEntityCache();
+      clearTombstone('suppliers', partyEntityKey(supplierModalEditingTarget));
+      const r = await cloudSaveAwait('saveSupplier', supplierModalEditingTarget, companies);
       closeNewSupplierModal();
       renderSuppliersPage();
-      showToast(`${payload.name} tedarikçi kaydı güncellendi.`, 'success');
+      if (r && r.ok === false) showToast(`Güncellendi (yerel); bulut: ${r.reason || 'hata'}`, 'error');
+      else showToast(`${payload.name} tedarikçi kaydı güncellendi.`, 'success');
     } else {
       suppliers.push(payload);
-      cloudSave('saveSupplier', payload, companies);
+      persistEntityCache();
+      clearTombstone('suppliers', partyEntityKey(payload));
+      const r = await cloudSaveAwait('saveSupplier', payload, companies);
       closeNewSupplierModal();
       renderSuppliersPage();
-      showToast(`${payload.name} tedarikçi listesine eklendi.`, 'success');
+      if (r && r.ok === false) showToast(`Eklendi (yerel); bulut: ${r.reason || 'hata'}`, 'error');
+      else showToast(`${payload.name} tedarikçi listesine eklendi.`, 'success');
     }
   });
 
@@ -11776,7 +11942,7 @@ ${vadeLine}`;
     if (e.key === 'Escape' && !newCustomerModalOverlay.classList.contains('hidden')) closeNewCustomerModal();
   });
 
-  document.getElementById('newCustomerSubmitBtn').addEventListener('click', () => {
+  document.getElementById('newCustomerSubmitBtn').addEventListener('click', async () => {
     const name = document.getElementById('newCustomerName').value.trim();
     if (!name) return;
     const cleanContacts = customerModalContacts
@@ -11813,10 +11979,13 @@ ${vadeLine}`;
       target.quoteTerms = document.getElementById('newCustomerQuoteTerms').value;
       target.contacts = cleanContacts;
       target.notifyPrefs = notifyPrefs;
-      cloudSave('saveCustomer', target, companies);
+      clearTombstone('customers', partyEntityKey(target));
+      persistEntityCache();
+      const r = await cloudSaveAwait('saveCustomer', target, companies);
       closeNewCustomerModal();
       renderCustomersPage();
-      showToast(`${target.name} müşteri kaydı güncellendi.`, 'success');
+      if (r && r.ok === false) showToast(`Güncellendi (yerel); bulut: ${r.reason || 'hata'}`, 'error');
+      else showToast(`${target.name} müşteri kaydı güncellendi.`, 'success');
     } else {
       const newCustomer = {
         company: activeCompany,
@@ -11836,10 +12005,13 @@ ${vadeLine}`;
         notifyPrefs,
       };
       customers.push(newCustomer);
-      cloudSave('saveCustomer', newCustomer, companies);
+      clearTombstone('customers', partyEntityKey(newCustomer));
+      persistEntityCache();
+      const r = await cloudSaveAwait('saveCustomer', newCustomer, companies);
       closeNewCustomerModal();
       renderCustomersPage();
-      showToast(`${newCustomer.name} müşteri listesine eklendi.`, 'success');
+      if (r && r.ok === false) showToast(`Eklendi (yerel); bulut: ${r.reason || 'hata'}`, 'error');
+      else showToast(`${newCustomer.name} müşteri listesine eklendi.`, 'success');
     }
   });
 
@@ -12333,8 +12505,9 @@ ${vadeLine}`;
         if (!confirmDelete(`Teklif ${id} silinecek.`)) return;
         removeLocalById(quotes, id);
         unlinkCostAnalysesFromQuote(id);
+        addTombstone('quotes', id);
+        persistEntityCache();
         cloudSave('deleteQuote', q, companies);
-        schedulePersistEntityCache();
         renderQuotesPage();
         if (typeof renderCostingPage === 'function') renderCostingPage();
         showToast(`${id} numaralı teklif silindi. İlişkili maliyet yeniden teklife aktarılabilir.`, 'info');
@@ -12542,6 +12715,8 @@ ${vadeLine}`;
     } else {
       quotes.push(quoteData);
     }
+    clearTombstone('quotes', quoteData.id);
+    persistEntityCache();
     cloudSave('saveQuote', quoteData, companies);
     closeNewQuoteModal();
     renderQuotesPage();
@@ -13089,7 +13264,7 @@ ${vadeLine}`;
     if (e.target === convertOrderModalOverlay) closeConvertOrderModal();
   });
 
-  document.getElementById('convertOrderConfirmBtn').addEventListener('click', () => {
+  document.getElementById('convertOrderConfirmBtn').addEventListener('click', async () => {
     if (!convertingQuote) return;
     if (findOrderForQuote(convertingQuote.id)) {
       showToast('Bu teklif için sipariş zaten var. İptal edip yeniden oluşturabilirsiniz.', 'error');
@@ -13098,13 +13273,22 @@ ${vadeLine}`;
     const approvalDate = document.getElementById('convertOrderApprovalDate').value || new Date().toISOString().slice(0, 10);
     const leadTimeDays = Number(document.getElementById('convertOrderLeadTime').value) || 15;
     const poNumber = document.getElementById('convertOrderPo').value.trim();
-    const order = convertQuoteToOrder(convertingQuote, { poNumber, leadTimeDays, approvalDate });
-    closeConvertOrderModal();
-    renderQuotesPage();
-    if (typeof renderOrdersPage === 'function') renderOrdersPage();
-    if (typeof renderDashboard === 'function') renderDashboard();
-    showToast(`${order.id} numaralı sipariş oluşturuldu · Termin: ${fmtDate(order.deliveryDate)}`, 'success');
-    showPage('orders');
+    const btn = document.getElementById('convertOrderConfirmBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Kaydediliyor…'; }
+    try {
+      const order = await convertQuoteToOrder(convertingQuote, { poNumber, leadTimeDays, approvalDate });
+      closeConvertOrderModal();
+      renderQuotesPage();
+      if (typeof renderOrdersPage === 'function') renderOrdersPage();
+      if (typeof renderDashboard === 'function') renderDashboard();
+      showToast(`${order.id} numaralı sipariş oluşturuldu · Termin: ${fmtDate(order.deliveryDate)}`, 'success');
+      showPage('orders');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 11 16 15 12"></polyline><circle cx="12" cy="12" r="10"></circle></svg> Siparişi Oluştur`;
+      }
+    }
   });
 
   // ---------- Siparişler Sayfası ----------
@@ -13600,7 +13784,7 @@ ${vadeLine}`;
     if (e.target === reviseOrderModalOverlay) closeReviseOrderModal();
   });
 
-  document.getElementById('reviseOrderSaveBtn').addEventListener('click', () => {
+  document.getElementById('reviseOrderSaveBtn').addEventListener('click', async () => {
     if (!reviseOrderTarget) return;
     const order = orders.find(o => o.id === reviseOrderTarget.id);
     if (!order) return;
@@ -13627,13 +13811,17 @@ ${vadeLine}`;
       date: new Date().toISOString().slice(0, 10),
       note: note || `Revizyon #${order.revisionNo} · iskonto / kalem güncellemesi`,
     });
-    // Bağlı teklif toplamı değişmez; sipariş kendi kalemlerini taşır
-    cloudSave('saveOrder', order, companies);
+    persistEntityCache();
+    const saved = await cloudSaveAwait('saveOrder', order, companies);
     closeReviseOrderModal();
     renderOrdersPage();
     if (typeof renderQuotesPage === 'function') renderQuotesPage();
     if (typeof renderDashboard === 'function') renderDashboard();
-    showToast(`${order.id} revize edildi · iskonto / kalemler kaydedildi.`, 'success');
+    if (saved && saved.ok === false) {
+      showToast(`Revizyon yerel kaydedildi; buluta yazılamadı: ${saved.reason || 'hata'}`, 'error');
+    } else {
+      showToast(`${order.id} revize edildi · iskonto / kalemler kaydedildi.`, 'success');
+    }
   });
 
   // ---------- Tedarik (Satınalma) Sayfası ----------
@@ -14242,8 +14430,9 @@ ${vadeLine}`;
         if (!item) return;
         if (!confirmDelete(`Tedarik kaydı ${item.id} silinecek.`)) return;
         removeLocalById(procurementItems, item.id);
+        addTombstone('procurementItems', item.id);
+        persistEntityCache();
         cloudSave('deleteProcurementItem', item, companies);
-        schedulePersistEntityCache();
         renderProcurementPage();
       });
     });
@@ -14631,8 +14820,9 @@ ${vadeLine}`;
         if (!rec) return;
         if (!confirmDelete(`Kalite kaydı ${rec.id} silinecek.`)) return;
         removeLocalById(qcRecords, rec.id);
+        addTombstone('qcRecords', rec.id);
+        persistEntityCache();
         cloudSave('deleteQc', rec, companies);
-        schedulePersistEntityCache();
         renderQualityPage();
       });
     });
@@ -14851,8 +15041,9 @@ ${vadeLine}`;
         if (!job) return;
         if (!confirmDelete(`Fason kaydı ${job.id} silinecek.`)) return;
         removeLocalById(fasonJobs, job.id);
+        addTombstone('fasonJobs', job.id);
+        persistEntityCache();
         cloudSave('deleteFason', job, companies);
-        schedulePersistEntityCache();
         renderFasonPage();
         if (typeof renderDashboard === 'function') renderDashboard();
       });
@@ -15024,8 +15215,9 @@ ${vadeLine}`;
           if (!s) return;
           if (!confirmDelete(`Sevkiyat kaydı ${s.id} silinecek.`)) return;
           removeLocalById(shipments, s.id);
+          addTombstone('shipments', s.id);
+          persistEntityCache();
           cloudSave('deleteShipment', s, companies);
-          schedulePersistEntityCache();
           renderShippingPage();
         });
       });
@@ -15139,8 +15331,9 @@ ${vadeLine}`;
         if (!inv) return;
         if (!confirmDelete(`Fatura ${inv.id} silinecek.`)) return;
         removeLocalById(invoices, inv.id);
+        addTombstone('invoices', inv.id);
+        persistEntityCache();
         cloudSave('deleteInvoice', inv, companies);
-        schedulePersistEntityCache();
         renderInvoicingPage();
       });
     });
@@ -17433,8 +17626,9 @@ Teşekkürler.`;
         if (!a) return;
         if (!confirmDelete(`Maliyet analizi ${a.id} silinecek.`)) return;
         removeLocalById(costAnalyses, a.id);
+        addTombstone('costAnalyses', a.id);
+        persistEntityCache();
         cloudSave('deleteCostAnalysis', a, companies);
-        schedulePersistEntityCache();
         renderCostingPage();
         showToast(`${a.id} silindi.`, 'info');
       });
@@ -20018,6 +20212,7 @@ Teşekkürler.`;
     let custN = 0;
     let suppN = 0;
     let linkN = 0;
+    let failN = 0;
     try {
       if (activeCompany !== PARASUT_CRM_TARGET && typeof setActiveCompany === 'function') {
         try { setActiveCompany(PARASUT_CRM_TARGET); } catch (_) { /* ignore */ }
@@ -20028,13 +20223,17 @@ Teşekkürler.`;
         let supp = null;
         if (row.role === 'customer' || row.role === 'both') {
           cust = upsertParasutCustomer(row);
+          clearTombstone('customers', partyEntityKey(cust));
           custN += 1;
-          await cloudSaveAwait('saveCustomer', cust, companies);
+          const r = await cloudSaveAwait('saveCustomer', cust, companies);
+          if (r && r.ok === false) failN += 1;
         }
         if (row.role === 'supplier' || row.role === 'both') {
           supp = upsertParasutSupplier(row);
+          clearTombstone('suppliers', partyEntityKey(supp));
           suppN += 1;
-          await cloudSaveAwait('saveSupplier', supp, companies);
+          const r = await cloudSaveAwait('saveSupplier', supp, companies);
+          if (r && r.ok === false) failN += 1;
         }
         if (cust && supp) pairs.push({ cust, supp });
       }
@@ -20043,16 +20242,21 @@ Teşekkürler.`;
         if (supp.dbId) cust.linkedSupplierDbId = supp.dbId;
         ensurePartyKey(cust);
         ensurePartyKey(supp);
-        await cloudSaveAwait('saveCustomer', cust, companies);
-        await cloudSaveAwait('saveSupplier', supp, companies);
+        const r1 = await cloudSaveAwait('saveCustomer', cust, companies);
+        const r2 = await cloudSaveAwait('saveSupplier', supp, companies);
+        if ((r1 && r1.ok === false) || (r2 && r2.ok === false)) failN += 1;
         linkN += 1;
       }
+      persistEntityCache();
       closeParasutCrmImport();
       if (typeof renderCustomersPage === 'function') renderCustomersPage();
       if (typeof renderSuppliersPage === 'function') renderSuppliersPage();
-      showToast(`${custN} müşteri · ${suppN} tedarikçi kaydedildi${linkN ? ` · ${linkN} çift yönlü bağ` : ''} (${PARASUT_CRM_TARGET}).`, 'success');
+      const base = `${custN} müşteri · ${suppN} tedarikçi kaydedildi${linkN ? ` · ${linkN} çift yönlü bağ` : ''} (${PARASUT_CRM_TARGET})`;
+      if (failN) showToast(`${base}. ${failN} kayıt buluta yazılamadı — yerel yedek alındı, tekrar deneyin.`, 'error');
+      else showToast(base + '.', 'success');
     } catch (err) {
       console.warn('[BTD] parasut confirm', err);
+      persistEntityCache();
       showToast('Aktarım sırasında hata: ' + (err.message || 'bilinmeyen'), 'error');
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Seçilenleri Kaydet'; }
@@ -21122,8 +21326,9 @@ Teşekkürler.`;
         if (!p) return;
         if (!confirmDelete(`Personel “${p.name}” silinecek.`)) return;
         removeLocalById(personnel, p.id);
+        addTombstone('personnel', p.id);
+        persistEntityCache();
         cloudSave('deletePersonnel', p, companies);
-        schedulePersistEntityCache();
         renderHrPage();
         showToast(`${p.name} personel listesinden kaldırıldı.`, 'info');
       });
@@ -21333,10 +21538,24 @@ Teşekkürler.`;
     console.warn('[BTD] Oturum geri yükleme atlandı', e);
   }
 
+  // Kapanış/yenilemede son durumu yerel yedekle
+  try {
+    window.addEventListener('beforeunload', () => {
+      try { if (typeof persistEntityCache === 'function') persistEntityCache(); } catch (_) { /* ignore */ }
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && typeof persistEntityCache === 'function') {
+        try { persistEntityCache(); } catch (_) { /* ignore */ }
+      }
+    });
+  } catch (_) { /* ignore */ }
+
   (async function btdCloudBoot() {
     try {
       // Canlı kurulumda son bilinen yerel snapshot (demo üstüne yazma)
       if (typeof restoreEntityCache === 'function') restoreEntityCache();
+      if (typeof applyAllTombstones === 'function') applyAllTombstones();
+      const localSnapshot = typeof snapshotPersistArrays === 'function' ? snapshotPersistArrays() : null;
       if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
       // Öncelik şemalarını firmalar için hazırla (boşsa varsayılan)
       ['Technomac', 'Bluemac', 'Devorias'].forEach((c) => {
@@ -21382,7 +21601,10 @@ Teşekkürler.`;
         turkishHolidays2026,
       });
       console.info('[BTD] Cloud boot', bootRes);
-      if (typeof schedulePersistEntityCache === 'function') schedulePersistEntityCache();
+      // Silinenleri tekrar enjekte etme; bulutta olmayan yerelleri geri yaz
+      if (typeof applyAllTombstones === 'function') applyAllTombstones();
+      if (typeof reconcileLocalOrphans === 'function') await reconcileLocalOrphans(localSnapshot);
+      if (typeof persistEntityCache === 'function') persistEntityCache();
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
       // Hidrate sonrası katalog UI (select/liste) yenile
       try {
