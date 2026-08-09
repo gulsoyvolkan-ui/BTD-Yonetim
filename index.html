@@ -15,10 +15,10 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabase-config.js?v=421bfac"></script>
-<script src="js/btd-supabase.js?v=421bfac"></script>
-<script src="js/btd-cloud.js?v=421bfac2"></script>
-<script src="js/btd-parasut.js?v=421bfac"></script>
+<script src="js/supabase-config.js?v=89f72ed"></script>
+<script src="js/btd-supabase.js?v=89f72ed"></script>
+<script src="js/btd-cloud.js?v=cloudflush1"></script>
+<script src="js/btd-parasut.js?v=89f72ed"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -5602,17 +5602,137 @@ ${vadeLine}`;
     if (!key) return null;
     return customers.find((c) => c.company === s.company && (c.partyKey || buildPartyKey(c.taxNo, c.name)) === key) || null;
   }
+  let _firmasReady = false;
+  let _flushingCloud = false;
+  async function ensureLocalFirmasReady() {
+    if (_firmasReady && Object.values(companies || {}).some((c) => c && c.dbId)) return true;
+    try {
+      const hr = await window.BtdSupabase?.hydrateCompanies?.(companies);
+      if (hr?.ok) _firmasReady = true;
+    } catch (e) {
+      console.warn('[BTD] ensureLocalFirmasReady', e);
+    }
+    // Hâlâ dbId yoksa firma adıyla tek tek çözümle
+    if (window.BtdCloud?.resolveFirmaId) {
+      for (const name of Object.keys(companies || {})) {
+        if (companies[name]?.dbId) continue;
+        try { await window.BtdCloud.resolveFirmaId(companies, name); } catch (_) { /* ignore */ }
+      }
+    }
+    _firmasReady = Object.values(companies || {}).some((c) => c && c.dbId);
+    return _firmasReady;
+  }
+
+  const CLOUD_OUTBOX_KEY = 'btd_cloud_outbox_v1';
+  function readCloudOutbox() {
+    try { return JSON.parse(localStorage.getItem(CLOUD_OUTBOX_KEY) || '[]') || []; }
+    catch (_) { return []; }
+  }
+  function writeCloudOutbox(list) {
+    try { localStorage.setItem(CLOUD_OUTBOX_KEY, JSON.stringify((list || []).slice(-80))); } catch (_) { /* ignore */ }
+  }
+  function enqueueCloudOutbox(method, args, reason) {
+    if (_flushingCloud) return;
+    const entity = args && args[0];
+    const hint = entity && typeof entity === 'object'
+      ? { id: entity.id || entity.username || entity.name || null, company: entity.company || null, dbId: entity.dbId || null }
+      : null;
+    const box = readCloudOutbox();
+    box.push({ at: Date.now(), method, hint, reason: String(reason || '').slice(0, 200) });
+    writeCloudOutbox(box);
+    console.warn('[BTD outbox]', method, reason, hint);
+  }
+
   async function cloudSaveAwait(method, ...args) {
     try {
+      await ensureLocalFirmasReady();
       const fn = window.BtdCloud?.[method];
       if (typeof fn !== 'function') return { ok: false, reason: 'no-fn' };
-      const r = await fn(...args);
-      if (r && r.ok !== false) schedulePersistEntityCache();
-      return r || { ok: true };
+      let r = await fn(...args);
+      // Firma henüz hydrate olmamışsa bir kez yenile ve dene
+      if (r && r.ok === false && /firma_id yok/i.test(String(r.reason || ''))) {
+        try { await window.BtdSupabase?.hydrateCompanies?.(companies); } catch (_) { /* ignore */ }
+        r = await fn(...args);
+      }
+      if (r && r.ok !== false) {
+        schedulePersistEntityCache();
+        return r || { ok: true };
+      }
+      enqueueCloudOutbox(method, args, r?.reason);
+      return r || { ok: false, reason: 'unknown' };
     } catch (e) {
       console.warn('[BTD cloud await]', method, e);
+      enqueueCloudOutbox(method, args, e?.message || String(e));
       return { ok: false, reason: e?.message || String(e) };
     }
+  }
+
+  /** dbId’siz kayıtları ve outbox’taki işlemleri tekrar buluta yaz */
+  async function flushPendingCloudWrites() {
+    if (_flushingCloud) return 0;
+    _flushingCloud = true;
+    let okN = 0;
+    try {
+      await ensureLocalFirmasReady();
+      const trySave = async (method, row) => {
+        if (!row) return;
+        const fn = window.BtdCloud?.[method];
+        if (typeof fn !== 'function') return;
+        const r = await fn(row, companies);
+        if (r && r.ok !== false) {
+          okN += 1;
+          schedulePersistEntityCache();
+        }
+      };
+      const box = readCloudOutbox();
+      for (const item of box) {
+        const id = item?.hint?.id;
+        if (!id || !item.method) continue;
+        if (item.method === 'saveOrder') await trySave('saveOrder', (orders || []).find((x) => x.id === id));
+        else if (item.method === 'saveQuote') await trySave('saveQuote', (quotes || []).find((x) => x.id === id));
+        else if (item.method === 'saveCustomer') await trySave('saveCustomer', (customers || []).find((x) => x.id === id || x.name === id));
+        else if (item.method === 'saveSupplier') await trySave('saveSupplier', (suppliers || []).find((x) => x.id === id || x.name === id));
+        else if (item.method === 'savePersonnel') await trySave('savePersonnel', (personnel || []).find((x) => x.id === id));
+        else if (item.method === 'saveUser') await trySave('saveUser', (users || []).find((x) => (x.username || '').toLowerCase() === String(id).toLowerCase()));
+        else if (item.method === 'deleteSupplier') {
+          const s = { name: id, company: item.hint?.company, dbId: item.hint?.dbId };
+          await window.BtdCloud.deleteSupplier?.(s, companies);
+        } else if (item.method === 'deleteCustomer') {
+          const c = { name: id, company: item.hint?.company, dbId: item.hint?.dbId };
+          await window.BtdCloud.deleteCustomer?.(c, companies);
+        } else if (item.method === 'deleteOrder') {
+          const o = { id, company: item.hint?.company, dbId: item.hint?.dbId };
+          await window.BtdCloud.deleteOrder?.(o, companies);
+        }
+      }
+      for (const o of (orders || [])) if (!o.dbId) await trySave('saveOrder', o);
+      for (const q of (quotes || [])) if (!q.dbId) await trySave('saveQuote', q);
+      for (const c of (customers || [])) if (!c.dbId) await trySave('saveCustomer', c);
+      for (const s of (suppliers || [])) if (!s.dbId) await trySave('saveSupplier', s);
+      for (const p of (personnel || [])) if (!p.dbId) await trySave('savePersonnel', p);
+      for (const u of (users || [])) if (!u.dbId) await trySave('saveUser', u);
+      if (typeof applyAllTombstones === 'function') applyAllTombstones();
+      writeCloudOutbox([]);
+      if (okN) console.info('[BTD] Bekleyen bulut yazmaları işlendi:', okN);
+    } catch (e) {
+      console.warn('[BTD] flushPendingCloudWrites', e);
+    } finally {
+      _flushingCloud = false;
+    }
+    return okN;
+  }
+
+  function isLoginScreenVisible() {
+    const el = document.getElementById('loginScreen');
+    return !!(el && !el.classList.contains('hidden'));
+  }
+  /** Giriş ekranında bulut uyarılarını toast etme — konsola yaz */
+  function cloudToast(msg, type) {
+    if (isLoginScreenVisible()) {
+      console.warn('[BTD cloud]', msg);
+      return;
+    }
+    showToast(msg, type || 'error');
   }
 
   /** İlk bulut senkronundan sonra demo veriyi tekrar enjekte etme */
@@ -6787,7 +6907,7 @@ ${vadeLine}`;
     persistEntityCache();
     const saved = await cloudSaveAwait('saveOrder', order, companies);
     if (saved && saved.ok === false) {
-      showToast(`Sipariş yerel kaydedildi ama buluta yazılamadı: ${saved.reason || 'hata'}. Yenilemede kaybolabilir.`, 'error');
+      cloudToast(`Sipariş yerel kaydedildi; buluta kuyruğa alındı: ${saved.reason || 'hata'}. Bağlantı gelince otomatik yazılır.`, 'warn');
     }
     return order;
   }
@@ -11593,11 +11713,11 @@ ${vadeLine}`;
         addTombstone('suppliers', partyEntityKey(target));
         persistEntityCache();
         const r = await cloudSaveAwait('deleteSupplier', target, companies);
-        if (r && r.ok === false && !/no-id|no-client/i.test(String(r.reason || ''))) {
+        if (r && r.ok === false && !/no-id|no-client|localOnly/i.test(String(r.reason || ''))) {
           suppliers.push(target);
           clearTombstone('suppliers', partyEntityKey(target));
           persistEntityCache();
-          showToast(`Tedarikçi buluttan silinemedi: ${r.reason || 'hata'}`, 'error');
+          cloudToast(`Tedarikçi buluttan silinemedi: ${r.reason || 'hata'}`, 'error');
           renderSuppliersPage();
           return;
         }
@@ -14002,7 +14122,7 @@ ${vadeLine}`;
     if (typeof renderQuotesPage === 'function') renderQuotesPage();
     if (typeof renderDashboard === 'function') renderDashboard();
     if (saved && saved.ok === false) {
-      showToast(`Revizyon yerel kaydedildi; buluta yazılamadı: ${saved.reason || 'hata'}`, 'error');
+      cloudToast(`Revizyon yerel kaydedildi; buluta kuyruğa alındı: ${saved.reason || 'hata'}`, 'warn');
     } else {
       showToast(`${order.id} revize edildi · iskonto / kalemler kaydedildi.`, 'success');
     }
@@ -22007,10 +22127,12 @@ Teşekkürler.`;
       });
       console.info('[BTD] Cloud boot', bootRes);
       if (fxManualRef.value) fxRatesManual = true;
+      _firmasReady = Object.values(companies || {}).some((c) => c && c.dbId);
       // Silinenleri tekrar enjekte etme; bulutta olmayan yerelleri geri yaz
       if (typeof applyAllTombstones === 'function') applyAllTombstones();
       if (typeof repairDuplicatePersonnelIds === 'function') repairDuplicatePersonnelIds();
       if (typeof reconcileLocalOrphans === 'function') await reconcileLocalOrphans(localSnapshot);
+      if (typeof flushPendingCloudWrites === 'function') await flushPendingCloudWrites();
       // Ayarlar: bulut hydrate sonrası yerel kaydı üstüne yaz (son kaydedilen ayarlar geçerli)
       if (typeof restoreSettingsCache === 'function') restoreSettingsCache();
       if (typeof persistEntityCache === 'function') persistEntityCache();

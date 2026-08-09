@@ -30,6 +30,30 @@
     if (!companies || !name) return null;
     return companies[name]?.dbId || null;
   }
+  const FIRMA_KOD = { Technomac: 'TM', Bluemac: 'BM', Devorias: 'DV' };
+  /** Firma UUID yoksa Supabase’ten ad/kod ile çözüp companies’e yaz */
+  async function resolveFirmaId(companies, name) {
+    let fid = firmaId(companies, name);
+    if (fid) return fid;
+    const client = sb();
+    if (!client || !name) return null;
+    try {
+      let { data, error } = await client.from('firmalar').select('id').eq('ad', name).maybeSingle();
+      if (error) throw error;
+      if (!data?.id && FIRMA_KOD[name]) {
+        ({ data, error } = await client.from('firmalar').select('id').eq('kod', FIRMA_KOD[name]).maybeSingle());
+        if (error) throw error;
+      }
+      if (data?.id) {
+        if (companies[name]) companies[name].dbId = data.id;
+        else if (companies) companies[name] = { dbId: data.id };
+        return data.id;
+      }
+    } catch (e) {
+      console.warn('[BtdCloud] resolveFirmaId', name, e?.message || e);
+    }
+    return null;
+  }
   function sb() {
     try {
       return global.BtdSupabase?.getClient?.() || null;
@@ -265,7 +289,7 @@
     try {
       const client = sb();
       if (!client || !c) return fail('no-client', 'saveCustomer');
-      const fid = firmaId(companies, c.company);
+      const fid = (await resolveFirmaId(companies, c.company)) || firmaId(companies, c.company);
       if (!fid) return fail('firma_id yok', 'saveCustomer');
       const row = customerToRow(c, fid);
       let dbId = c.dbId;
@@ -309,13 +333,13 @@
         if (error) throw error;
         return ok();
       }
-      const fid = firmaId(companies, c.company);
+      const fid = (await resolveFirmaId(companies, c.company)) || firmaId(companies, c.company);
       if (fid && c.name) {
         const { error } = await client.from('musteriler').delete().eq('firma_id', fid).eq('unvan', c.name);
         if (error) throw error;
         return ok();
       }
-      return fail('no-id', 'deleteCustomer');
+      return ok({ localOnly: true });
     } catch (e) { return fail(e, 'deleteCustomer'); }
   }
   async function hydrateCustomers(ctx) {
@@ -409,7 +433,7 @@
     try {
       const client = sb();
       if (!client || !s) return fail('no-client', 'saveSupplier');
-      const fid = firmaId(companies, s.company);
+      const fid = (await resolveFirmaId(companies, s.company)) || firmaId(companies, s.company);
       if (!fid) return fail('firma_id yok', 'saveSupplier');
       const groups = await ensureMaterialGroups(client, s.materialGroups || []);
       const row = supplierToRow(s, fid);
@@ -471,13 +495,14 @@
         if (error) throw error;
         return ok();
       }
-      const fid = firmaId(companies, s.company);
+      const fid = (await resolveFirmaId(companies, s.company)) || firmaId(companies, s.company);
       if (fid && s.name) {
         const { error } = await client.from('tedarikciler').delete().eq('firma_id', fid).eq('unvan', s.name);
         if (error) throw error;
         return ok();
       }
-      return fail('no-id', 'deleteSupplier');
+      // Bulutta hiç olmamış yerel kayıt — silme başarılı sayılsın
+      return ok({ localOnly: true });
     } catch (e) { return fail(e, 'deleteSupplier'); }
   }
   async function hydrateSuppliers(ctx) {
@@ -1287,9 +1312,19 @@
     try {
       const client = sb();
       if (!client || !o) return fail('no-client', 'saveOrder');
-      const fid = firmaId(companies, o.company);
+      const fid = (await resolveFirmaId(companies, o.company)) || firmaId(companies, o.company);
       if (!fid) return fail('firma_id yok', 'saveOrder');
       const teklifId = o.quoteDbId || (await lookupTeklifId(client, fid, o.quoteId || o.id));
+      const ALLOWED_ORDER_STATUS = new Set(['Onaylandı', 'Revize Edildi', 'Üretimde', 'Tamamlandı', 'İptal']);
+      let durum = o.status || 'Onaylandı';
+      if (!ALLOWED_ORDER_STATUS.has(durum)) {
+        // UI “Sipariş Verildi” vb. ise geçerli DB değerine çevir
+        if (/iptal/i.test(durum)) durum = 'İptal';
+        else if (/tamam/i.test(durum)) durum = 'Tamamlandı';
+        else if (/reviz/i.test(durum)) durum = 'Revize Edildi';
+        else if (/üretim|uretim/i.test(durum)) durum = 'Üretimde';
+        else durum = 'Onaylandı';
+      }
       const row = {
         firma_id: fid,
         belge_no: o.id,
@@ -1302,7 +1337,7 @@
         termin_gun: o.leadTimeDays ?? 15,
         teslim_tarihi: o.deliveryDate || null,
         kosullar: o.terms || null,
-        durum: o.status || 'Onaylandı',
+        durum,
         revizyon_no: o.revisionNo ?? 0,
         beklenmeyen_toplam: o.unforeseenTotal ?? 0,
       };
@@ -2884,6 +2919,7 @@
     currencyToDb,
     currencyToUi,
     firmaId,
+    resolveFirmaId,
     sb,
     boot,
     saveCustomer,
