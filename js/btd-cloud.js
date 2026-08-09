@@ -55,11 +55,12 @@
     target.length = 0;
     (rows || []).forEach((r) => target.push(r));
   }
-  /** İlk seed sonrası boş tabloları tekrar demo veriyle doldurmayı engeller */
-  function blockReseed(arr) {
-    if (!alreadySeeded()) return false;
-    if (Array.isArray(arr)) replaceArray(arr, []);
-    return true;
+  /**
+   * İlk seed sonrası boş tabloları tekrar demo veriyle doldurmayı engeller.
+   * Diziyi silmez — yerel/cache kayıtları (yeni eklenen, henüz buluta yazılamayan) korunur.
+   */
+  function blockReseed(/* arr */) {
+    return alreadySeeded();
   }
   async function deleteBelgeRow(table, entity, companies, label) {
     try {
@@ -622,6 +623,9 @@
     if (ctx.attendanceLogs) {
       const { count } = await client.from('personel_devam').select('id', { count: 'exact', head: true });
       if (!count && ctx.attendanceLogs.length) {
+        if (blockReseed(ctx.attendanceLogs)) {
+          /* canlı kurulumda boş tabloya demo devam yazma */
+        } else {
         progress(ctx, 'Devam seed…');
         const byCode = Object.fromEntries((ctx.personnel || []).map((p) => [p.id, p.dbId]));
         const rows = ctx.attendanceLogs
@@ -643,6 +647,7 @@
           })
           .filter(Boolean);
         if (rows.length) await client.from('personel_devam').upsert(rows, { onConflict: 'personel_id,tarih' });
+        }
       } else if (count) {
         const rows = await selectAll(client, 'personel_devam', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
@@ -664,6 +669,9 @@
     if (ctx.leaveRequests) {
       const { count } = await client.from('personel_izin').select('id', { count: 'exact', head: true });
       if (!count && ctx.leaveRequests.length) {
+        if (blockReseed(ctx.leaveRequests)) {
+          /* canlı kurulumda boş tabloya demo izin yazma */
+        } else {
         progress(ctx, 'İzin seed…');
         const byCode = Object.fromEntries((ctx.personnel || []).map((p) => [p.id, p.dbId]));
         const rows = ctx.leaveRequests
@@ -682,6 +690,7 @@
           })
           .filter(Boolean);
         if (rows.length) await client.from('personel_izin').insert(rows);
+        }
       } else if (count) {
         const rows = await selectAll(client, 'personel_izin', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
@@ -1667,6 +1676,7 @@
     if (!client || !ctx.materialRfqs) return;
     const n = await countTable(client, 'rfq_paketleri');
     if (!n) {
+      if (blockReseed(ctx.materialRfqs)) return;
       if (ctx.materialRfqs.length) {
         progress(ctx, `RFQ seed (${ctx.materialRfqs.length})…`);
         for (const r of ctx.materialRfqs) await saveMaterialRfq(r, ctx.companies);
@@ -1795,7 +1805,9 @@
     if (ctx.reprocRequests) {
       const n = await countTable(client, 'yeniden_tedarik_talepleri');
       if (!n && ctx.reprocRequests.length) {
-        for (const r of ctx.reprocRequests) await saveReproc(r, ctx.companies);
+        if (!blockReseed(ctx.reprocRequests)) {
+          for (const r of ctx.reprocRequests) await saveReproc(r, ctx.companies);
+        }
       } else if (n) {
         const rows = await selectAll(client, 'yeniden_tedarik_talepleri', '*');
         replaceArray(ctx.reprocRequests, rows.map((r) => ({
@@ -1818,7 +1830,9 @@
     if (ctx.unforeseenCosts) {
       const n = await countTable(client, 'beklenmeyen_giderler');
       if (!n && ctx.unforeseenCosts.length) {
-        for (const u of ctx.unforeseenCosts) await saveUnforeseen(u, ctx.companies);
+        if (!blockReseed(ctx.unforeseenCosts)) {
+          for (const u of ctx.unforeseenCosts) await saveUnforeseen(u, ctx.companies);
+        }
       } else if (n) {
         const rows = await selectAll(client, 'beklenmeyen_giderler', '*');
         replaceArray(ctx.unforeseenCosts, rows.map((r) => ({

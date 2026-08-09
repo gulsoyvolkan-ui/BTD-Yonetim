@@ -5599,6 +5599,85 @@ ${vadeLine}`;
     }
   }
 
+  /** İlk bulut senkronundan sonra demo veriyi tekrar enjekte etme */
+  function isCloudSeeded() {
+    try { return localStorage.getItem('btd_cloud_seeded_v1') === '1'; } catch (_) { return false; }
+  }
+  function mutateLocalArray(arr, rows) {
+    if (!Array.isArray(arr)) return;
+    arr.length = 0;
+    (rows || []).forEach((r) => arr.push(r));
+  }
+  /** Boot/hydrate aynı dizi referansını kullansın diye filter yerine splice */
+  function removeLocalById(arr, id) {
+    if (!Array.isArray(arr)) return false;
+    const i = arr.findIndex((x) => x && x.id === id);
+    if (i < 0) return false;
+    arr.splice(i, 1);
+    return true;
+  }
+  const ENTITY_CACHE_KEY = 'btd_entity_cache_v1';
+  let _entityCacheTimer = null;
+  function persistEntityCache() {
+    if (!isCloudSeeded()) return;
+    try {
+      const payload = {
+        at: Date.now(),
+        quotes,
+        orders,
+        costAnalyses,
+        customers,
+        suppliers,
+        procurementItems,
+        fasonJobs,
+        qcRecords,
+        shipments,
+        invoices,
+        workOrders: Array.isArray(workOrders) ? [...workOrders] : [],
+        personnel,
+        materialRfqs,
+        reprocRequests,
+        unforeseenCosts,
+      };
+      localStorage.setItem(ENTITY_CACHE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      console.warn('[BTD] entity cache yazılamadı (kota?)', e?.message || e);
+    }
+  }
+  function schedulePersistEntityCache() {
+    try { clearTimeout(_entityCacheTimer); } catch (_) { /* ignore */ }
+    _entityCacheTimer = setTimeout(persistEntityCache, 450);
+  }
+  function restoreEntityCache() {
+    if (!isCloudSeeded()) return false;
+    try {
+      const raw = localStorage.getItem(ENTITY_CACHE_KEY);
+      if (!raw) return false;
+      const c = JSON.parse(raw);
+      if (!c || !c.at) return false;
+      if (Array.isArray(c.quotes)) mutateLocalArray(quotes, c.quotes);
+      if (Array.isArray(c.orders)) mutateLocalArray(orders, c.orders);
+      if (Array.isArray(c.costAnalyses)) mutateLocalArray(costAnalyses, c.costAnalyses);
+      if (Array.isArray(c.customers)) mutateLocalArray(customers, c.customers);
+      if (Array.isArray(c.suppliers)) mutateLocalArray(suppliers, c.suppliers);
+      if (Array.isArray(c.procurementItems)) mutateLocalArray(procurementItems, c.procurementItems);
+      if (Array.isArray(c.fasonJobs)) mutateLocalArray(fasonJobs, c.fasonJobs);
+      if (Array.isArray(c.qcRecords)) mutateLocalArray(qcRecords, c.qcRecords);
+      if (Array.isArray(c.shipments)) mutateLocalArray(shipments, c.shipments);
+      if (Array.isArray(c.invoices)) mutateLocalArray(invoices, c.invoices);
+      if (Array.isArray(c.workOrders) && Array.isArray(workOrders)) mutateLocalArray(workOrders, c.workOrders);
+      if (Array.isArray(c.personnel)) mutateLocalArray(personnel, c.personnel);
+      if (Array.isArray(c.materialRfqs)) mutateLocalArray(materialRfqs, c.materialRfqs);
+      if (Array.isArray(c.reprocRequests)) mutateLocalArray(reprocRequests, c.reprocRequests);
+      if (Array.isArray(c.unforeseenCosts)) mutateLocalArray(unforeseenCosts, c.unforeseenCosts);
+      console.info('[BTD] Yerel entity cache yüklendi', new Date(c.at).toISOString());
+      return true;
+    } catch (e) {
+      console.warn('[BTD] entity cache okunamadı', e);
+      return false;
+    }
+  }
+
   function formatTlBalance(n) {
     if (n == null || n === '') return '—';
     const v = Number(n);
@@ -5757,7 +5836,8 @@ ${vadeLine}`;
     }
 
     if (newRole === 'customer' && supp) {
-      suppliers = suppliers.filter((s) => s !== supp);
+      const si = suppliers.indexOf(supp);
+      if (si >= 0) suppliers.splice(si, 1);
       await cloudSaveAwait('deleteSupplier', supp, companies);
       if (cust) {
         cust.linkedSupplierDbId = null;
@@ -5767,7 +5847,8 @@ ${vadeLine}`;
       supp = null;
     }
     if (newRole === 'supplier' && cust) {
-      customers = customers.filter((c) => c !== cust);
+      const ci = customers.indexOf(cust);
+      if (ci >= 0) customers.splice(ci, 1);
       await cloudSaveAwait('deleteCustomer', cust, companies);
       if (supp) {
         supp.linkedCustomerDbId = null;
@@ -6293,6 +6374,7 @@ ${vadeLine}`;
     return `FS-${companyCode[company]}-${String(fasonSeq++).padStart(4, '0')}`;
   }
   (function seedFasonDemo() {
+    if (typeof isCloudSeeded === 'function' && isCloudSeeded()) return;
     if (fasonJobs.length) return;
     const iso = (offset) => {
       const d = new Date();
@@ -6391,7 +6473,7 @@ ${vadeLine}`;
   }
 
   /** Siparişi sil → teklif Onaylandı kalır, yeniden dönüştürülebilir */
-  function revertOrderFromQuote(quoteOrOrderId, { confirmMsg } = {}) {
+  async function revertOrderFromQuote(quoteOrOrderId, { confirmMsg } = {}) {
     const order = orders.find(o =>
       o.id === quoteOrOrderId || o.quoteId === quoteOrOrderId
     );
@@ -6420,15 +6502,19 @@ ${vadeLine}`;
           text: `Sipariş ${order.id} iptal edildi — iş emri sipariş bağlantısı kaldırıldı.`,
         });
       }
+      cloudSave('saveWorkOrder', w, companies);
     });
-    // Tedarik / sevkiyat bağlarını gevşet
     procurementItems.forEach(p => {
-      if (p.orderId === order.id) p.orderId = '';
+      if (p.orderId === order.id) {
+        p.orderId = '';
+        cloudSave('saveProcurementItem', p, companies);
+      }
     });
     shipments.forEach(s => {
       if (s.orderId === order.id && s.status !== 'Teslim Edildi') {
         s.status = 'İptal';
         s.note = (s.note ? s.note + ' · ' : '') + 'Sipariş iptal edildi';
+        cloudSave('saveShipment', s, companies);
       }
     });
 
@@ -6439,15 +6525,28 @@ ${vadeLine}`;
       cloudSave('saveQuote', quote, companies);
     }
 
-    orders = orders.filter(o => o.id !== order.id);
-    if (orderRevisionLog[order.id]) delete orderRevisionLog[order.id];
-    try { if (typeof expandedOrders !== 'undefined') expandedOrders.delete(order.id); } catch (_) { /* henüz init olmamış olabilir */ }
+    const removed = order;
+    const idx = orders.indexOf(order);
+    if (idx >= 0) orders.splice(idx, 1);
+    else orders = orders.filter(o => o.id !== removed.id);
+    if (orderRevisionLog[removed.id]) delete orderRevisionLog[removed.id];
+    try { if (typeof expandedOrders !== 'undefined') expandedOrders.delete(removed.id); } catch (_) { /* ignore */ }
+
+    const del = await cloudSaveAwait('deleteOrder', removed, companies);
+    if (del && del.ok === false) {
+      orders.push(removed);
+      showToast('Sipariş buluttan silinemedi — iptal geri alındı. Bağlantıyı kontrol edin.', 'error');
+      if (typeof renderQuotesPage === 'function') renderQuotesPage();
+      if (typeof renderOrdersPage === 'function') renderOrdersPage();
+      return false;
+    }
+    schedulePersistEntityCache();
 
     if (typeof renderQuotesPage === 'function') renderQuotesPage();
     if (typeof renderOrdersPage === 'function') renderOrdersPage();
     if (typeof renderWorkOrderTable === 'function') renderWorkOrderTable();
     if (typeof renderDashboard === 'function') renderDashboard();
-    showToast(`${order.id} iptal edildi · teklif yeniden siparişe dönüştürülebilir.`, 'info');
+    showToast(`${removed.id} iptal edildi · teklif yeniden siparişe dönüştürülebilir.`, 'info');
     return true;
   }
 
@@ -7325,8 +7424,20 @@ ${vadeLine}`;
       const p = fn(...args);
       if (p && typeof p.then === 'function') {
         p.then((r) => {
-          if (r && r.ok === false) console.warn('[BTD cloud]', method, r.reason || r);
-        }).catch((e) => console.warn('[BTD cloud]', method, e));
+          if (r && r.ok === false) {
+            console.warn('[BTD cloud]', method, r.reason || r);
+            if (typeof showToast === 'function' && /^(delete|save)/i.test(String(method))) {
+              showToast(`Buluta yazılamadı (${method}). Yenilemede değişiklik geri gelebilir.`, 'error');
+            }
+          } else if (typeof schedulePersistEntityCache === 'function') {
+            schedulePersistEntityCache();
+          }
+        }).catch((e) => {
+          console.warn('[BTD cloud]', method, e);
+          if (typeof showToast === 'function' && /^(delete|save)/i.test(String(method))) {
+            showToast(`Bulut hatası (${method}).`, 'error');
+          }
+        });
       }
     } catch (e) {
       console.warn('[BTD cloud]', method, e);
@@ -11025,8 +11136,10 @@ ${vadeLine}`;
         const target = list[Number(btn.dataset.delCustomer)];
         if (!target) return;
         if (!confirmDelete(`Müşteri “${target.name}” silinecek.`)) return;
-        customers = customers.filter(c => c !== target);
+        const ci = customers.indexOf(target);
+        if (ci >= 0) customers.splice(ci, 1);
         cloudSave('deleteCustomer', target, companies);
+        schedulePersistEntityCache();
         renderCustomersPage();
         showToast(`${target.name} müşteri listesinden kaldırıldı.`, 'info');
       });
@@ -11140,8 +11253,10 @@ ${vadeLine}`;
         const target = list[Number(btn.dataset.delSupplier)];
         if (!target) return;
         if (!confirmDelete(`Tedarikçi “${target.name}” silinecek.`)) return;
-        suppliers = suppliers.filter(s => s !== target);
+        const si = suppliers.indexOf(target);
+        if (si >= 0) suppliers.splice(si, 1);
         cloudSave('deleteSupplier', target, companies);
+        schedulePersistEntityCache();
         renderSuppliersPage();
         showToast(`${target.name} tedarikçi listesinden kaldırıldı.`, 'info');
       });
@@ -12216,9 +12331,10 @@ ${vadeLine}`;
         const q = quotes.find(x => x.id === id);
         if (!q) return;
         if (!confirmDelete(`Teklif ${id} silinecek.`)) return;
-        quotes = quotes.filter(x => x.id !== id);
+        removeLocalById(quotes, id);
         unlinkCostAnalysesFromQuote(id);
         cloudSave('deleteQuote', q, companies);
+        schedulePersistEntityCache();
         renderQuotesPage();
         if (typeof renderCostingPage === 'function') renderCostingPage();
         showToast(`${id} numaralı teklif silindi. İlişkili maliyet yeniden teklife aktarılabilir.`, 'info');
@@ -14125,8 +14241,9 @@ ${vadeLine}`;
         const item = procurementItems.find(p => p.id === btn.dataset.delProc);
         if (!item) return;
         if (!confirmDelete(`Tedarik kaydı ${item.id} silinecek.`)) return;
-        procurementItems = procurementItems.filter(p => p.id !== item.id);
+        removeLocalById(procurementItems, item.id);
         cloudSave('deleteProcurementItem', item, companies);
+        schedulePersistEntityCache();
         renderProcurementPage();
       });
     });
@@ -14513,8 +14630,9 @@ ${vadeLine}`;
         const rec = qcRecords.find(r => r.id === btn.dataset.delQc);
         if (!rec) return;
         if (!confirmDelete(`Kalite kaydı ${rec.id} silinecek.`)) return;
-        qcRecords = qcRecords.filter(r => r.id !== rec.id);
+        removeLocalById(qcRecords, rec.id);
         cloudSave('deleteQc', rec, companies);
+        schedulePersistEntityCache();
         renderQualityPage();
       });
     });
@@ -14732,8 +14850,9 @@ ${vadeLine}`;
         const job = fasonJobs.find(x => x.id === btn.dataset.fasonDel);
         if (!job) return;
         if (!confirmDelete(`Fason kaydı ${job.id} silinecek.`)) return;
-        fasonJobs = fasonJobs.filter(x => x.id !== job.id);
+        removeLocalById(fasonJobs, job.id);
         cloudSave('deleteFason', job, companies);
+        schedulePersistEntityCache();
         renderFasonPage();
         if (typeof renderDashboard === 'function') renderDashboard();
       });
@@ -14904,8 +15023,9 @@ ${vadeLine}`;
           const s = shipments.find(x => x.id === btn.dataset.delShip);
           if (!s) return;
           if (!confirmDelete(`Sevkiyat kaydı ${s.id} silinecek.`)) return;
-          shipments = shipments.filter(x => x.id !== s.id);
+          removeLocalById(shipments, s.id);
           cloudSave('deleteShipment', s, companies);
+          schedulePersistEntityCache();
           renderShippingPage();
         });
       });
@@ -15018,8 +15138,9 @@ ${vadeLine}`;
         const inv = invoices.find(i => i.id === btn.dataset.delInv);
         if (!inv) return;
         if (!confirmDelete(`Fatura ${inv.id} silinecek.`)) return;
-        invoices = invoices.filter(i => i.id !== inv.id);
+        removeLocalById(invoices, inv.id);
         cloudSave('deleteInvoice', inv, companies);
+        schedulePersistEntityCache();
         renderInvoicingPage();
       });
     });
@@ -16265,6 +16386,8 @@ Teşekkürler.`;
 
   // ---------- Demo seed + ilk firma yüklemesi (tüm fonksiyonlar tanımlandıktan sonra) ----------
   (function seedPipelineDemoData() {
+    // Canlı kullanımda demo sipariş/tekrar upsert yasak — silinen kayıt geri gelmesin
+    if (typeof isCloudSeeded === 'function' && isCloudSeeded()) return;
     if (orders.some(o => o.quoteId === quoteId('Technomac', 38))) return;
     const sampleQuote = quotes.find(q => q.id === quoteId('Technomac', 38));
     if (sampleQuote && sampleQuote.status === 'Onaylandı') {
@@ -17309,8 +17432,9 @@ Teşekkürler.`;
         const a = costAnalyses.find(x => x.id === btn.dataset.delCost);
         if (!a) return;
         if (!confirmDelete(`Maliyet analizi ${a.id} silinecek.`)) return;
-        costAnalyses = costAnalyses.filter(x => x.id !== a.id);
+        removeLocalById(costAnalyses, a.id);
         cloudSave('deleteCostAnalysis', a, companies);
+        schedulePersistEntityCache();
         renderCostingPage();
         showToast(`${a.id} silindi.`, 'info');
       });
@@ -20487,22 +20611,24 @@ Teşekkürler.`;
   let viewingHrId = null;
 
   function seedPersonnelIfEmpty() {
+    if (typeof isCloudSeeded === 'function' && isCloudSeeded()) return;
     if (personnel.length) return;
-    personnel = [
+    const seed = [
       { id: 'P-TM-001', company: 'Technomac', name: 'Ahmet Yıldız', dept: 'CNC Operatörü', startDate: '2023-03-15', salary: 42000, status: 'Aktif', tcNo: '11111111111', phone: '0532 100 00 01', whatsapp: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr', address: 'Pendik / İstanbul', userId: 'ahmet', collar: 'blue', leaveEntitle: 14, leavePlanned: 5 },
       { id: 'P-TM-002', company: 'Technomac', name: 'Elif Kara', dept: 'Kalite Kontrol', startDate: '2022-11-01', salary: 38500, status: 'Aktif', tcNo: '22222222222', phone: '0532 100 00 02', whatsapp: '0532 100 00 02', email: 'elif.kara@technomac.com.tr', address: 'Kartal / İstanbul', userId: null, collar: 'white', leaveEntitle: 14, leavePlanned: 1 },
       { id: 'P-TM-003', company: 'Technomac', name: 'Murat Şahin', dept: 'Universal', startDate: '2024-01-10', salary: 40000, status: 'Aktif', tcNo: '33333333333', phone: '0532 100 00 03', whatsapp: '0532 100 00 03', email: 'murat.sahin@technomac.com.tr', address: 'Tuzla / İstanbul', userId: null, collar: 'blue', leaveEntitle: 14, leavePlanned: 0 },
       { id: 'P-BM-001', company: 'Bluemac', name: 'Selin Arslan', dept: 'Planlama', startDate: '2023-06-20', salary: 36000, status: 'Aktif', tcNo: '44444444444', phone: '0533 200 00 01', whatsapp: '0533 200 00 01', email: 'selin.arslan@bluemac.com.tr', address: 'Pendik / İstanbul', userId: null, collar: 'white', leaveEntitle: 14, leavePlanned: 3 },
       { id: 'P-DV-001', company: 'Devorias', name: 'Kerem Polat', dept: 'CAD/CAM Operatörü', startDate: '2024-02-01', salary: 45000, status: 'Aktif', tcNo: '55555555555', phone: '0534 300 00 01', whatsapp: '0534 300 00 01', email: 'kerem.polat@devorias.com.tr', address: 'Ataşehir / İstanbul', userId: null, collar: 'manager', leaveEntitle: 20, leavePlanned: 0 },
     ];
+    mutateLocalArray(personnel, seed);
     personnelSeq = 4;
     const days = ['2026-07-27','2026-07-28','2026-07-29','2026-07-30','2026-07-31'];
-    attendanceLogs = [];
+    const attendanceSeed = [];
     personnel.filter(p => p.company === 'Technomac').forEach((p, pi) => {
       days.forEach((d, di) => {
         const late = (pi + di) % 4 === 0;
         const isSunday = new Date(d + 'T12:00:00').getDay() === 0;
-        attendanceLogs.push({
+        attendanceSeed.push({
           id: `A-${attendanceSeq++}`,
           personnelId: p.id,
           company: p.company,
@@ -20516,11 +20642,12 @@ Teşekkürler.`;
         });
       });
     });
-    leaveRequests = [
+    mutateLocalArray(attendanceLogs, attendanceSeed);
+    mutateLocalArray(leaveRequests, [
       { id: 'L-1', personnelId: 'P-TM-001', company: 'Technomac', type: 'Yıllık İzin', days: 5, month: '2026-08', status: 'Onaylandı' },
       { id: 'L-2', personnelId: 'P-TM-002', company: 'Technomac', type: 'Mazeret', days: 1, month: '2026-07', status: 'Onaylandı' },
       { id: 'L-3', personnelId: 'P-BM-001', company: 'Bluemac', type: 'Yıllık İzin', days: 3, month: '2026-09', status: 'Bekliyor' },
-    ];
+    ]);
     leaveSeq = 4;
   }
 
@@ -20994,8 +21121,9 @@ Teşekkürler.`;
         const p = personnel.find(x => x.id === btn.dataset.delHr);
         if (!p) return;
         if (!confirmDelete(`Personel “${p.name}” silinecek.`)) return;
-        personnel = personnel.filter(x => x.id !== p.id);
+        removeLocalById(personnel, p.id);
         cloudSave('deletePersonnel', p, companies);
+        schedulePersistEntityCache();
         renderHrPage();
         showToast(`${p.name} personel listesinden kaldırıldı.`, 'info');
       });
@@ -21207,6 +21335,8 @@ Teşekkürler.`;
 
   (async function btdCloudBoot() {
     try {
+      // Canlı kurulumda son bilinen yerel snapshot (demo üstüne yazma)
+      if (typeof restoreEntityCache === 'function') restoreEntityCache();
       if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
       // Öncelik şemalarını firmalar için hazırla (boşsa varsayılan)
       ['Technomac', 'Bluemac', 'Devorias'].forEach((c) => {
@@ -21252,6 +21382,7 @@ Teşekkürler.`;
         turkishHolidays2026,
       });
       console.info('[BTD] Cloud boot', bootRes);
+      if (typeof schedulePersistEntityCache === 'function') schedulePersistEntityCache();
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
       // Hidrate sonrası katalog UI (select/liste) yenile
       try {
