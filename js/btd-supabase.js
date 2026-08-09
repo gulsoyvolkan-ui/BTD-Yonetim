@@ -38,6 +38,15 @@
     return 'white';
   }
 
+  function mapCurrencyToDb(sym) {
+    const s = String(sym || '').trim();
+    if (s === '₺' || s.toUpperCase() === 'TRY') return 'TRY';
+    if (s === '€' || s.toUpperCase() === 'EUR') return 'EUR';
+    if (s === '$' || s.toUpperCase() === 'USD') return 'USD';
+    if (s === '£' || s.toUpperCase() === 'GBP') return 'GBP';
+    return s.toUpperCase() || 'TRY';
+  }
+
   /**
    * firmalar + banka hesaplarını mevcut `companies` nesnesine merge eder.
    * UI chrome (badgeBg vb.) yerel varsayılanlarla korunur.
@@ -86,21 +95,26 @@
           ...chrome,
           dbId: f.id,
           kod: f.kod,
-          logo: f.logo_url || prev.logo || '',
-          legal: f.unvan || prev.legal || name,
-          address: f.adres || prev.address || '',
-          taxOffice: f.vergi_dairesi || prev.taxOffice || '',
-          taxNo: f.vergi_no || prev.taxNo || '',
-          phone: f.telefon || prev.phone || '',
-          website: f.website || prev.website || '',
-          email: f.eposta || prev.email || '',
-          signatory: f.imza_yetkilisi || prev.signatory || '',
-          deliveryPlace: f.teslim_yeri || prev.deliveryPlace || '',
-          warranty: f.garanti_metni || prev.warranty || '',
-          defaultPaymentType: f.varsayilan_odeme || prev.defaultPaymentType || '',
+          // Yerel/ayarlar cache doluysa bulut demosu üzerine yazmasın
+          logo: prev.logo || f.logo_url || '',
+          legal: prev.legal || f.unvan || name,
+          address: prev.address || f.adres || '',
+          taxOffice: prev.taxOffice || f.vergi_dairesi || '',
+          taxNo: prev.taxNo || f.vergi_no || '',
+          phone: prev.phone || f.telefon || '',
+          website: prev.website || f.website || '',
+          email: prev.email || f.eposta || '',
+          signatory: prev.signatory || f.imza_yetkilisi || '',
+          deliveryPlace: prev.deliveryPlace || f.teslim_yeri || '',
+          warranty: prev.warranty || f.garanti_metni || '',
+          defaultPaymentType: prev.defaultPaymentType || f.varsayilan_odeme || '',
           quoteBankMode: prev.quoteBankMode || 'auto',
-          quoteBankSelected: selectedIds.length ? selectedIds : (prev.quoteBankSelected || []),
-          bankAccounts: bankAccounts.length ? bankAccounts : (prev.bankAccounts || []),
+          quoteBankSelected: (Array.isArray(prev.quoteBankSelected) && prev.quoteBankSelected.length)
+            ? prev.quoteBankSelected
+            : (selectedIds.length ? selectedIds : []),
+          bankAccounts: (Array.isArray(prev.bankAccounts) && prev.bankAccounts.length)
+            ? prev.bankAccounts
+            : (bankAccounts.length ? bankAccounts : []),
         };
       });
 
@@ -109,6 +123,64 @@
     } catch (err) {
       lastError = err?.message || String(err);
       console.warn('[BTD] Firma hydrate başarısız, yerel veri kullanılıyor:', lastError);
+      return { ok: false, reason: lastError };
+    }
+  }
+
+  /** Ayarlar → Firma / ödeme / banka kaydı */
+  async function saveCompany(info, companyName) {
+    const sb = getClient();
+    if (!sb || !info) return { ok: false, reason: lastError || 'no-client' };
+    try {
+      let firmaId = info.dbId;
+      if (!firmaId && companyName) {
+        const { data: hit } = await sb.from('firmalar').select('id').eq('ad', companyName).maybeSingle();
+        firmaId = hit?.id || null;
+        if (firmaId) info.dbId = firmaId;
+      }
+      if (!firmaId) return { ok: false, reason: 'firma_id yok' };
+
+      const row = {
+        unvan: info.legal || companyName || '',
+        adres: info.address || null,
+        vergi_dairesi: info.taxOffice || null,
+        vergi_no: info.taxNo || null,
+        telefon: info.phone || null,
+        website: info.website || null,
+        eposta: info.email || null,
+        imza_yetkilisi: info.signatory || null,
+        teslim_yeri: info.deliveryPlace || null,
+        garanti_metni: info.warranty || null,
+        varsayilan_odeme: info.defaultPaymentType || null,
+      };
+      if (info.logo) row.logo_url = info.logo;
+
+      const { error: uErr } = await sb.from('firmalar').update(row).eq('id', firmaId);
+      if (uErr) throw uErr;
+
+      const { error: dErr } = await sb.from('firma_banka_hesaplari').delete().eq('firma_id', firmaId);
+      if (dErr) throw dErr;
+
+      const banks = Array.isArray(info.bankAccounts) ? info.bankAccounts : [];
+      if (banks.length) {
+        const bankRows = banks.map((a, i) => ({
+          firma_id: firmaId,
+          hesap_kodu: a.id || `acc-${i}`,
+          para_birimi: mapCurrencyToDb(a.currency),
+          etiket: a.label || null,
+          banka_adi: a.bankName || null,
+          sube: a.bankBranch || null,
+          iban: a.iban || null,
+          sira: i,
+          aktif: true,
+        }));
+        const { error: iErr } = await sb.from('firma_banka_hesaplari').insert(bankRows);
+        if (iErr) throw iErr;
+      }
+      return { ok: true, dbId: firmaId };
+    } catch (err) {
+      lastError = err?.message || String(err);
+      console.warn('[BTD] saveCompany', lastError);
       return { ok: false, reason: lastError };
     }
   }
@@ -197,6 +269,7 @@
     isReady: () => ready && !!getClient(),
     getLastError: () => lastError,
     hydrateCompanies,
+    saveCompany,
     fetchUserForLogin,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

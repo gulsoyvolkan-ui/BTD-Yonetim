@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#0d47a1" />
+<meta name="robots" content="noindex" />
+<title>BTD Andon · Universal Atölyesi</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: { DEFAULT: '#0d47a1', dark: '#092e6b', light: '#1565c0' },
+          steel: {
+            50: '#f5f7f9', 100: '#e9edf1', 200: '#d3dae1', 300: '#b3bec8',
+            400: '#8a97a3', 500: '#68757f', 600: '#4f5a63', 700: '#3d454c',
+            800: '#282e33', 900: '#171a1d',
+          },
+        },
+      },
+    },
+  };
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="css/btd-andon.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <p class="brand-kicker">BTD Core · MES</p>
+        <h1 id="andonTitle" class="brand-title">Universal Atölyesi</h1>
+        <p id="andonSubtitle" class="brand-sub">Torna · taşlama · freze</p>
+      </div>
+      <div class="clock-block">
+        <div id="andonClock" class="clock">--:--:--</div>
+        <p class="clock-meta">Son güncelleme: <span id="andonUpdated">—</span></p>
+      </div>
+    </header>
+    <nav id="andonNav" class="nav-row" aria-label="Andon sayfaları"></nav>
+    <main id="andonRoot" class="main"></main>
+  </div>
+  <script>window.BTD_ANDON_VIEW = 'universal';</script>
+  <script src="js/btd-andon.js"></script>
+</body>
+</html>
