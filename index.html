@@ -5609,6 +5609,70 @@ ${vadeLine}`;
     }
     return findSupplierByName(company, name);
   }
+
+  /** Aynı firmada aynı vergi no (10/11 hane) — aynı tarafta mükerrer cari engeli (müşteri↔müşteri / tedarikçi↔tedarikçi) */
+  function isCheckableTaxNo(taxNo) {
+    const dig = digitsOnly(taxNo);
+    return dig.length === 10 || dig.length === 11 ? dig : '';
+  }
+  function findSameSideTaxDuplicate(company, taxNo, kind, editing) {
+    const dig = isCheckableTaxNo(taxNo);
+    if (!dig || !company) return null;
+    if (kind === 'customer') {
+      return (customers || []).find((c) =>
+        c && c !== editing && c.company === company && digitsOnly(c.taxNo) === dig
+      ) || null;
+    }
+    return (suppliers || []).find((s) =>
+      s && s !== editing && s.company === company && digitsOnly(s.taxNo) === dig
+    ) || null;
+  }
+  function assertUniqueTaxNo(company, taxNo, kind, editing) {
+    const hit = findSameSideTaxDuplicate(company, taxNo, kind, editing);
+    if (!hit) return { ok: true };
+    const dig = isCheckableTaxNo(taxNo);
+    const side = kind === 'customer' ? 'müşteri' : 'tedarikçi';
+    return {
+      ok: false,
+      dig,
+      hit,
+      reason: `Vergi no ${dig} zaten ${side} olarak kayıtlı: “${hit.name}”. Mükerrer cari kartı oluşturulamaz; mevcut kaydı düzenleyin.`,
+    };
+  }
+  function setCrmTaxNoHint(inputId, msg) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    let hint = document.getElementById(inputId + 'Hint');
+    if (!hint && input.parentElement) {
+      hint = document.createElement('p');
+      hint.id = inputId + 'Hint';
+      input.parentElement.appendChild(hint);
+    }
+    if (!hint) return;
+    if (msg) {
+      hint.textContent = msg;
+      hint.className = 'text-xs mt-1.5 text-red-600 font-semibold leading-snug';
+      input.classList.add('border-red-400');
+    } else {
+      hint.textContent = '';
+      hint.className = 'hidden';
+      input.classList.remove('border-red-400');
+    }
+  }
+  function refreshCrmTaxNoHint(kind) {
+    const inputId = kind === 'customer' ? 'newCustomerTaxNo' : 'newSupplierTaxNo';
+    const taxEl = document.getElementById(inputId);
+    if (!taxEl) return;
+    const dig = isCheckableTaxNo(taxEl.value);
+    if (!dig) {
+      setCrmTaxNoHint(inputId, '');
+      return;
+    }
+    const editing = kind === 'customer' ? customerModalEditingTarget : supplierModalEditingTarget;
+    const check = assertUniqueTaxNo(activeCompany, taxEl.value, kind, editing);
+    setCrmTaxNoHint(inputId, check.ok ? '' : check.reason);
+  }
+
   function findLinkedSupplierForCustomer(c) {
     if (!c) return null;
     if (c.linkedSupplierDbId) {
@@ -11972,7 +12036,13 @@ ${vadeLine}`;
   function updateNewSupplierSubmitState() {
     const btn = document.getElementById('newSupplierSubmitBtn');
     if (!btn) return;
-    const ok = document.getElementById('newSupplierName').value.trim().length > 0;
+    const nameOk = document.getElementById('newSupplierName').value.trim().length > 0;
+    const taxEl = document.getElementById('newSupplierTaxNo');
+    const taxCheck = taxEl
+      ? assertUniqueTaxNo(activeCompany, taxEl.value, 'supplier', supplierModalEditingTarget)
+      : { ok: true };
+    refreshCrmTaxNoHint('supplier');
+    const ok = nameOk && taxCheck.ok;
     btn.disabled = !ok;
     btn.classList.toggle('opacity-50', !ok);
     btn.classList.toggle('cursor-not-allowed', !ok);
@@ -12165,12 +12235,15 @@ ${vadeLine}`;
 
   function closeNewSupplierModal() {
     newSupplierModalOverlay.classList.add('hidden');
+    setCrmTaxNoHint('newSupplierTaxNo', '');
   }
 
   document.getElementById('newSupplierBtn')?.addEventListener('click', () => openSupplierModal(null));
   document.getElementById('newSupplierCloseBtn')?.addEventListener('click', closeNewSupplierModal);
   document.getElementById('newSupplierCancelBtn')?.addEventListener('click', closeNewSupplierModal);
   document.getElementById('newSupplierName')?.addEventListener('input', updateNewSupplierSubmitState);
+  document.getElementById('newSupplierTaxNo')?.addEventListener('input', updateNewSupplierSubmitState);
+  document.getElementById('newSupplierTaxNo')?.addEventListener('blur', () => refreshCrmTaxNoHint('supplier'));
   document.getElementById('newSupplierCategory')?.addEventListener('change', renderSupplierCapabilityList);
   document.getElementById('addSupplierContactBtn')?.addEventListener('click', () => {
     supplierModalContacts.push({ name: '', department: 'Satın Alma ve Tedarik', phone: '', whatsapp: '', email: '' });
@@ -12198,6 +12271,13 @@ ${vadeLine}`;
   document.getElementById('newSupplierSubmitBtn')?.addEventListener('click', async () => {
     const name = document.getElementById('newSupplierName').value.trim();
     if (!name) return;
+    const taxNoVal = document.getElementById('newSupplierTaxNo')?.value.trim() || '';
+    const taxCheck = assertUniqueTaxNo(activeCompany, taxNoVal, 'supplier', supplierModalEditingTarget);
+    if (!taxCheck.ok) {
+      refreshCrmTaxNoHint('supplier');
+      showToast(taxCheck.reason, 'error');
+      return;
+    }
     const cleanContacts = supplierModalContacts
       .map(ct => {
         const wa = (ct.whatsapp || ct.phone || '').trim();
@@ -12212,7 +12292,6 @@ ${vadeLine}`;
       .filter(ct => ct.name || ct.phone || ct.whatsapp || ct.email);
     const primary = cleanContacts[0] || null;
     const category = document.getElementById('newSupplierCategory').value;
-    const taxNoVal = document.getElementById('newSupplierTaxNo')?.value.trim() || '';
     const payload = {
       company: activeCompany,
       name,
@@ -12261,7 +12340,14 @@ ${vadeLine}`;
 
   function updateNewCustomerSubmitState() {
     const submitBtn = document.getElementById('newCustomerSubmitBtn');
-    const ok = document.getElementById('newCustomerName').value.trim().length > 0;
+    if (!submitBtn) return;
+    const nameOk = document.getElementById('newCustomerName').value.trim().length > 0;
+    const taxEl = document.getElementById('newCustomerTaxNo');
+    const taxCheck = taxEl
+      ? assertUniqueTaxNo(activeCompany, taxEl.value, 'customer', customerModalEditingTarget)
+      : { ok: true };
+    refreshCrmTaxNoHint('customer');
+    const ok = nameOk && taxCheck.ok;
     submitBtn.disabled = !ok;
     submitBtn.classList.toggle('opacity-50', !ok);
     submitBtn.classList.toggle('cursor-not-allowed', !ok);
@@ -12386,12 +12472,15 @@ ${vadeLine}`;
 
   function closeNewCustomerModal() {
     newCustomerModalOverlay.classList.add('hidden');
+    setCrmTaxNoHint('newCustomerTaxNo', '');
   }
 
   document.getElementById('newCustomerBtn').addEventListener('click', () => openCustomerModal(null));
   document.getElementById('newCustomerCloseBtn').addEventListener('click', closeNewCustomerModal);
   document.getElementById('newCustomerCancelBtn').addEventListener('click', closeNewCustomerModal);
   document.getElementById('newCustomerName').addEventListener('input', updateNewCustomerSubmitState);
+  document.getElementById('newCustomerTaxNo')?.addEventListener('input', updateNewCustomerSubmitState);
+  document.getElementById('newCustomerTaxNo')?.addEventListener('blur', () => refreshCrmTaxNoHint('customer'));
   document.getElementById('custNotifyWa').addEventListener('click', () => {
     setNotifyToggle(document.getElementById('custNotifyWa'), !getNotifyToggle(document.getElementById('custNotifyWa')));
   });
@@ -12408,6 +12497,13 @@ ${vadeLine}`;
   document.getElementById('newCustomerSubmitBtn').addEventListener('click', async () => {
     const name = document.getElementById('newCustomerName').value.trim();
     if (!name) return;
+    const taxNoVal = document.getElementById('newCustomerTaxNo').value.trim();
+    const taxCheck = assertUniqueTaxNo(activeCompany, taxNoVal, 'customer', customerModalEditingTarget);
+    if (!taxCheck.ok) {
+      refreshCrmTaxNoHint('customer');
+      showToast(taxCheck.reason, 'error');
+      return;
+    }
     const cleanContacts = customerModalContacts
       .map(ct => {
         const wa = (ct.whatsapp || ct.phone || '').trim();
@@ -12432,7 +12528,7 @@ ${vadeLine}`;
       target.shortName = document.getElementById('newCustomerShortName').value.trim();
       target.address = document.getElementById('newCustomerAddress').value.trim();
       target.phone = firmPhone;
-      target.taxNo = document.getElementById('newCustomerTaxNo').value.trim();
+      target.taxNo = taxNoVal;
       target.taxOffice = document.getElementById('newCustomerTaxOffice').value.trim();
       target.partyKey = buildPartyKey(target.taxNo, target.name);
       target.currency = document.getElementById('newCustomerCurrency').value;
@@ -12456,9 +12552,9 @@ ${vadeLine}`;
         shortName: document.getElementById('newCustomerShortName').value.trim(),
         address: document.getElementById('newCustomerAddress').value.trim(),
         phone: firmPhone,
-        taxNo: document.getElementById('newCustomerTaxNo').value.trim(),
+        taxNo: taxNoVal,
         taxOffice: document.getElementById('newCustomerTaxOffice').value.trim(),
-        partyKey: buildPartyKey(document.getElementById('newCustomerTaxNo').value.trim(), name),
+        partyKey: buildPartyKey(taxNoVal, name),
         currency: document.getElementById('newCustomerCurrency').value,
         paymentTerms: document.getElementById('newCustomerPaymentTerms').value,
         leadTimeDays: Math.max(1, Number(document.getElementById('newCustomerLeadTime').value) || 15),
@@ -20702,6 +20798,10 @@ Teşekkürler.`;
   function upsertParasutCustomer(row) {
     const company = row.company || PARASUT_CRM_TARGET;
     let c = findCustomerByPartyKey(company, row.partyKey, row.taxNo, row.name);
+    if (!c) {
+      const dup = findSameSideTaxDuplicate(company, row.taxNo, 'customer', null);
+      if (dup) c = dup;
+    }
     const patch = {
       company,
       name: row.name,
@@ -20735,6 +20835,10 @@ Teşekkürler.`;
   function upsertParasutSupplier(row) {
     const company = row.company || PARASUT_CRM_TARGET;
     let s = findSupplierByPartyKey(company, row.partyKey, row.taxNo, row.name);
+    if (!s) {
+      const dup = findSameSideTaxDuplicate(company, row.taxNo, 'supplier', null);
+      if (dup) s = dup;
+    }
     const patch = {
       company,
       name: row.name,
