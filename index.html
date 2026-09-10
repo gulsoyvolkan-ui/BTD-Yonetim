@@ -20,6 +20,7 @@
 <script src="js/btd-cloud.js?v=datafix1"></script>
 <script src="js/btd-parasut.js?v=datafix1"></script>
 <script src="js/btd-accounting.js?v=acct3"></script>
+<script src="js/btd-finans.js?v=fin1"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -654,6 +655,10 @@
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M2 10h20"></path><path d="M6 15h2"></path><path d="M10 15h4"></path></svg>
           <span class="sidebar-label text-sm font-medium flex-1">Muhasebe <span class="opacity-70 font-normal">(Cari)</span></span>
         </a>
+        <a href="#" data-page="finance" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Finans">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+          <span class="sidebar-label text-sm font-medium flex-1">Finans <span class="opacity-70 font-normal">(Nakit)</span></span>
+        </a>
         <a href="#" data-page="machinepark" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Makine Parkı">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="1.5"></rect><path d="M16 10h2.5L21 12.5V16h-5"></path><circle cx="6.5" cy="19.5" r="1.5"></circle><circle cx="13.5" cy="19.5" r="1.5"></circle><path d="M7 10v4"></path><path d="M5.5 12h3"></path></svg>
           <span class="sidebar-label text-sm font-medium flex-1">Makine Parkı</span>
@@ -853,7 +858,7 @@
                   <th class="px-5 py-3 whitespace-nowrap">İş Emri No</th>
                   <th class="px-4 py-3 whitespace-nowrap">Parça / Müşteri</th>
                   <th class="px-4 py-3 whitespace-nowrap hidden md:table-cell">Malzeme / Adet</th>
-                  <th class="px-4 py-3 whitespace-nowrap">Operasyon Adımı</th>
+                  <th class="px-4 py-3 whitespace-nowrap">Rota</th>
                   <th class="px-4 py-3 whitespace-nowrap hidden sm:table-cell">Tezgah</th>
                   <th class="px-4 py-3 whitespace-nowrap">Durum</th>
                   <th class="px-4 py-3 whitespace-nowrap text-right">İşlem</th>
@@ -883,7 +888,7 @@
                     <th class="px-5 py-3 whitespace-nowrap">İş Emri No</th>
                     <th class="px-4 py-3 whitespace-nowrap">Parça / Müşteri</th>
                     <th class="px-4 py-3 whitespace-nowrap hidden md:table-cell">Malzeme / Adet</th>
-                    <th class="px-4 py-3 whitespace-nowrap">Operasyon Adımı</th>
+                    <th class="px-4 py-3 whitespace-nowrap">Rota</th>
                     <th class="px-4 py-3 whitespace-nowrap hidden sm:table-cell">Tezgah</th>
                     <th class="px-4 py-3 whitespace-nowrap">Durum</th>
                     <th class="px-4 py-3 whitespace-nowrap text-right">İşlem</th>
@@ -2013,6 +2018,90 @@
         <div class="h-6"></div>
       </div>
 
+      <!-- ============ PAGE: FINANS / NAKIT AKISI ============ -->
+      <div id="page-finance" class="hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+          <div>
+            <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Finans <span class="text-steel-400 font-medium">/ Nakit Akışı</span></h1>
+            <p class="text-sm text-steel-400 mt-1">Şirket + grup + kişisel kasa · gelir/gider · vade takibi</p>
+          </div>
+          <button type="button" id="finansNewMoveBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold shadow-md shadow-navy/25">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Hızlı İşlem
+          </button>
+        </div>
+
+        <div id="finansAssetFilter" class="flex flex-wrap gap-2 mb-5"></div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-5">
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Bu Ayki Gelir</p>
+            <p id="finansKpiGelir" class="mt-1 text-xl font-bold mono text-emerald-700">0 ₺</p>
+          </div>
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Bu Ayki Gider</p>
+            <p id="finansKpiGider" class="mt-1 text-xl font-bold mono text-red-600">0 ₺</p>
+          </div>
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Net Durum</p>
+            <p id="finansKpiNet" class="mt-1 text-xl font-bold mono text-navy">0 ₺</p>
+          </div>
+          <div class="bg-white border border-steel-200 rounded-2xl px-4 py-3.5">
+            <p class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Yaklaşan Vadeler</p>
+            <p id="finansKpiVade" class="mt-1 text-xl font-bold mono text-amber-700">0</p>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden mb-5">
+          <div class="px-5 py-3.5 border-b border-steel-100 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p class="text-sm font-semibold text-steel-700">Vade takvim &amp; liste</p>
+              <p class="text-[11px] text-steel-400 mt-0.5">Çek / senet / kredi · sarı yakın · kırmızı gecikmiş/kritik</p>
+            </div>
+            <span id="finansDueCount" class="text-[11px] bg-amber-50 text-amber-800 font-semibold px-2 py-0.5 rounded-full">0</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-steel-50/80 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                  <th class="px-5 py-3">Vade</th>
+                  <th class="px-4 py-3">Varlık</th>
+                  <th class="px-4 py-3">Tip</th>
+                  <th class="px-4 py-3">Yöntem</th>
+                  <th class="px-4 py-3">Açıklama</th>
+                  <th class="px-4 py-3 text-right">Tutar</th>
+                  <th class="px-4 py-3">Risk</th>
+                  <th class="px-4 py-3 text-right">İşlem</th>
+                </tr>
+              </thead>
+              <tbody id="finansDueBody" class="divide-y divide-steel-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-3.5 border-b border-steel-100">
+            <p class="text-sm font-semibold text-steel-700">Son hareketler</p>
+          </div>
+          <div class="overflow-x-auto max-h-[22rem]">
+            <table class="w-full text-sm">
+              <thead class="sticky top-0">
+                <tr class="bg-steel-50 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                  <th class="px-5 py-3">Tarih</th>
+                  <th class="px-4 py-3">Varlık</th>
+                  <th class="px-4 py-3">Tip</th>
+                  <th class="px-4 py-3">Kategori</th>
+                  <th class="px-4 py-3">Durum</th>
+                  <th class="px-4 py-3 text-right">Tutar</th>
+                </tr>
+              </thead>
+              <tbody id="finansMovesBody" class="divide-y divide-steel-100"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="h-6"></div>
+      </div>
+
       <!-- ============ PAGE: ANDON TV ============ -->
       <div id="page-andon" class="hidden">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
@@ -2661,7 +2750,7 @@
       <div class="rounded-2xl border border-steel-200 bg-steel-50/60 overflow-hidden flex flex-col min-h-[220px]">
         <div class="px-3.5 py-2.5 border-b border-steel-200/80 flex items-center justify-between gap-2">
           <p class="text-[11px] font-bold uppercase tracking-wide text-steel-500">Teknik Resim</p>
-          <label class="text-[11px] font-semibold text-navy cursor-pointer hover:underline">
+          <label id="partInfoTechUploadWrap" class="text-[11px] font-semibold text-navy cursor-pointer hover:underline">
             Yükle / Değiştir
             <input type="file" id="partInfoTechUpload" accept="image/*,application/pdf" class="hidden" />
           </label>
@@ -2893,23 +2982,44 @@
           </div>
         </div>
 
-        <!-- Operasyon Ağacı -->
+        <!-- Saha işlem sırası (basit checkbox rota) -->
         <div>
-          <div class="flex items-center justify-between mb-2">
-            <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">İşlem Ağacı (Rota) <span class="text-red-500">*</span></label>
-            <span class="text-[11px] text-steel-400">Alt başlıklara tıklayarak sırayla seçin</span>
+          <div class="flex flex-wrap items-end justify-between gap-2 mb-2">
+            <div>
+              <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">İşlem Sırası <span class="text-red-500">*</span></label>
+              <p class="text-[11px] text-steel-400 mt-0.5">İşaretlenenler soldan sağa sabit sırada uygulanır · detay sonra</p>
+            </div>
+            <span id="routeStepCount" class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">0 adım</span>
           </div>
-          <div id="opCatalogAccordion" class="space-y-2"></div>
+          <div id="opCatalogAccordion" class="flex flex-wrap gap-2"></div>
+          <div id="ebatlamaDetailPanel" class="hidden mt-3 rounded-xl border border-amber-200 bg-amber-50/60 p-3 space-y-3">
+            <p class="text-[11px] font-bold text-amber-900 uppercase tracking-wide">Ebatlama · Atölye &amp; Tezgâh</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label class="text-[10px] font-semibold text-steel-500 uppercase">Atölye</label>
+                <select id="newWOEbatlamaWorkshop" class="mt-1 w-full rounded-lg border border-steel-200 bg-white px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30">
+                  <option value="">Seçin</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[10px] font-semibold text-steel-500 uppercase">Tezgâh</label>
+                <select id="newWOEbatlamaMachine" class="mt-1 w-full rounded-lg border border-steel-200 bg-white px-2.5 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30" disabled>
+                  <option value="">Önce atölye</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="routeTimeline" class="mt-3 flex flex-wrap gap-1.5 min-h-[2rem]"></div>
         </div>
       </div>
 
-      <!-- RIGHT: Rota Akışı (Timeline) -->
+      <!-- RIGHT: Özet -->
       <div class="p-6 bg-steel-50 flex flex-col gap-3 overflow-y-auto">
-        <div class="flex items-center justify-between shrink-0">
-          <h4 class="font-bold text-steel-800 text-sm">Rota Akışı</h4>
-          <span id="routeStepCount" class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">0 adım</span>
+        <div class="shrink-0">
+          <h4 class="font-bold text-steel-800 text-sm">Hızlı Özet</h4>
+          <p class="text-[11px] text-steel-400 mt-0.5">Sahada kullanılacak rota — gereksiz detay yok</p>
         </div>
-        <div id="routeTimeline" class="flex-1 space-y-1"></div>
+        <div id="routeSummaryPanel" class="flex-1 space-y-2 text-sm text-steel-600"></div>
       </div>
     </div>
 
@@ -4246,6 +4356,107 @@
     <div class="px-5 py-4 border-t border-steel-100 flex flex-wrap items-center justify-end gap-2 shrink-0">
       <button type="button" id="parasutCrmImportCancelBtn" class="text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl">Vazgeç</button>
       <button type="button" id="parasutCrmImportConfirmBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold px-5 py-2.5 rounded-xl shadow-md">Seçilenleri Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FINANS · HIZLI İŞLEM ============ -->
+<div id="finansMoveOverlay" class="hidden fixed inset-0 bg-steel-900/70 backdrop-blur-panel z-[86] flex items-center justify-center p-3 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] flex flex-col overflow-hidden">
+    <div class="bg-navy px-5 py-4 flex items-start justify-between shrink-0">
+      <div>
+        <p class="text-[11px] text-white/70 font-semibold uppercase tracking-wide">Finans</p>
+        <h3 class="text-white font-bold text-lg mt-0.5">Hızlı işlem ekle</h3>
+      </div>
+      <button type="button" id="finansMoveCloseBtn" class="text-white/80 hover:text-white hover:bg-white/10 rounded-lg p-1.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="p-5 space-y-3 overflow-y-auto flex-1">
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Varlık</label>
+        <select id="finansMoveAsset" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm"></select>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">İşlem tipi</label>
+          <select id="finansMoveTip" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+            <option value="GELIR">Gelir</option>
+            <option value="GIDER">Gider</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Kategori</label>
+          <select id="finansMoveCat" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm"></select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Tutar</label>
+          <input id="finansMoveAmount" type="text" inputmode="decimal" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm mono" placeholder="0" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Para birimi</label>
+          <select id="finansMoveCur" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+            <option value="TRY">TRY</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">İşlem tarihi</label>
+          <input id="finansMoveDate" type="date" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Vade tarihi</label>
+          <input id="finansMoveDue" type="date" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Ödeme yöntemi</label>
+          <select id="finansMovePay" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+            <option value="Nakit">Nakit</option>
+            <option value="Havale/EFT" selected>Havale/EFT</option>
+            <option value="Kredi Karti">Kredi Kartı</option>
+            <option value="Cek">Çek</option>
+            <option value="Senet">Senet</option>
+            <option value="Kredi Taksiti">Kredi Taksiti</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] font-semibold text-steel-500 uppercase">Durum</label>
+          <select id="finansMoveStatus" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+            <option value="Bekliyor">Bekliyor</option>
+            <option value="Odendi">Ödendi</option>
+            <option value="Tahsil Edildi">Tahsil Edildi</option>
+            <option value="Iptal">İptal</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Açıklama</label>
+        <input id="finansMoveDesc" type="text" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm" placeholder="Opsiyonel" />
+      </div>
+      <label class="inline-flex items-center gap-2 text-sm text-steel-600">
+        <input id="finansMoveRecurring" type="checkbox" class="rounded border-steel-300" />
+        Tekrar eden (kira / kredi)
+      </label>
+      <div id="finansMovePeriodWrap" class="hidden">
+        <label class="text-[11px] font-semibold text-steel-500 uppercase">Periyot</label>
+        <select id="finansMovePeriod" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm">
+          <option value="Aylik">Aylık</option>
+          <option value="Haftalik">Haftalık</option>
+          <option value="Uc Aylik">Üç Aylık</option>
+          <option value="Yillik">Yıllık</option>
+        </select>
+      </div>
+    </div>
+    <div class="px-5 py-4 border-t border-steel-100 flex justify-end gap-2">
+      <button type="button" id="finansMoveCancelBtn" class="text-sm font-medium text-steel-500 px-4 py-2.5 rounded-xl">Vazgeç</button>
+      <button type="button" id="finansMoveSaveBtn" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-5 py-2.5 rounded-xl">Kaydet</button>
     </div>
   </div>
 </div>
@@ -8073,6 +8284,37 @@ ${vadeLine}`;
     </span>`;
   }
 
+  function partTechThumbHtml(part) {
+    const src = String(part?.techDrawing || '').trim();
+    if (!src) {
+      return `<button type="button" title="Teknik resim / künye" class="wo-draw-btn shrink-0 w-10 h-10 rounded-lg border border-dashed border-steel-300 bg-steel-50 text-steel-400 hover:border-navy hover:text-navy flex items-center justify-center" aria-label="Teknik resim">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      </button>`;
+    }
+    if (src.startsWith('data:application/pdf') || /\.pdf($|\?)/i.test(src)) {
+      return `<button type="button" title="PDF teknik resmi aç" class="wo-draw-btn shrink-0 w-10 h-10 rounded-lg border border-steel-200 bg-white text-red-600 hover:border-navy font-bold text-[10px]" aria-label="PDF teknik resim">PDF</button>`;
+    }
+    return `<button type="button" title="Teknik resmi aç" class="wo-draw-btn shrink-0 w-10 h-10 rounded-lg border border-steel-200 bg-white overflow-hidden hover:ring-2 hover:ring-navy/30 p-0" aria-label="Teknik resim">
+      <img src="${src}" alt="" class="w-full h-full object-contain pointer-events-none" />
+    </button>`;
+  }
+
+  function partRouteChipsHtml(part) {
+    const cams = part?.cam || [];
+    if (!cams.length) return `<span class="text-xs text-steel-400">—</span>`;
+    const active = part.activeCam || 0;
+    return `<div class="flex flex-wrap gap-1 max-w-[280px]">${cams.map((c, i) => {
+      const done = i < active;
+      const cur = i === active && !partOpsComplete(part);
+      const cls = done
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+        : cur
+          ? 'bg-navy/10 text-navy border-navy/20 font-bold'
+          : 'bg-steel-50 text-steel-500 border-steel-100';
+      return `<span class="inline-flex text-[10px] px-1.5 py-0.5 rounded border ${cls}">${c.label}</span>`;
+    }).join('')}</div>`;
+  }
+
   function appendWOGroup(targetBody, wo, opts = {}) {
     const expanded = expandedWOs.has(wo.id);
     const processingCount = wo.parts.filter(p => partStatus(p, wo) === 'processing').length;
@@ -8146,8 +8388,9 @@ ${vadeLine}`;
       tr.className = 'row-hover cursor-pointer transition-colors';
       tr.innerHTML = `
         <td class="px-5 py-3.5">
-          <div class="flex items-center gap-2 pl-6">
+          <div class="flex items-center gap-2 pl-4">
             <span class="text-steel-300 shrink-0">└</span>
+            ${partTechThumbHtml(part)}
             <span class="font-semibold text-navy mono text-sm">${partCode(wo, part)}</span>
             <button title="QR Kodu Görüntüle" class="qr-btn text-steel-400 hover:text-navy transition-colors p-1 -m-1 rounded">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><line x1="14" y1="14" x2="14" y2="21"></line><line x1="21" y1="14" x2="21" y2="21"></line><line x1="17" y1="14" x2="17" y2="18"></line><line x1="14" y1="17" x2="18" y2="17"></line></svg>
@@ -8155,13 +8398,13 @@ ${vadeLine}`;
           </div>
         </td>
         <td class="px-4 py-3.5 font-medium text-steel-700">${part.name}</td>
-        <td class="px-4 py-3.5 text-steel-500 hidden md:table-cell">${part.material}</td>
-        <td class="px-4 py-3.5 text-steel-600">${step.label} <span class="text-steel-400">${(part.activeCam || 0) + 1}/${(part.cam || []).length}</span></td>
+        <td class="px-4 py-3.5 text-steel-500 hidden md:table-cell">${part.material || '—'}</td>
+        <td class="px-4 py-3.5">${partRouteChipsHtml(part)}</td>
         <td class="px-4 py-3.5 hidden sm:table-cell">
-          ${step.machine ? `
+          ${step.machine || step.plannedMachine ? `
           <span class="inline-flex items-center gap-1.5 bg-steel-100 text-steel-600 text-xs font-semibold px-2.5 py-1 rounded-lg mono">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line></svg>
-            ${step.machine}
+            ${step.machine || step.plannedMachine}
           </span>` : `<span class="text-xs text-steel-400 italic">${status === 'completed' || status === 'cancelled' ? '—' : 'Atanmadı'}</span>`}
         </td>
         <td class="px-4 py-3.5">
@@ -8173,7 +8416,7 @@ ${vadeLine}`;
         <td class="px-4 py-3.5 text-steel-500 text-right">${part.operator || '—'}</td>
       `;
       tr.addEventListener('click', (e) => {
-        if (e.target.closest('.qr-btn')) {
+        if (e.target.closest('.qr-btn') || e.target.closest('.wo-draw-btn')) {
           e.stopPropagation();
           openWoPartInfo(wo, part);
           return;
@@ -8235,17 +8478,23 @@ ${vadeLine}`;
       const step = part ? (activeStep(part) || {}) : {};
       const cust = blue ? wo.company : (wo.customer || '—');
       return `<article class="rounded-2xl border border-steel-200 bg-white p-4 shadow-sm active:bg-steel-50" data-wo-card="${wo.id}">
-        <div class="flex items-start justify-between gap-2">
-          <div class="min-w-0">
-            <p class="font-bold text-navy mono text-sm">${wo.id}</p>
-            <p class="text-sm text-steel-700 mt-0.5 truncate">${cust}</p>
-            <p class="text-[11px] text-steel-400 mt-1">${wo.parts.length} parça · ${step.label || '—'}</p>
-            ${step.machine ? `<p class="text-[11px] text-steel-500 mt-0.5 truncate">${step.machine}</p>` : ''}
+        <div class="flex items-start gap-3">
+          ${part ? partTechThumbHtml(part).replace('<button', `<button data-wo-card-draw="${wo.id}"`) : ''}
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <p class="font-bold text-navy mono text-sm">${wo.id}</p>
+                <p class="text-sm text-steel-700 mt-0.5 truncate">${cust}</p>
+                <p class="text-[11px] text-steel-400 mt-1">${wo.parts.length} parça · ${step.label || '—'}</p>
+                ${part ? `<div class="mt-1.5">${partRouteChipsHtml(part)}</div>` : ''}
+              </div>
+              ${woStatusBadgeHtml(wo)}
+            </div>
           </div>
-          ${woStatusBadgeHtml(wo)}
         </div>
         <div class="flex gap-2 mt-3">
           <button type="button" data-wo-open-part="${wo.id}" class="flex-1 touch-btn text-sm font-semibold text-white bg-navy rounded-xl py-2.5">Aç</button>
+          <button type="button" data-wo-card-draw="${wo.id}" class="touch-btn text-sm font-semibold text-steel-700 bg-steel-100 px-3 rounded-xl">Resim</button>
           <button type="button" data-wo-card-qr="${wo.id}" class="touch-btn text-sm font-semibold text-sky-700 bg-sky-50 px-3 rounded-xl">QR</button>
         </div>
       </article>`;
@@ -8256,11 +8505,21 @@ ${vadeLine}`;
         if (wo && wo.parts[0]) openDrawer(wo, wo.parts[0]);
       });
     });
+    const openDraw = (id) => {
+      const wo = workOrders.find(w => w.id === id);
+      if (!wo || !wo.parts[0]) return;
+      openWoPartInfo(wo, wo.parts[0]);
+    };
+    host.querySelectorAll('[data-wo-card-draw]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openDraw(btn.dataset.woCardDraw);
+      });
+    });
     host.querySelectorAll('[data-wo-card-qr]').forEach(btn => {
       btn.addEventListener('click', () => {
         const wo = workOrders.find(w => w.id === btn.dataset.woCardQr);
         if (!wo || !wo.parts[0]) return;
-        // Ortak WO QR yok — ilk parçanın kalem QR / künyesini aç
         openWoPartInfo(wo, wo.parts[0]);
         if ((wo.parts || []).length > 1) {
           showToast('Birden fazla parça var — her satırın kendi QR’sini kullanın.', 'info');
@@ -8844,12 +9103,12 @@ ${vadeLine}`;
     'Kalite Kontrol': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason', 'andon', 'machinepark'],
     'Kalite Kontrol Uzmanı': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason', 'andon', 'machinepark'],
     'Sevkiyat': ['dashboard', 'shipping', 'orders', 'andon'],
-    'Muhasebe': ['dashboard', 'invoicing', 'accounting', 'orders', 'quotes', 'costing', 'customers', 'suppliers', 'hr'],
+    'Muhasebe': ['dashboard', 'invoicing', 'accounting', 'finance', 'orders', 'quotes', 'costing', 'customers', 'suppliers', 'hr'],
   };
   const roleLabels = { 'Yönetici': 'Sistem Yöneticisi', 'Kalite Kontrol': 'Kalite Kontrol Uzmanı', 'Sevkiyat': 'Sevkiyat Sorumlusu' };
   const NAV_REGION2_CRITICAL = ['customers', 'suppliers', 'hr', 'settings'];
   const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'fason', 'quality', 'shipping', 'machinepark', 'andon'];
-  const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders', 'accounting'];
+  const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders', 'accounting', 'finance'];
 
   function isGroupAdmin(user) {
     if (!user || user.role !== 'Yönetici') return false;
@@ -9071,10 +9330,26 @@ ${vadeLine}`;
       return;
     }
     if (src.startsWith('data:application/pdf') || /\.pdf($|\?)/i.test(src)) {
-      el.innerHTML = `<iframe src="${src}" title="Teknik resim PDF" class="w-full h-[280px] rounded-lg border border-steel-200 bg-white"></iframe>`;
+      el.innerHTML = `<iframe src="${src}" title="Teknik resim PDF" class="w-full h-[min(70vh,480px)] rounded-lg border border-steel-200 bg-white"></iframe>`;
       return;
     }
-    el.innerHTML = `<img src="${src}" alt="Teknik resim" class="max-h-[320px] w-full object-contain rounded-lg bg-white" />`;
+    el.innerHTML = `<button type="button" class="tech-draw-zoom w-full p-0 border-0 bg-transparent cursor-zoom-in" title="Büyüt">
+      <img src="${src}" alt="Teknik resim" class="max-h-[min(70vh,520px)] w-full object-contain rounded-lg bg-white" />
+    </button>`;
+    el.querySelector('.tech-draw-zoom')?.addEventListener('click', () => {
+      const w = window.open('about:blank');
+      if (!w) {
+        showToast('Tarayıcı pop-up engelledi — resmi görmek için izin verin.', 'error');
+        return;
+      }
+      w.document.title = 'Teknik Resim';
+      w.document.body.style.cssText = 'margin:0;background:#111;display:flex;align-items:center;justify-content:center;min-height:100vh';
+      const img = w.document.createElement('img');
+      img.src = src;
+      img.alt = 'Teknik resim';
+      img.style.cssText = 'max-width:100%;max-height:100vh;object-fit:contain';
+      w.document.body.appendChild(img);
+    });
   }
 
   function openPartInfoPanel(ctx) {
@@ -9096,6 +9371,12 @@ ${vadeLine}`;
       </div>`).join('');
 
     renderTechDrawingBody(document.getElementById('partInfoTechBody'), ctx.techDrawing);
+
+    const uploadWrap = document.getElementById('partInfoTechUploadWrap');
+    if (uploadWrap) {
+      const blue = !!(currentUser && typeof isBlueCollar === 'function' && isBlueCollar(currentUser));
+      uploadWrap.classList.toggle('hidden', blue);
+    }
 
     const qrUrl = ctx.qrUrl || '';
     const qrBox = document.getElementById('partInfoQrBox');
@@ -10140,6 +10421,7 @@ ${vadeLine}`;
     shipping: 'page-shipping',
     invoicing: 'page-invoicing',
     accounting: 'page-accounting',
+    finance: 'page-finance',
     machinepark: 'page-machinepark',
     hr: 'page-hr',
     stock: 'page-stock',
@@ -10227,6 +10509,7 @@ ${vadeLine}`;
     if (page === 'shipping') renderShippingPage();
     if (page === 'invoicing') renderInvoicingPage();
     if (page === 'accounting') renderAccountingPage();
+    if (page === 'finance') renderFinancePage();
     if (page === 'andon') renderAndonHubPage();
     if (page === 'settings') renderSettingsPage();
 
@@ -11591,40 +11874,25 @@ ${vadeLine}`;
   /* legacy nfc block removed */
 
   // ---------- Yeni İş Emri / Rota Planla ----------
-  // Operasyon Master Data (tüm firmalarda ortak kullanılan rota kataloğu)
-  const operationCatalog = [
-    { name: 'Satış ve Ön Hazırlık', color: 'sky', steps: [
-      'Talep Toplama / İhtiyaç Analizi', 'Maliyet ve Süre Analizi', 'Teklif Onayı',
-    ]},
-    { name: 'Mühendislik ve Tasarım', color: 'indigo', steps: [
-      'CAD Tasarımı (Katı Modelleme)', 'CAM Programlama', 'Slicing / Dilimleme', 'Teknik Resim Çıktısı',
-    ]},
-    { name: 'Hammadde Hazırlık', color: 'amber', steps: [
-      'Malzeme Siparişi / Depo Girişi', 'Ebatlama (Testere Kesimi)', 'Kumlama / Tamburlama',
-    ]},
-    { name: 'İmalat Çeşitleri', color: 'blue', steps: [
-      'CNC Frezeleme (3 Eksen / 5 Eksen)', 'CNC Tornalama', 'Üniversal Frezeleme / Tornalama', 'Taşlama (Düzlem / Silindirik)',
-      'Erozyon (Tel / Dalma)', 'FDM 3D Baskı', 'Reçine Baskı (SLA/DLP)', 'Ard İşlem (Yüzey Yıkama/Kürleme)',
-    ]},
-    { name: 'Termal ve İkincil İşlemler', color: 'orange', steps: [
-      'Vakum Isıl İşlem', 'İndüksiyon / Tuz Banyosu', 'Sementasyon / Nitrasyon', 'Kaynak (TIG / MIG-MAG / Lazer)',
-    ]},
-    { name: 'Yüzey İşlem ve Kaplama', color: 'purple', steps: [
-      'Fosfat / Galvaniz / Eloksal', 'Kataforez / Sert Krom', 'Toz Boya / Yaş Boya',
-    ]},
-    { name: 'Montaj ve Son İşlemler', color: 'teal', steps: [
-      'Alt Montaj / Mekanik Montaj', 'Tesisat Çekimi',
-    ]},
-    { name: 'Kalite Güvence', color: 'emerald', steps: [
-      'İlk Parça Onayı', 'Ara Kontrol', 'Son Kalite Kontrol (AI Kamera Onayı)',
-    ]},
-    { name: 'Lojistik ve Finans', color: 'rose', steps: [
-      'Paketleme ve QR Etiketleme', 'Sevk (İrsaliye Kesimi)', 'Faturalandırma',
-    ]},
+  // Saha rotası: sabit sıra, yan yana checkbox (detaylı katalog sonra eklenebilir)
+  const shopFloorProcesses = [
+    { id: 'ebatlama', label: 'Ebatlama', short: 'Ebat', needsMachine: true },
+    { id: 'frezeleme', label: 'Frezeleme', short: 'Freze', needsMachine: false },
+    { id: 'tornalama', label: 'Tornalama', short: 'Torna', needsMachine: false },
+    { id: 'taslama', label: 'Taşlama', short: 'Taşla', needsMachine: false },
+    { id: 'bileme', label: 'Bileme', short: 'Bile', needsMachine: false },
+    { id: 'kaynak', label: 'Kaynak', short: 'Kaynak', needsMachine: false },
+    { id: 'isil', label: 'Isıl İşlem', short: 'Isıl', needsMachine: false },
+    { id: 'kaplama', label: 'Kaplama', short: 'Kapla', needsMachine: false },
+    { id: 'boyama', label: 'Boyama', short: 'Boya', needsMachine: false },
   ];
+  // Eski iş emirleri / geriye uyum için isim korunur (artık kullanılmıyor)
+  const operationCatalog = [{ name: 'Saha İşlemleri', color: 'navy', steps: shopFloorProcesses.map(p => p.label) }];
 
-  let selectedRoute = []; // [{ cat: catIndex, step: 'label' }] — seçim sırası korunur
-  let openCategories = new Set([0]);
+  let selectedRoute = []; // [{ cat: 0, step, processId }] — shopFloorProcesses sırası
+  let selectedProcessIds = new Set();
+  let ebatlamaWorkshop = '';
+  let ebatlamaMachine = '';
 
   // ---------- Malzeme Veritabanı (Talaşlı + Eklemeli İmalat) — Searchable Combobox ----------
   const materialCatalog = [
@@ -11735,116 +12003,151 @@ ${vadeLine}`;
     return (seqs.length ? Math.max(...seqs) : 0) + 1;
   }
 
+  function syncSelectedRouteFromProcesses() {
+    selectedRoute = shopFloorProcesses
+      .filter(p => selectedProcessIds.has(p.id))
+      .map(p => ({ cat: 0, step: p.label, processId: p.id }));
+  }
+
+  function fillEbatlamaWorkshopSelect() {
+    const wsSel = document.getElementById('newWOEbatlamaWorkshop');
+    const mSel = document.getElementById('newWOEbatlamaMachine');
+    if (!wsSel || !mSel) return;
+    const company = (newWOPrefill && newWOPrefill.company) || activeCompany;
+    const workshops = machineWorkshopsFor(company);
+    wsSel.innerHTML = `<option value="">Seçin</option>` + workshops.map(ws =>
+      `<option value="${String(ws.workshop).replace(/"/g, '&quot;')}" ${ebatlamaWorkshop === ws.workshop ? 'selected' : ''}>${ws.workshop}</option>`
+    ).join('');
+    fillEbatlamaMachineSelect();
+  }
+
+  function fillEbatlamaMachineSelect() {
+    const mSel = document.getElementById('newWOEbatlamaMachine');
+    if (!mSel) return;
+    const company = (newWOPrefill && newWOPrefill.company) || activeCompany;
+    const ws = machineWorkshopsFor(company).find(w => w.workshop === ebatlamaWorkshop);
+    if (!ws) {
+      mSel.disabled = true;
+      mSel.innerHTML = `<option value="">Önce atölye</option>`;
+      ebatlamaMachine = '';
+      return;
+    }
+    mSel.disabled = false;
+    const opts = ws.machines.map(m => {
+      const label = machineLabel(m);
+      return `<option value="${label.replace(/"/g, '&quot;')}" ${ebatlamaMachine === label ? 'selected' : ''}>${label}</option>`;
+    }).join('');
+    mSel.innerHTML = `<option value="">Tezgâh seçin</option>` + opts;
+    if (ebatlamaMachine && !ws.machines.some(m => machineLabel(m) === ebatlamaMachine)) {
+      ebatlamaMachine = '';
+      mSel.value = '';
+    }
+  }
+
   function renderOpCatalog() {
     const el = document.getElementById('opCatalogAccordion');
-    el.innerHTML = operationCatalog.map((cat, ci) => {
-      const selectedCount = selectedRoute.filter(s => s.cat === ci).length;
-      const open = openCategories.has(ci);
+    if (!el) return;
+    syncSelectedRouteFromProcesses();
+    el.innerHTML = shopFloorProcesses.map((p, idx) => {
+      const checked = selectedProcessIds.has(p.id);
+      const orderNo = checked ? selectedRoute.findIndex(s => s.processId === p.id) + 1 : 0;
       return `
-        <div class="border border-steel-200 rounded-xl overflow-hidden">
-          <button type="button" data-cat-toggle="${ci}" class="cat-toggle w-full flex items-center gap-2.5 px-4 py-3 bg-steel-50 hover:bg-steel-100 transition-colors text-left">
-            <span class="w-6 h-6 rounded-full bg-${cat.color}-100 text-${cat.color}-700 text-xs font-bold flex items-center justify-center shrink-0">${ci + 1}</span>
-            <span class="font-semibold text-sm text-steel-700 flex-1">${cat.name}</span>
-            ${selectedCount ? `<span class="text-[11px] bg-${cat.color}-100 text-${cat.color}-700 font-semibold px-2 py-0.5 rounded-full shrink-0">${selectedCount} seçili</span>` : ''}
-            <svg class="w-4 h-4 text-steel-400 shrink-0 transition-transform ${open ? 'rotate-180' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-          </button>
-          <div class="${open ? '' : 'hidden'} px-2 py-2 space-y-0.5 bg-white border-t border-steel-100">
-            ${cat.steps.map(step => {
-              const selIdx = selectedRoute.findIndex(s => s.cat === ci && s.step === step);
-              const checked = selIdx > -1;
-              return `
-                <label class="flex items-center gap-2.5 rounded-lg px-2.5 py-2 hover:bg-steel-50 cursor-pointer transition-colors">
-                  <input type="checkbox" data-cat="${ci}" data-step="${step.replace(/"/g, '&quot;')}" class="step-checkbox w-4 h-4 rounded border-steel-300 text-navy focus:ring-navy shrink-0" ${checked ? 'checked' : ''} />
-                  <span class="text-sm ${checked ? 'text-steel-800 font-medium' : 'text-steel-600'} flex-1">${step}</span>
-                  ${checked ? `<span class="text-[10px] font-bold bg-navy text-white rounded-full w-5 h-5 flex items-center justify-center shrink-0">${selIdx + 1}</span>` : ''}
-                </label>
-              `;
-            }).join('')}
-          </div>
-        </div>
+        <label class="inline-flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors select-none
+          ${checked ? 'border-navy bg-navy/5 shadow-sm' : 'border-steel-200 bg-white hover:border-steel-300'}">
+          <input type="checkbox" data-process-id="${p.id}" class="process-check w-4 h-4 rounded border-steel-300 text-navy focus:ring-navy shrink-0" ${checked ? 'checked' : ''} />
+          <span class="text-[10px] font-bold text-steel-400 mono w-4">${String(idx + 1).padStart(2, '0')}</span>
+          <span class="text-sm font-semibold ${checked ? 'text-navy' : 'text-steel-700'}">${p.label}</span>
+          ${checked ? `<span class="text-[10px] font-bold bg-navy text-white rounded-full w-5 h-5 flex items-center justify-center">${orderNo}</span>` : ''}
+        </label>
       `;
     }).join('');
 
-    el.querySelectorAll('.cat-toggle').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const ci = Number(btn.dataset.catToggle);
-        if (openCategories.has(ci)) openCategories.delete(ci); else openCategories.add(ci);
-        renderOpCatalog();
-      });
-    });
-    el.querySelectorAll('.step-checkbox').forEach(cb => {
+    el.querySelectorAll('.process-check').forEach(cb => {
       cb.addEventListener('change', () => {
-        const ci = Number(cb.dataset.cat);
-        const step = cb.dataset.step;
-        if (cb.checked) {
-          if (!selectedRoute.some(s => s.cat === ci && s.step === step)) selectedRoute.push({ cat: ci, step });
-        } else {
-          selectedRoute = selectedRoute.filter(s => !(s.cat === ci && s.step === step));
+        const id = cb.dataset.processId;
+        if (cb.checked) selectedProcessIds.add(id);
+        else {
+          selectedProcessIds.delete(id);
+          if (id === 'ebatlama') {
+            ebatlamaWorkshop = '';
+            ebatlamaMachine = '';
+          }
         }
         renderOpCatalog();
         renderRouteTimeline();
       });
     });
+
+    const ebatPanel = document.getElementById('ebatlamaDetailPanel');
+    if (ebatPanel) {
+      const show = selectedProcessIds.has('ebatlama');
+      ebatPanel.classList.toggle('hidden', !show);
+      if (show) fillEbatlamaWorkshopSelect();
+    }
   }
 
   function renderRouteTimeline() {
+    syncSelectedRouteFromProcesses();
     const el = document.getElementById('routeTimeline');
-    document.getElementById('routeStepCount').textContent = `${selectedRoute.length} adım`;
+    const countEl = document.getElementById('routeStepCount');
+    if (countEl) countEl.textContent = `${selectedRoute.length} adım`;
 
-    if (!selectedRoute.length) {
-      el.innerHTML = `
-        <div class="flex-1 flex flex-col items-center justify-center text-center py-10 px-4">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-9 h-9 text-steel-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-9 4 18 3-9h4"></path></svg>
-          <p class="text-sm text-steel-500 font-medium mt-3">Henüz operasyon adımı seçilmedi</p>
-          <p class="text-xs text-steel-400 mt-1">Sol taraftaki listeden sırayla seçim yapın</p>
+    if (el) {
+      if (!selectedRoute.length) {
+        el.innerHTML = `<span class="text-xs text-steel-400 italic">Henüz işlem seçilmedi</span>`;
+      } else {
+        el.innerHTML = selectedRoute.map((s, i) => {
+          const extra = s.processId === 'ebatlama' && ebatlamaMachine
+            ? ` · ${ebatlamaMachine}`
+            : '';
+          return `<span class="inline-flex items-center gap-1.5 rounded-lg bg-white border border-steel-200 px-2.5 py-1 text-xs font-semibold text-steel-700">
+            <span class="w-4 h-4 rounded-full bg-navy text-white text-[10px] flex items-center justify-center">${i + 1}</span>
+            ${s.step}${extra}
+          </span>`;
+        }).join('<span class="text-steel-300 text-xs self-center">→</span>');
+      }
+    }
+
+    const summary = document.getElementById('routeSummaryPanel');
+    if (summary) {
+      const partName = document.getElementById('newWOPartName')?.value.trim() || '—';
+      const customer = document.getElementById('newWOCustomer')?.value.trim() || '—';
+      const material = document.getElementById('newWOMaterial')?.value.trim() || '—';
+      summary.innerHTML = `
+        <div class="rounded-xl border border-steel-200 bg-white p-3 space-y-2">
+          <p class="text-[10px] font-bold uppercase text-steel-400">Parça</p>
+          <p class="font-semibold text-steel-800">${partName}</p>
+          <p class="text-xs text-steel-500">${customer}</p>
+          <p class="text-xs text-steel-500">Malzeme: ${material}</p>
         </div>
+        <div class="rounded-xl border border-steel-200 bg-white p-3 space-y-2">
+          <p class="text-[10px] font-bold uppercase text-steel-400">Rota (${selectedRoute.length})</p>
+          ${selectedRoute.length
+            ? `<ol class="list-decimal list-inside space-y-1 text-sm text-steel-700">${selectedRoute.map(s => {
+                const tip = s.processId === 'ebatlama'
+                  ? (ebatlamaMachine ? ` — ${ebatlamaMachine}` : ' — tezgâh seçilmedi')
+                  : '';
+                return `<li>${s.step}${tip}</li>`;
+              }).join('')}</ol>`
+            : `<p class="text-xs text-steel-400 italic">Checkbox’lardan işlem seçin</p>`}
+        </div>
+        ${selectedProcessIds.has('ebatlama') && !ebatlamaMachine
+          ? `<p class="text-[11px] text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">Ebatlama işaretli — atölye ve tezgâh seçmeniz önerilir (boş bırakılırsa sahada atanır).</p>`
+          : ''}
       `;
-    } else {
-      el.innerHTML = selectedRoute.map((s, i) => {
-        const cat = operationCatalog[s.cat];
-        const connector = i < selectedRoute.length - 1
-          ? `<div class="flex justify-center py-0.5"><svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-steel-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>`
-          : '';
-        return `
-          <div class="flex items-start gap-2.5 bg-white rounded-xl border border-steel-200 p-2.5 shadow-sm">
-            <span class="w-6 h-6 rounded-full bg-${cat.color}-500 text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">${i + 1}</span>
-            <div class="flex-1 min-w-0">
-              <p class="text-xs font-semibold text-steel-800 leading-tight">${s.step}</p>
-              <p class="text-[10px] text-${cat.color}-600 font-medium mt-0.5">${cat.name}</p>
-            </div>
-            <div class="flex flex-col shrink-0">
-              <button type="button" data-move-up="${i}" ${i === 0 ? 'disabled' : ''} class="text-steel-400 hover:text-navy disabled:opacity-25 disabled:cursor-not-allowed p-0.5 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-              </button>
-              <button type="button" data-move-down="${i}" ${i === selectedRoute.length - 1 ? 'disabled' : ''} class="text-steel-400 hover:text-navy disabled:opacity-25 disabled:cursor-not-allowed p-0.5 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </button>
-            </div>
-            <button type="button" data-remove-route="${i}" class="text-steel-300 hover:text-red-500 p-0.5 shrink-0 transition-colors">
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          </div>
-          ${connector}
-        `;
-      }).join('');
-
-      el.querySelectorAll('[data-move-up]').forEach(b => b.addEventListener('click', () => moveRouteItem(Number(b.dataset.moveUp), -1)));
-      el.querySelectorAll('[data-move-down]').forEach(b => b.addEventListener('click', () => moveRouteItem(Number(b.dataset.moveDown), 1)));
-      el.querySelectorAll('[data-remove-route]').forEach(b => b.addEventListener('click', () => removeRouteItem(Number(b.dataset.removeRoute))));
     }
 
     updateNewWOSubmitState();
   }
 
-  function moveRouteItem(idx, dir) {
-    const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= selectedRoute.length) return;
-    [selectedRoute[idx], selectedRoute[newIdx]] = [selectedRoute[newIdx], selectedRoute[idx]];
-    renderRouteTimeline();
-  }
-
   function removeRouteItem(idx) {
-    selectedRoute.splice(idx, 1);
+    const item = selectedRoute[idx];
+    if (!item) return;
+    selectedProcessIds.delete(item.processId);
+    if (item.processId === 'ebatlama') {
+      ebatlamaWorkshop = '';
+      ebatlamaMachine = '';
+    }
     renderOpCatalog();
     renderRouteTimeline();
   }
@@ -11890,7 +12193,9 @@ ${vadeLine}`;
 
   function openNewWOModal(prefill = null) {
     selectedRoute = [];
-    openCategories = new Set([0]);
+    selectedProcessIds = new Set();
+    ebatlamaWorkshop = '';
+    ebatlamaMachine = '';
     const company = (prefill && prefill.company) || activeCompany;
     const info = companies[company];
     document.getElementById('newWOCompanyName').textContent = company;
@@ -11905,8 +12210,6 @@ ${vadeLine}`;
     document.getElementById('newWOCustomerList').innerHTML = companyCustomers()
       .map(c => `<option value="${c.name.replace(/"/g, '&quot;')}"></option>`).join('');
     updateNewWOContactOptions();
-    renderOpCatalog();
-    renderRouteTimeline();
     newWOPrefill = prefill ? {
       orderId: prefill.orderId || null,
       quoteId: prefill.quoteId || null,
@@ -11914,8 +12217,10 @@ ${vadeLine}`;
       techDrawing: prefill.techDrawing || '',
       itemIdx: prefill.itemIdx != null ? prefill.itemIdx : null,
     } : null;
+    renderOpCatalog();
+    renderRouteTimeline();
     if (prefill && prefill.orderId) {
-      showToast(`${prefill.orderId} numaralı siparişten iş emri hazırlanıyor. Lütfen operasyon rotasını seçin.`, 'info');
+      showToast(`${prefill.orderId} numaralı siparişten iş emri hazırlanıyor. İşlem sırasını işaretleyin.`, 'info');
     }
     newWOModalOverlay.classList.remove('hidden');
   }
@@ -11946,7 +12251,22 @@ ${vadeLine}`;
   document.getElementById('newWOBtn').addEventListener('click', openNewWOModal);
   document.getElementById('newWOCloseBtn').addEventListener('click', closeNewWOModal);
   document.getElementById('newWOCancelBtn').addEventListener('click', closeNewWOModal);
-  document.getElementById('newWOPartName').addEventListener('input', updateNewWOSubmitState);
+  document.getElementById('newWOPartName').addEventListener('input', () => {
+    updateNewWOSubmitState();
+    renderRouteTimeline();
+  });
+  document.getElementById('newWOCustomer')?.addEventListener('input', () => renderRouteTimeline());
+  document.getElementById('newWOMaterial')?.addEventListener('input', () => renderRouteTimeline());
+  document.getElementById('newWOEbatlamaWorkshop')?.addEventListener('change', (e) => {
+    ebatlamaWorkshop = e.target.value || '';
+    ebatlamaMachine = '';
+    fillEbatlamaMachineSelect();
+    renderRouteTimeline();
+  });
+  document.getElementById('newWOEbatlamaMachine')?.addEventListener('change', (e) => {
+    ebatlamaMachine = e.target.value || '';
+    renderRouteTimeline();
+  });
   document.getElementById('newWOCustomer').addEventListener('input', updateNewWOContactOptions);
   document.getElementById('newWOTechDrawing')?.addEventListener('change', async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -12006,7 +12326,12 @@ ${vadeLine}`;
         activeCam: 0,
         techDrawing,
         qrKey: partQrKey,
-        cam: selectedRoute.map(s => ({ label: s.step, machine: null, plannedMachine: null })),
+        cam: selectedRoute.map(s => ({
+          label: s.step,
+          machine: null,
+          plannedMachine: (s.processId === 'ebatlama' && ebatlamaMachine) ? ebatlamaMachine : null,
+          workshop: (s.processId === 'ebatlama' && ebatlamaWorkshop) ? ebatlamaWorkshop : null,
+        })),
       }],
     };
     // Sipariş kalemine teknik resmi geri yaz
@@ -16758,6 +17083,217 @@ ${vadeLine}`;
     document.getElementById('gotoAccountingFromSuppliers')?.addEventListener('click', () => showPage('accounting'));
   })();
 
+  // ---------- Finans / Nakit Akışı ----------
+  let finansStore = null;
+  let finansSelectedAssetId = '';
+
+  function ensureFinansStore() {
+    if (!finansStore && window.BtdFinans) finansStore = BtdFinans.createStore();
+    return finansStore;
+  }
+
+  function finansEsc(s) {
+    return typeof escapeHtml === 'function' ? escapeHtml(s) : String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function finansAssetName(id) {
+    const a = (finansStore?.assets || []).find((x) => x.id === id);
+    return a ? a.ad : '—';
+  }
+
+  function finansCatName(id) {
+    const c = (finansStore?.categories || []).find((x) => x.id === id);
+    return c ? c.ad : '—';
+  }
+
+  function finansRiskBadge(risk) {
+    if (risk === 'gecikmis') return '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700">Gecikmiş</span>';
+    if (risk === 'kritik') return '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Kritik (7g)</span>';
+    if (risk === 'yakin') return '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800">Yakın (30g)</span>';
+    return '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-steel-100 text-steel-600">İleri</span>';
+  }
+
+  function renderFinansAssetFilter() {
+    const wrap = document.getElementById('finansAssetFilter');
+    if (!wrap || !finansStore) return;
+    const assets = (finansStore.assets || []).slice().sort((a, b) => (a.sira || 0) - (b.sira || 0));
+    const btn = (id, label, on) =>
+      `<button type="button" data-finans-asset="${finansEsc(id)}" class="px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${on ? 'bg-navy text-white border-navy shadow-sm' : 'bg-white text-steel-600 border-steel-200 hover:bg-steel-50'}">${finansEsc(label)}</button>`;
+    wrap.innerHTML = btn('', 'Tümü', !finansSelectedAssetId) +
+      assets.map((a) => btn(a.id, a.ad, finansSelectedAssetId === a.id)).join('');
+    wrap.querySelectorAll('[data-finans-asset]').forEach((el) => {
+      el.addEventListener('click', () => {
+        finansSelectedAssetId = el.dataset.finansAsset || '';
+        renderFinancePage();
+      });
+    });
+  }
+
+  function renderFinansKpis() {
+    if (!finansStore || !window.BtdFinans) return;
+    const kpi = BtdFinans.kpiForAsset(finansStore, finansSelectedAssetId || null);
+    const set = (id, txt, cls) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = txt;
+      if (cls) el.className = `mt-1 text-xl font-bold mono ${cls}`;
+    };
+    set('finansKpiGelir', BtdFinans.money(kpi.gelir), 'text-emerald-700');
+    set('finansKpiGider', BtdFinans.money(kpi.gider), 'text-red-600');
+    set('finansKpiNet', BtdFinans.money(kpi.net), kpi.net >= 0 ? 'text-navy' : 'text-red-600');
+    set('finansKpiVade', String(kpi.upcomingCount), 'text-amber-700');
+  }
+
+  function renderFinansDueTable() {
+    const tbody = document.getElementById('finansDueBody');
+    const badge = document.getElementById('finansDueCount');
+    if (!tbody || !finansStore || !window.BtdFinans) return;
+    const list = BtdFinans.upcomingDue(finansStore, finansSelectedAssetId || null, 45);
+    if (badge) badge.textContent = `${list.length} vade`;
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="px-5 py-10 text-center text-sm text-steel-400">Yaklaşan vade yok.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map((m) => {
+      const markLabel = m.islem_tipi === 'GELIR' ? 'Tahsil Edildi' : 'Odendi';
+      return `<tr class="hover:bg-steel-50/60">
+        <td class="px-5 py-3 text-xs mono font-semibold">${finansEsc(m.vade_tarihi || '—')}</td>
+        <td class="px-4 py-3 text-xs font-semibold text-steel-800">${finansEsc(finansAssetName(m.varlik_id))}</td>
+        <td class="px-4 py-3 text-xs">${m.islem_tipi === 'GELIR' ? '<span class="text-emerald-700 font-bold">Gelir</span>' : '<span class="text-red-600 font-bold">Gider</span>'}</td>
+        <td class="px-4 py-3 text-xs text-steel-500">${finansEsc(m.odeme_yontemi || '—')}</td>
+        <td class="px-4 py-3 text-xs text-steel-600 max-w-[12rem] truncate">${finansEsc(m.aciklama || finansCatName(m.kategori_id))}</td>
+        <td class="px-4 py-3 text-right mono text-xs font-semibold">${BtdFinans.money(m.tutar, m.para_birimi)}</td>
+        <td class="px-4 py-3">${finansRiskBadge(m.risk)}</td>
+        <td class="px-4 py-3 text-right">
+          <button type="button" data-finans-mark="${finansEsc(m.id)}" data-finans-status="${markLabel}" class="text-xs font-semibold text-navy hover:underline">${markLabel === 'Odendi' ? 'Ödendi' : 'Tahsil'}</button>
+        </td>
+      </tr>`;
+    }).join('');
+    tbody.querySelectorAll('[data-finans-mark]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const r = await BtdFinans.markStatus(finansStore, btn.dataset.finansMark, btn.dataset.finansStatus);
+        if (r.ok) {
+          showToast('Durum güncellendi.', 'success');
+          renderFinancePage();
+        } else showToast(r.reason || 'Güncellenemedi', 'error');
+      });
+    });
+  }
+
+  function renderFinansMovesTable() {
+    const tbody = document.getElementById('finansMovesBody');
+    if (!tbody || !finansStore || !window.BtdFinans) return;
+    const list = BtdFinans.filterMoves(finansStore, finansSelectedAssetId || null)
+      .slice()
+      .sort((a, b) => String(b.islem_tarihi || '').localeCompare(String(a.islem_tarihi || '')))
+      .slice(0, 80);
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-10 text-center text-sm text-steel-400">Hareket yok. Hızlı İşlem ile ekleyin.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map((m) => `
+      <tr class="hover:bg-steel-50/50">
+        <td class="px-5 py-2.5 text-xs">${finansEsc(m.islem_tarihi || '—')}</td>
+        <td class="px-4 py-2.5 text-xs font-semibold">${finansEsc(finansAssetName(m.varlik_id))}</td>
+        <td class="px-4 py-2.5 text-xs ${m.islem_tipi === 'GELIR' ? 'text-emerald-700' : 'text-red-600'} font-bold">${m.islem_tipi === 'GELIR' ? 'Gelir' : 'Gider'}</td>
+        <td class="px-4 py-2.5 text-xs text-steel-500">${finansEsc(finansCatName(m.kategori_id))}</td>
+        <td class="px-4 py-2.5 text-xs text-steel-500">${finansEsc(m.durum || '—')}</td>
+        <td class="px-4 py-2.5 text-right mono text-xs font-semibold">${BtdFinans.money(m.tutar, m.para_birimi)}</td>
+      </tr>`).join('');
+  }
+
+  function fillFinansMoveFormCats() {
+    const tip = document.getElementById('finansMoveTip')?.value || 'GELIR';
+    const assetId = document.getElementById('finansMoveAsset')?.value || '';
+    const sel = document.getElementById('finansMoveCat');
+    if (!sel || !finansStore) return;
+    const cats = BtdFinans.categoriesFor(finansStore, tip, assetId);
+    sel.innerHTML = cats.length
+      ? cats.map((c) => `<option value="${finansEsc(c.id)}">${finansEsc(c.ad)}</option>`).join('')
+      : '<option value="">Kategori yok</option>';
+  }
+
+  function openFinansMoveModal() {
+    ensureFinansStore();
+    const assetSel = document.getElementById('finansMoveAsset');
+    if (assetSel) {
+      const assets = (finansStore.assets || []).slice().sort((a, b) => (a.sira || 0) - (b.sira || 0));
+      assetSel.innerHTML = assets.map((a) =>
+        `<option value="${finansEsc(a.id)}" ${finansSelectedAssetId === a.id ? 'selected' : ''}>${finansEsc(a.ad)}</option>`
+      ).join('');
+    }
+    document.getElementById('finansMoveTip').value = 'GIDER';
+    document.getElementById('finansMoveDate').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('finansMoveDue').value = '';
+    document.getElementById('finansMoveAmount').value = '';
+    document.getElementById('finansMoveDesc').value = '';
+    document.getElementById('finansMoveStatus').value = 'Bekliyor';
+    document.getElementById('finansMovePay').value = 'Havale/EFT';
+    document.getElementById('finansMoveCur').value = 'TRY';
+    document.getElementById('finansMoveRecurring').checked = false;
+    document.getElementById('finansMovePeriodWrap')?.classList.add('hidden');
+    fillFinansMoveFormCats();
+    document.getElementById('finansMoveOverlay')?.classList.remove('hidden');
+  }
+
+  function closeFinansMoveModal() {
+    document.getElementById('finansMoveOverlay')?.classList.add('hidden');
+  }
+
+  async function saveFinansMove() {
+    ensureFinansStore();
+    const payload = {
+      varlik_id: document.getElementById('finansMoveAsset')?.value,
+      islem_tipi: document.getElementById('finansMoveTip')?.value,
+      kategori_id: document.getElementById('finansMoveCat')?.value || null,
+      tutar: document.getElementById('finansMoveAmount')?.value,
+      para_birimi: document.getElementById('finansMoveCur')?.value || 'TRY',
+      islem_tarihi: document.getElementById('finansMoveDate')?.value,
+      vade_tarihi: document.getElementById('finansMoveDue')?.value || null,
+      odeme_yontemi: document.getElementById('finansMovePay')?.value,
+      durum: document.getElementById('finansMoveStatus')?.value,
+      tekrar_eden: !!document.getElementById('finansMoveRecurring')?.checked,
+      tekrar_periyodu: document.getElementById('finansMoveRecurring')?.checked
+        ? (document.getElementById('finansMovePeriod')?.value || 'Aylik')
+        : null,
+      aciklama: document.getElementById('finansMoveDesc')?.value || '',
+    };
+    const r = await BtdFinans.addMove(finansStore, payload);
+    if (!r.ok) {
+      showToast(r.reason === 'tutar-zorunlu' ? 'Tutar girin.' : (r.reason || 'Kayıt hatası'), 'error');
+      return;
+    }
+    closeFinansMoveModal();
+    showToast(r.cloud ? 'İşlem kaydedildi (bulut).' : 'İşlem kaydedildi (yerel).', r.cloud ? 'success' : 'info');
+    renderFinancePage();
+  }
+
+  async function renderFinancePage() {
+    if (!window.BtdFinans) {
+      showToast('Finans modülü yüklenemedi.', 'error');
+      return;
+    }
+    ensureFinansStore();
+    await BtdFinans.hydrateFromCloud(finansStore);
+    renderFinansAssetFilter();
+    renderFinansKpis();
+    renderFinansDueTable();
+    renderFinansMovesTable();
+  }
+
+  (function wireFinansUi() {
+    document.getElementById('finansNewMoveBtn')?.addEventListener('click', openFinansMoveModal);
+    document.getElementById('finansMoveCloseBtn')?.addEventListener('click', closeFinansMoveModal);
+    document.getElementById('finansMoveCancelBtn')?.addEventListener('click', closeFinansMoveModal);
+    document.getElementById('finansMoveSaveBtn')?.addEventListener('click', () => { saveFinansMove(); });
+    document.getElementById('finansMoveTip')?.addEventListener('change', fillFinansMoveFormCats);
+    document.getElementById('finansMoveAsset')?.addEventListener('change', fillFinansMoveFormCats);
+    document.getElementById('finansMoveRecurring')?.addEventListener('change', (e) => {
+      document.getElementById('finansMovePeriodWrap')?.classList.toggle('hidden', !e.target.checked);
+    });
+  })();
+
   function applyInvoiceLedgerSync(inv, opts) {
     if (!inv || !window.BtdAccounting || typeof BtdAccounting.syncInvoiceToLedger !== 'function') {
       return { ok: false, reason: 'no-acct' };
@@ -17440,7 +17976,7 @@ Teşekkürler.`;
   }
 
   // ---------- Kullanıcı ve Yetki Yönetimi (RBAC) ----------
-  const permModules = ['Maliyet', 'Teklifler', 'Siparişler', 'İş Emirleri', 'Tedarik', 'İmalat', 'Fason Takip', 'Kalite Kontrol', 'Sevkiyat', 'Faturalandırma', 'Muhasebe', 'Müşteriler', 'Tedarikçiler', 'Stok'];
+  const permModules = ['Maliyet', 'Teklifler', 'Siparişler', 'İş Emirleri', 'Tedarik', 'İmalat', 'Fason Takip', 'Kalite Kontrol', 'Sevkiyat', 'Faturalandırma', 'Muhasebe', 'Finans', 'Müşteriler', 'Tedarikçiler', 'Stok'];
   const permColumns = ['view', 'edit', 'delete', 'export'];
 
   function defaultPerms() {
