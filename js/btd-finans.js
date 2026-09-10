@@ -12,7 +12,7 @@
     { kod: 'bluemac', ad: 'Bluemac', tip: 'sirket', sira: 20 },
     { kod: 'devorias', ad: 'Devorias', tip: 'sirket', sira: 30 },
     { kod: 'btd_core', ad: 'BTD Core', tip: 'grup', sira: 40 },
-    { kod: 'kisisel_volkan', ad: 'Kisisel (Volkan)', tip: 'kisisel', sira: 50 },
+    { kod: 'kisisel_volkan', ad: 'Volkan Gülsoy', tip: 'kisisel', sira: 50 },
   ];
 
   const DEFAULT_CATEGORIES = [
@@ -67,6 +67,26 @@
         sira: a.sira,
         aktif: true,
       }));
+    } else {
+      // İsim / kod senkronu (yerel cache güncellemesi)
+      state.assets.forEach((a) => {
+        if (a.kod === 'kisisel_volkan') {
+          a.ad = 'Volkan Gülsoy';
+          a.tip = 'kisisel';
+        }
+      });
+      DEFAULT_ASSETS.forEach((def) => {
+        if (!state.assets.some((a) => a.kod === def.kod)) {
+          state.assets.push({
+            id: uid('FA'),
+            kod: def.kod,
+            ad: def.ad,
+            tip: def.tip,
+            sira: def.sira,
+            aktif: true,
+          });
+        }
+      });
     }
     if (!state.categories.length) {
       state.categories = DEFAULT_CATEGORIES.map((c) => ({

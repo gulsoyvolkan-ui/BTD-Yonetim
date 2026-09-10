@@ -20,7 +20,7 @@
 <script src="js/btd-cloud.js?v=datafix1"></script>
 <script src="js/btd-parasut.js?v=datafix1"></script>
 <script src="js/btd-accounting.js?v=acct3"></script>
-<script src="js/btd-finans.js?v=fin1"></script>
+<script src="js/btd-finans.js?v=fin2"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -185,6 +185,15 @@
   #companyMenu .company-option.co-technomac:hover { background: #092e6b; }
   #companyMenu .company-option.co-devorias { background: #d97706; }
   #companyMenu .company-option.co-devorias:hover { background: #b45309; }
+  #companyMenu .company-option.co-personal { background: #334155; }
+  #companyMenu .company-option.co-personal:hover { background: #1e293b; }
+  #companyMenu .company-option .co-initials {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+  }
+  body.personal-finance-mode #sidebar .sidebar-section-label { opacity: 0.45; }
 
   /* Mobil: sidebar drawer (md altı = saha cihazı) */
   @media (max-width: 767px) {
@@ -465,8 +474,8 @@
         </button>
         <div id="companyMenu" class="hidden absolute top-[calc(100%+8px)] left-1/2 -translate-x-1/2 w-[19rem] bg-white rounded-2xl shadow-2xl border border-steel-200 overflow-hidden z-50">
           <div class="px-3 py-2 flex items-center justify-between border-b border-steel-100 bg-steel-50">
-            <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Şirket Seçimi</span>
-            <span class="text-[10px] font-bold text-navy bg-navy/10 px-1.5 py-0.5 rounded-full">3 Firma</span>
+            <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Bağlam Seçimi</span>
+            <span id="companyMenuCountBadge" class="text-[10px] font-bold text-navy bg-navy/10 px-1.5 py-0.5 rounded-full">3 Firma</span>
           </div>
           <button data-company="Bluemac" class="company-option co-bluemac w-full transition-colors">
             <span class="co-logo-box bg-white">
@@ -487,6 +496,16 @@
               <img src="assets/logos/devorias.png" alt="Devorias" />
             </span>
             <span class="co-legal">Devorias Tasarım ve İnovasyon Sanayi Ticaret Limited Şirketi</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          </button>
+          <div class="px-3 py-1.5 border-t border-steel-100 bg-steel-50">
+            <span class="text-[10px] font-semibold text-steel-400 uppercase tracking-wide">Kişisel · yalnızca finans</span>
+          </div>
+          <button data-company="Volkan Gülsoy" class="company-option co-personal w-full transition-colors">
+            <span class="co-logo-box bg-white">
+              <span class="co-initials">VG</span>
+            </span>
+            <span class="co-legal">Volkan Gülsoy · Kişisel finans takibi</span>
             <svg xmlns="http://www.w3.org/2000/svg" class="check-icon hidden shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
           </button>
         </div>
@@ -2023,7 +2042,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Finans <span class="text-steel-400 font-medium">/ Nakit Akışı</span></h1>
-            <p class="text-sm text-steel-400 mt-1">Şirket + grup + kişisel kasa · gelir/gider · vade takibi</p>
+            <p id="finansPageSub" class="text-sm text-steel-400 mt-1">Aktif firmaya göre kasa · gelir/gider · vade takibi</p>
           </div>
           <button type="button" id="finansNewMoveBtn" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold shadow-md shadow-navy/25">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -6294,7 +6313,7 @@ ${vadeLine}`;
     }
     // Hâlâ dbId yoksa firma adıyla tek tek çözümle
     if (window.BtdCloud?.resolveFirmaId) {
-      for (const name of Object.keys(companies || {})) {
+      for (const name of companyNamesList()) {
         if (companies[name]?.dbId) continue;
         try { await window.BtdCloud.resolveFirmaId(companies, name); } catch (_) { /* ignore */ }
       }
@@ -6782,7 +6801,7 @@ ${vadeLine}`;
       if (typeof companies !== 'undefined' && companies) {
         Object.keys(companies).forEach((name) => {
           const c = companies[name];
-          if (!c) return;
+          if (!c || c.isPersonal) return;
           payload.companies[name] = {
             legal: c.legal,
             address: c.address,
@@ -8669,7 +8688,34 @@ ${vadeLine}`;
         { id: 'dv-eur', currency: '€', label: 'Euro Hesabı', bankName: 'Yapı Kredi', bankBranch: 'Ataşehir (857)', iban: 'TR55 0006 7010 0000 0857 7415 31' },
       ],
     },
+    'Volkan Gülsoy': {
+      isPersonal: true,
+      logo: '',
+      legal: 'Volkan Gülsoy · Kişisel Finans',
+      badgeBg: 'bg-slate-700',
+      logoBoxBg: 'bg-white',
+      address: '',
+      taxOffice: '',
+      taxNo: '',
+      phone: '',
+      website: '',
+      email: '',
+      signatory: 'Volkan Gülsoy',
+      finansKod: 'kisisel_volkan',
+    },
   };
+  const FINANS_COMPANY_KOD = {
+    Technomac: 'technomac',
+    Bluemac: 'bluemac',
+    Devorias: 'devorias',
+  };
+  const PERSONAL_CONTEXT_KEY = 'Volkan Gülsoy';
+  const PERSONAL_FINANS_KOD = 'kisisel_volkan';
+
+  function isPersonalContext(name) {
+    const key = name || activeCompany;
+    return !!(companies[key] && companies[key].isPersonal);
+  }
   let allBadgeBgClasses = Object.values(companies).map(c => c.badgeBg);
   let allLogoBoxBgClasses = [...new Set(Object.values(companies).map(c => c.logoBoxBg))];
 
@@ -8741,6 +8787,8 @@ ${vadeLine}`;
   function setActiveCompany(name) {
     const info = companies[name];
     if (!info) return;
+    const wasPersonal = isPersonalContext(activeCompany);
+    const enteringPersonal = !!info.isPersonal;
     activeCompany = name;
 
     const setTxt = (id, text) => {
@@ -8785,33 +8833,54 @@ ${vadeLine}`;
 
     const badgeImg = document.getElementById('companyBadgeImg');
     if (badgeImg) {
-      if (info.logo) badgeImg.src = info.logo;
+      if (info.logo) {
+        badgeImg.src = info.logo;
+        badgeImg.classList.remove('hidden');
+      } else {
+        badgeImg.removeAttribute('src');
+        badgeImg.classList.add('hidden');
+      }
       badgeImg.alt = name;
     }
     setTxt('companyBadgeLegal', info.legal || name);
 
+    try { applyPersonalModeChrome(); } catch (_) { /* ignore */ }
+
     const safeRender = (fn) => {
       try { if (typeof fn === 'function') fn(); } catch (e) { console.warn('[BTD] render', e); }
     };
-    safeRender(renderWorkOrderTable);
-    safeRender(renderMachinePark);
-    safeRender(renderCustomersPage);
-    safeRender(renderSuppliersPage);
-    safeRender(renderCostingPage);
-    safeRender(renderQuotesPage);
-    safeRender(renderOrdersPage);
-    safeRender(renderProcurementPage);
-    safeRender(renderHrPage);
-    safeRender(renderStockPage);
-    safeRender(renderManufacturingPage);
-    safeRender(renderQualityPage);
-    safeRender(renderShippingPage);
-    safeRender(renderInvoicingPage);
-    safeRender(renderAccountingPage);
-    if (document.getElementById('page-settings') && !document.getElementById('page-settings').classList.contains('hidden')) {
-      safeRender(renderSettingsPage);
+    if (!enteringPersonal) {
+      safeRender(renderWorkOrderTable);
+      safeRender(renderMachinePark);
+      safeRender(renderCustomersPage);
+      safeRender(renderSuppliersPage);
+      safeRender(renderCostingPage);
+      safeRender(renderQuotesPage);
+      safeRender(renderOrdersPage);
+      safeRender(renderProcurementPage);
+      safeRender(renderHrPage);
+      safeRender(renderStockPage);
+      safeRender(renderManufacturingPage);
+      safeRender(renderQualityPage);
+      safeRender(renderShippingPage);
+      safeRender(renderInvoicingPage);
+      safeRender(renderAccountingPage);
+      if (document.getElementById('page-settings') && !document.getElementById('page-settings').classList.contains('hidden')) {
+        safeRender(renderSettingsPage);
+      }
+      safeRender(renderDashboard);
     }
-    safeRender(renderDashboard);
+    if (typeof renderFinancePage === 'function' && (enteringPersonal || document.getElementById('page-finance') && !document.getElementById('page-finance').classList.contains('hidden'))) {
+      safeRender(renderFinancePage);
+    }
+
+    if (enteringPersonal) {
+      if (typeof showPage === 'function') showPage('finance', { replace: true });
+      if (typeof showToast === 'function') showToast('Kişisel moda geçildi — yalnızca finans.', 'info');
+    } else if (wasPersonal && typeof showPage === 'function') {
+      if (typeof showToast === 'function') showToast(`${name} firma bağlamına dönüldü.`, 'info');
+      showPage('dashboard', { replace: true });
+    }
   }
 
   const companyBtn = document.getElementById('companyBtn');
@@ -8959,7 +9028,9 @@ ${vadeLine}`;
     } else {
       targetCompany = auth.company || auth.scope || company || 'Bluemac';
     }
-    if (!companies[targetCompany]) targetCompany = Object.keys(companies)[0] || 'Bluemac';
+    if (!companies[targetCompany] || companies[targetCompany].isPersonal) {
+      targetCompany = companyNamesList()[0] || 'Bluemac';
+    }
     try {
       if (typeof setActiveCompany === 'function') setActiveCompany(targetCompany);
     } catch (e) {
@@ -9114,24 +9185,24 @@ ${vadeLine}`;
     if (!user || user.role !== 'Yönetici') return false;
     if (user.isGod || user.scope === 'Tüm Grup') return true;
     const cos = normalizeUserCompanies(user);
-    return cos.length >= Object.keys(companies).length;
+    return cos.length >= companyNamesList().length;
   }
   function companyNamesList() {
-    return Object.keys(companies);
+    return Object.keys(companies).filter((k) => !companies[k]?.isPersonal);
   }
   function normalizeUserCompanies(user) {
     if (!user) return [];
     if (user.isGod || user.scope === 'Tüm Grup') return companyNamesList();
     if (Array.isArray(user.companies) && user.companies.length) {
-      return user.companies.filter(c => companies[c]);
+      return user.companies.filter(c => companies[c] && !companies[c].isPersonal);
     }
-    if (user.scope && companies[user.scope]) return [user.scope];
-    if (user.company && companies[user.company]) return [user.company];
+    if (user.scope && companies[user.scope] && !companies[user.scope].isPersonal) return [user.scope];
+    if (user.company && companies[user.company] && !companies[user.company].isPersonal) return [user.company];
     return [];
   }
   function deriveUserScope(companiesArr, allGroup) {
     if (allGroup) return 'Tüm Grup';
-    const list = (companiesArr || []).filter(c => companies[c]);
+    const list = (companiesArr || []).filter(c => companies[c] && !companies[c].isPersonal);
     if (list.length >= companyNamesList().length) return 'Tüm Grup';
     if (list.length === 1) return list[0];
     if (list.length > 1) return list.join(', ');
@@ -9199,14 +9270,45 @@ ${vadeLine}`;
     };
   }
 
-  function userCanAccessCompany(user, companyName) {
+  function userCanAccessPersonalFinance(user) {
     if (!user) return false;
+    if (isBlueCollar(user)) return false;
+    return userCanAccessPage(user, 'finance');
+  }
+  function userCanAccessCompany(user, companyName) {
+    if (!user || !companyName) return false;
+    if (companies[companyName]?.isPersonal) return userCanAccessPersonalFinance(user);
     if (user.isGod || user.scope === 'Tüm Grup') return true;
     return normalizeUserCompanies(user).includes(companyName);
+  }
+  function applyPersonalModeChrome() {
+    const personal = isPersonalContext();
+    document.body.classList.toggle('personal-finance-mode', personal);
+    const firmHint = document.querySelector('#companyBtn .text-xs');
+    if (firmHint) firmHint.textContent = personal ? 'Kişisel:' : 'Aktif Firma:';
+    const countBadge = document.getElementById('companyMenuCountBadge');
+    if (countBadge) {
+      countBadge.textContent = userCanAccessPersonalFinance(currentUser)
+        ? `${companyNamesList().length} Firma + Kişisel`
+        : `${companyNamesList().length} Firma`;
+    }
+    if (typeof navLinks !== 'undefined' && navLinks) {
+      navLinks.forEach((link) => {
+        const page = link.dataset.page;
+        if (personal) {
+          link.classList.toggle('hidden', page !== 'finance');
+        } else if (currentUser) {
+          link.classList.toggle('hidden', !userCanAccessPage(currentUser, page));
+        } else {
+          link.classList.remove('hidden');
+        }
+      });
+    }
   }
   function applyCompanyAccessUI() {
     const isGod = !!(currentUser && currentUser.isGod);
     const allowedList = currentUser ? normalizeUserCompanies(currentUser) : companyNamesList();
+    const canPersonal = !!(currentUser && userCanAccessPersonalFinance(currentUser));
     document.querySelectorAll('.company-option').forEach(btn => {
       const allowed = !currentUser || userCanAccessCompany(currentUser, btn.dataset.company);
       btn.classList.toggle('hidden', !allowed);
@@ -9214,11 +9316,12 @@ ${vadeLine}`;
     });
     const cBtn = document.getElementById('companyBtn');
     if (cBtn) {
-      const multi = isGod || allowedList.length > 1;
+      const multi = isGod || allowedList.length > 1 || canPersonal;
       cBtn.classList.toggle('opacity-60', !multi);
-      cBtn.title = multi ? 'Yetkili firmalar arasında geçiş' : 'Yalnızca kendi firmanız';
+      cBtn.title = multi ? 'Firma / kişisel bağlam geçişi' : 'Yalnızca kendi firmanız';
       cBtn.dataset.locked = multi ? '0' : '1';
     }
+    try { applyPersonalModeChrome(); } catch (_) { /* ignore */ }
   }
   function applyCurrentUser() {
     if (!currentUser) return;
@@ -10480,6 +10583,12 @@ ${vadeLine}`;
 
   function showPage(page, opts = {}) {
     if (page === 'settings' && !currentUser) return;
+    if (typeof isPersonalContext === 'function' && isPersonalContext() && page !== 'finance') {
+      if (!(opts && opts.replace && page === 'finance')) {
+        showToast('Kişisel modda yalnızca Finans açıktır. Firma seçerek diğer modüllere dönün.', 'info');
+      }
+      page = 'finance';
+    }
     if (currentUser && !userCanAccessPage(currentUser, page)) {
       showToast('Bu bölüme erişim yetkiniz yok.', 'error');
       return;
@@ -10863,7 +10972,7 @@ ${vadeLine}`;
     document.getElementById('mpWsName').value = ws?.workshop || '';
     const box = document.getElementById('mpWsCompanies');
     const selected = new Set(ws?.companies?.length ? ws.companies : [activeCompany]);
-    box.innerHTML = Object.keys(companies).map(c => `
+    box.innerHTML = companyNamesList().map(c => `
       <label class="inline-flex items-center gap-2 text-sm font-medium text-steel-700 bg-steel-50 border border-steel-200 rounded-xl px-3 py-2 cursor-pointer hover:border-navy/30">
         <input type="checkbox" data-mp-company="${escapeHtml(c)}" ${selected.has(c) ? 'checked' : ''} class="rounded border-steel-300 text-navy focus:ring-navy" />
         ${escapeHtml(c)}
@@ -17097,6 +17206,33 @@ ${vadeLine}`;
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  function finansContextKod() {
+    if (typeof isPersonalContext === 'function' && isPersonalContext()) {
+      return (companies[activeCompany]?.finansKod) || PERSONAL_FINANS_KOD;
+    }
+    return FINANS_COMPANY_KOD[activeCompany] || null;
+  }
+
+  function finansScopedAssets() {
+    ensureFinansStore();
+    const kod = finansContextKod();
+    const list = (finansStore?.assets || []).filter((a) => a && a.aktif !== false);
+    if (!kod) return list.filter((a) => a.tip === 'sirket');
+    return list.filter((a) => a.kod === kod || (kod === PERSONAL_FINANS_KOD && a.tip === 'kisisel'));
+  }
+
+  function syncFinansSelectionToContext() {
+    const assets = finansScopedAssets();
+    if (!assets.length) {
+      finansSelectedAssetId = '';
+      return assets;
+    }
+    if (!assets.some((a) => a.id === finansSelectedAssetId)) {
+      finansSelectedAssetId = assets[0].id;
+    }
+    return assets;
+  }
+
   function finansAssetName(id) {
     const a = (finansStore?.assets || []).find((x) => x.id === id);
     return a ? a.ad : '—';
@@ -17117,21 +17253,23 @@ ${vadeLine}`;
   function renderFinansAssetFilter() {
     const wrap = document.getElementById('finansAssetFilter');
     if (!wrap || !finansStore) return;
-    const assets = (finansStore.assets || []).slice().sort((a, b) => (a.sira || 0) - (b.sira || 0));
-    const btn = (id, label, on) =>
-      `<button type="button" data-finans-asset="${finansEsc(id)}" class="px-3 py-2 rounded-xl text-sm font-semibold border transition-colors ${on ? 'bg-navy text-white border-navy shadow-sm' : 'bg-white text-steel-600 border-steel-200 hover:bg-steel-50'}">${finansEsc(label)}</button>`;
-    wrap.innerHTML = btn('', 'Tümü', !finansSelectedAssetId) +
-      assets.map((a) => btn(a.id, a.ad, finansSelectedAssetId === a.id)).join('');
-    wrap.querySelectorAll('[data-finans-asset]').forEach((el) => {
-      el.addEventListener('click', () => {
-        finansSelectedAssetId = el.dataset.finansAsset || '';
-        renderFinancePage();
-      });
-    });
+    const assets = syncFinansSelectionToContext();
+    const personal = typeof isPersonalContext === 'function' && isPersonalContext();
+    const scopeLabel = personal
+      ? 'Kişisel kasa · Volkan Gülsoy'
+      : `${activeCompany} şirket kasası`;
+    wrap.innerHTML = `
+      <div class="w-full flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border bg-navy text-white border-navy shadow-sm">
+          ${finansEsc(assets[0]?.ad || scopeLabel)}
+        </span>
+        <span class="text-[11px] text-steel-400">${finansEsc(scopeLabel)} · diğer firmalar / kişisel üst menüden ayrılır</span>
+      </div>`;
   }
 
   function renderFinansKpis() {
     if (!finansStore || !window.BtdFinans) return;
+    syncFinansSelectionToContext();
     const kpi = BtdFinans.kpiForAsset(finansStore, finansSelectedAssetId || null);
     const set = (id, txt, cls) => {
       const el = document.getElementById(id);
@@ -17149,6 +17287,7 @@ ${vadeLine}`;
     const tbody = document.getElementById('finansDueBody');
     const badge = document.getElementById('finansDueCount');
     if (!tbody || !finansStore || !window.BtdFinans) return;
+    syncFinansSelectionToContext();
     const list = BtdFinans.upcomingDue(finansStore, finansSelectedAssetId || null, 45);
     if (badge) badge.textContent = `${list.length} vade`;
     if (!list.length) {
@@ -17184,6 +17323,7 @@ ${vadeLine}`;
   function renderFinansMovesTable() {
     const tbody = document.getElementById('finansMovesBody');
     if (!tbody || !finansStore || !window.BtdFinans) return;
+    syncFinansSelectionToContext();
     const list = BtdFinans.filterMoves(finansStore, finansSelectedAssetId || null)
       .slice()
       .sort((a, b) => String(b.islem_tarihi || '').localeCompare(String(a.islem_tarihi || '')))
@@ -17216,12 +17356,13 @@ ${vadeLine}`;
 
   function openFinansMoveModal() {
     ensureFinansStore();
+    const assets = syncFinansSelectionToContext();
     const assetSel = document.getElementById('finansMoveAsset');
     if (assetSel) {
-      const assets = (finansStore.assets || []).slice().sort((a, b) => (a.sira || 0) - (b.sira || 0));
       assetSel.innerHTML = assets.map((a) =>
         `<option value="${finansEsc(a.id)}" ${finansSelectedAssetId === a.id ? 'selected' : ''}>${finansEsc(a.ad)}</option>`
-      ).join('');
+      ).join('') || '<option value="">Kasa yok</option>';
+      assetSel.disabled = assets.length <= 1;
     }
     document.getElementById('finansMoveTip').value = 'GIDER';
     document.getElementById('finansMoveDate').value = new Date().toISOString().slice(0, 10);
@@ -17243,8 +17384,9 @@ ${vadeLine}`;
 
   async function saveFinansMove() {
     ensureFinansStore();
+    syncFinansSelectionToContext();
     const payload = {
-      varlik_id: document.getElementById('finansMoveAsset')?.value,
+      varlik_id: document.getElementById('finansMoveAsset')?.value || finansSelectedAssetId,
       islem_tipi: document.getElementById('finansMoveTip')?.value,
       kategori_id: document.getElementById('finansMoveCat')?.value || null,
       tutar: document.getElementById('finansMoveAmount')?.value,
@@ -17259,6 +17401,11 @@ ${vadeLine}`;
         : null,
       aciklama: document.getElementById('finansMoveDesc')?.value || '',
     };
+    const scoped = finansScopedAssets().map((a) => a.id);
+    if (payload.varlik_id && scoped.length && !scoped.includes(payload.varlik_id)) {
+      showToast('Bu bağlamda yalnızca kendi kasasına işlem eklenebilir.', 'error');
+      return;
+    }
     const r = await BtdFinans.addMove(finansStore, payload);
     if (!r.ok) {
       showToast(r.reason === 'tutar-zorunlu' ? 'Tutar girin.' : (r.reason || 'Kayıt hatası'), 'error');
@@ -17276,6 +17423,13 @@ ${vadeLine}`;
     }
     ensureFinansStore();
     await BtdFinans.hydrateFromCloud(finansStore);
+    syncFinansSelectionToContext();
+    const sub = document.getElementById('finansPageSub');
+    if (sub) {
+      sub.textContent = (typeof isPersonalContext === 'function' && isPersonalContext())
+        ? 'Kişisel finans · Volkan Gülsoy · firma kasalarından ayrı'
+        : `${activeCompany} kasası · diğer firmalar üst menüden ayrılır`;
+    }
     renderFinansAssetFilter();
     renderFinansKpis();
     renderFinansDueTable();
