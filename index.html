@@ -15,6 +15,8 @@
 <script src="js/supabase-config.js"></script>
 <script src="js/btd-supabase.js"></script>
 <script src="js/btd-cloud.js"></script>
+<script src="js/btd-prices.js"></script>
+<script src="js/btd-quote.js"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -1278,7 +1280,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Ürünler <span class="text-steel-400 font-medium">/ Ürün Kartı</span></h1>
-            <p class="text-sm text-steel-400 mt-1">Firma kataloğu · demo kart Devorias · <span id="companyNameProducts" class="font-semibold text-navy">Devorias</span></p>
+            <p class="text-sm text-steel-400 mt-1">Firma kataloğu · <span id="companyNameProducts" class="font-semibold text-navy">Devorias</span></p>
           </div>
         </div>
         <form id="productForm" class="bg-white rounded-2xl border border-steel-200 shadow-sm p-4 sm:p-5 mb-5" autocomplete="off">
@@ -1587,6 +1589,8 @@
             Yeni Teklif Oluştur
           </button>
         </div>
+
+        <div id="priceQuoteMount" class="mb-5"></div>
 
         <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
           <div class="px-5 py-3.5 border-b border-steel-100 flex items-center justify-between">
@@ -5400,7 +5404,7 @@ ${vadeLine}`;
     });
   })();
 
-  // Ürün kartı: demo yalnız Devorias (stoktaki PLA adıyla aynı). Diğer firmalar boş başlar.
+  // Ürün kartı. PLA yerel demo. Lumi-Wall ve CNC yerel diziye eklenir; dolu urunler tablosu hydrate ile diziyi değiştirir, satır yazmaz.
   let products = [
     {
       id: 'UR-DV-0001',
@@ -5415,6 +5419,7 @@ ${vadeLine}`;
     },
   ];
   let productSeq = 2;
+  if (window.BtdPrices) window.BtdPrices.mergeDemoProducts(products);
   let editingProductId = null;
 
   // Fasoncu ana listesi: demo yalnız Technomac. Fason iş kaydı (fasonJobs) ayrı kalır.
@@ -10769,9 +10774,9 @@ ${vadeLine}`;
     const count = document.getElementById('productsCount');
     if (count) count.textContent = `${list.length} ürün`;
     if (!list.length) {
-      const hint = activeCompany === 'Devorias'
-        ? 'Kartı Kaydet ile ilk ürünü ekleyin.'
-        : 'Demo ürün kartı Devorias firmasındadır. Üstten Devorias’ı seçin veya bu firma için kart ekleyin.';
+      const hint = (activeCompany === 'Devorias' || activeCompany === 'Technomac')
+        ? 'Kartı Kaydet ile ürün ekleyin.'
+        : 'Demo seri Devorias (Lumi-Wall) ve Technomac (CNC) firmasındadır. Üstten firmayı seçin veya bu firma için kart ekleyin.';
       tbody.innerHTML = `<tr><td colspan="6" class="px-5 py-12 text-center"><p class="text-sm font-medium text-steel-400">Bu firma için ürün kartı yok.</p><p class="text-xs text-steel-300 mt-1">${hint}</p></td></tr>`;
       return;
     }
@@ -10983,6 +10988,12 @@ ${vadeLine}`;
   bindSubconPage();
 
   function renderQuotesPage() {
+    window.BtdPage = window.BtdPage || {
+      get company() { return activeCompany; },
+      get customers() { return customers; },
+      get companyCode() { return companyCode; },
+    };
+    if (window.BtdPriceQuote) window.BtdPriceQuote.render();
     const tbody = document.getElementById('quotesTableBody');
     if (!tbody) return;
     const list = quotes.filter(q => q.company === activeCompany).sort((a, b) => b.id.localeCompare(a.id));
@@ -11569,6 +11580,7 @@ ${vadeLine}`;
 
   function markQuoteChannelSent(quote, channel) {
     if (!quote) return;
+    if (String(quote.id || '').includes('ONIZ')) return;
     if (!quote.sentChannels) quote.sentChannels = { email: false, whatsapp: false };
     quote.sentChannels[channel] = true;
     quote.status = 'Gönderildi';
