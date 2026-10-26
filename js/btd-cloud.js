@@ -1019,17 +1019,30 @@
       .maybeSingle();
     return data?.id || null;
   }
+  async function lookupMusteriId(client, fid, unvan) {
+    if (!fid || !unvan) return null;
+    const { data } = await client
+      .from('musteriler')
+      .select('id')
+      .eq('firma_id', fid)
+      .eq('unvan', unvan)
+      .maybeSingle();
+    return data?.id || null;
+  }
   async function saveOrder(o, companies) {
     try {
       const client = sb();
       if (!client || !o) return fail('no-client', 'saveOrder');
       const fid = firmaId(companies, o.company);
       if (!fid) return fail('firma_id yok', 'saveOrder');
-      const teklifId = o.quoteDbId || (await lookupTeklifId(client, fid, o.quoteId || o.id));
+      const teklifId = o.quoteDbId || (o.quoteId ? await lookupTeklifId(client, fid, o.quoteId) : null);
+      const musteriId = o.customerDbId || await lookupMusteriId(client, fid, o.customer);
+      if (musteriId) o.customerDbId = musteriId;
       const row = {
         firma_id: fid,
         belge_no: o.id,
         teklif_id: teklifId,
+        musteri_id: musteriId,
         musteri_unvan: o.customer,
         ilgili_kisi: o.contact || null,
         po_no: o.poNumber || null,
@@ -1105,7 +1118,8 @@
       return {
         dbId: r.id,
         id,
-        quoteId: r.teklifler?.belge_no || id,
+        quoteId: r.teklifler?.belge_no || (r.teklif_id ? id : null),
+        customerDbId: r.musteri_id || null,
         company: companyNameById(ctx.companies, r.firma_id) || '',
         customer: r.musteri_unvan,
         contact: r.ilgili_kisi || '',

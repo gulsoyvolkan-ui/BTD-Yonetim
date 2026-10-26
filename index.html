@@ -643,6 +643,142 @@
         <p class="text-[11px] font-bold text-steel-400 uppercase tracking-wide mb-2">Üretim &amp; Teslim</p>
         <div id="dashboardRow2" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6"></div>
 
+        <section id="dashOrderEntry" class="bg-white rounded-2xl border border-steel-200 shadow-sm p-5 sm:p-6 mb-6">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+            <div>
+              <p class="text-sm font-bold text-steel-800">Teklifsiz Sipariş Girişi</p>
+              <p class="text-xs text-steel-400 mt-0.5">Teklif zorunlu değil. Kayıt seçili firmanın müşteri ve sipariş listesine yazılır · <span id="dashOrderCompany" class="font-semibold text-navy">Technomac</span></p>
+            </div>
+            <p class="text-[11px] font-semibold text-steel-500 bg-steel-50 border border-steel-200 rounded-full px-3 py-1 shrink-0">Sıradaki no: <span id="dashOrderNextNo" class="mono text-navy">—</span></p>
+          </div>
+          <form id="dashOrderForm" class="space-y-4" autocomplete="off">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <label class="block sm:col-span-2">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Müşteri</span>
+                <select id="dashOrderCustomer" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy bg-white">
+                  <option value="">Müşteri seçin</option>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">İlgili Kişi</span>
+                <input id="dashOrderContact" type="text" placeholder="Ad soyad" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+              </label>
+              <label class="block">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Müşteri PO No</span>
+                <input id="dashOrderPo" type="text" placeholder="PO-2026-…" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+              </label>
+              <label class="block">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Para Birimi</span>
+                <select id="dashOrderCurrency" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy bg-white">
+                  <option value="€">€ Euro</option>
+                  <option value="₺">₺ TL</option>
+                  <option value="$">$ Dolar</option>
+                  <option value="£">£ Sterlin</option>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Onay Tarihi</span>
+                <input id="dashOrderDate" type="date" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+              </label>
+              <label class="block">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Termin (iş günü)</span>
+                <input id="dashOrderLead" type="number" min="1" step="1" value="15" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+              </label>
+              <div class="block">
+                <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Teslim Tarihi</span>
+                <p id="dashOrderDelivery" class="mt-1 rounded-xl border border-steel-100 bg-steel-50 px-3 py-2.5 text-sm font-semibold text-steel-700">—</p>
+              </div>
+            </div>
+            <p id="dashOrderNoCustomer" class="hidden text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">Bu firmada kayıtlı müşteri yok. Önce <button type="button" data-dash-page="customers" class="font-semibold underline">Müşteriler</button> sayfasından ekleyin.</p>
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <p class="text-[11px] font-bold text-steel-400 uppercase tracking-wide">Sipariş Kalemleri</p>
+                <button type="button" id="dashOrderAddLine" class="text-[11px] font-semibold text-navy bg-navy/10 hover:bg-navy/15 px-2.5 py-1.5 rounded-lg">Kalem Ekle</button>
+              </div>
+              <div id="dashOrderLines" class="space-y-2"></div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <p class="text-[11px] text-steel-400">Kalemler sipariş satırı olarak kaydedilir. Teklif bağlantısı açılmaz.</p>
+              <button type="submit" class="flex items-center gap-2 bg-navy hover:bg-navy-light text-white rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors shadow-md shadow-navy/25">Siparişi Kaydet</button>
+            </div>
+          </form>
+        </section>
+
+        <div class="space-y-5 mb-6">
+          <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-steel-100 flex items-center justify-between gap-2">
+              <p class="text-sm font-semibold text-steel-700">Müşteriler</p>
+              <div class="flex items-center gap-2">
+                <span id="dashCustomersCount" class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">0 müşteri</span>
+                <button type="button" data-dash-page="customers" class="text-[11px] font-semibold text-navy hover:underline">Sayfaya git</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto max-h-80">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0">
+                  <tr class="bg-steel-50/95 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                    <th class="px-5 py-3">Firma Adı</th>
+                    <th class="px-4 py-3">Döviz / Vade</th>
+                    <th class="px-4 py-3">İletişim</th>
+                    <th class="px-4 py-3">Sipariş</th>
+                  </tr>
+                </thead>
+                <tbody id="dashCustomersBody" class="divide-y divide-steel-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-steel-100 flex items-center justify-between gap-2">
+              <p class="text-sm font-semibold text-steel-700">Siparişler</p>
+              <div class="flex items-center gap-2">
+                <span id="dashOrdersCount" class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">0 sipariş</span>
+                <button type="button" data-dash-page="orders" class="text-[11px] font-semibold text-navy hover:underline">Sayfaya git</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto max-h-80">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0">
+                  <tr class="bg-steel-50/95 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                    <th class="px-5 py-3">Sipariş No</th>
+                    <th class="px-4 py-3">Müşteri / PO</th>
+                    <th class="px-4 py-3">Termin</th>
+                    <th class="px-4 py-3">Tutar</th>
+                    <th class="px-4 py-3">Durum</th>
+                    <th class="px-4 py-3">Kaynak</th>
+                  </tr>
+                </thead>
+                <tbody id="dashOrdersBody" class="divide-y divide-steel-100"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl border border-steel-200 shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-steel-100 flex items-center justify-between gap-2">
+              <p class="text-sm font-semibold text-steel-700">Fason İşleri</p>
+              <div class="flex items-center gap-2">
+                <span id="dashFasonCount" class="text-[11px] bg-navy/10 text-navy font-semibold px-2 py-0.5 rounded-full">0 kayıt</span>
+                <button type="button" data-dash-page="fason" class="text-[11px] font-semibold text-navy hover:underline">Sayfaya git</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto max-h-80">
+              <table class="w-full text-sm">
+                <thead class="sticky top-0">
+                  <tr class="bg-steel-50/95 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
+                    <th class="px-5 py-3">Kayıt</th>
+                    <th class="px-4 py-3">Parça</th>
+                    <th class="px-4 py-3">Proses</th>
+                    <th class="px-4 py-3">Fasoncu</th>
+                    <th class="px-4 py-3">Çıkış → Dönüş</th>
+                    <th class="px-4 py-3">Durum</th>
+                  </tr>
+                </thead>
+                <tbody id="dashFasonBody" class="divide-y divide-steel-100"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div class="lg:col-span-2 bg-white rounded-2xl border border-steel-200 shadow-sm p-5 sm:p-6">
             <p class="text-sm font-bold text-steel-800 mb-4">Son Hareketler</p>
@@ -1344,7 +1480,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">Siparişler <span class="text-steel-400 font-medium">/ Onaylanan Teklifler</span></h1>
-            <p class="text-sm text-steel-400 mt-1">Teklif no ile birebir izlenebilir sipariş kayıtları · <span id="companyNameOrders" class="font-semibold text-navy">Technomac</span></p>
+            <p class="text-sm text-steel-400 mt-1">Tekliften dönüşen ve doğrudan girilen siparişler · <span id="companyNameOrders" class="font-semibold text-navy">Technomac</span></p>
           </div>
         </div>
 
@@ -4187,6 +4323,7 @@
 <script>
   // ---------- Data ----------
   let activeCompany = 'Technomac';
+  let dashOrderCompanySeen = null;
 
   // Müşteri (CRM) kayıtları — firma bazlı ayrıştırılır.
   // Her müşterinin birden fazla iletişim kişisi olabilir (departman bazlı: Satış/Sipariş, Muhasebe/Finans, vb.)
@@ -5482,6 +5619,68 @@ ${vadeLine}`;
     return order;
   }
 
+  /** Teklif zorunlu değil. Numara SP-{firma}-{sıra}-{yıl}; teklif no ile çakışmaz. */
+  function nextDirectOrderId(company, approvalDate) {
+    const year = String(approvalDate || '').slice(0, 4) || String(new Date().getFullYear());
+    const code = companyCode[company] || 'XX';
+    const re = new RegExp('^SP-' + code + '-(\\d+)-' + year + '$');
+    let max = 0;
+    orders.forEach(o => {
+      if (o.company !== company) return;
+      const m = String(o.id || '').match(re);
+      if (m) max = Math.max(max, parseInt(m[1], 10) || 0);
+    });
+    return `SP-${code}-${String(max + 1).padStart(4, '0')}-${year}`;
+  }
+
+  function createDirectOrder({ customer, contact, poNumber, currency, approvalDate, leadTimeDays, items }) {
+    const cust = customers.find(c => c.company === activeCompany && c.name === customer);
+    if (!cust) {
+      showToast('Müşteri bu firmada kayıtlı değil.', 'error');
+      return null;
+    }
+    const date = approvalDate || new Date().toISOString().slice(0, 10);
+    const days = Math.max(1, Number(leadTimeDays) || Number(cust.leadTimeDays) || 15);
+    const lines = (items || []).map(it => ({
+      partNo: String(it.partNo || '').trim(),
+      desc: String(it.desc || '').trim(),
+      qty: Number(it.qty) || 0,
+      unitPrice: Number(it.unitPrice) || 0,
+      discountPct: 0,
+    })).filter(it => it.partNo || it.desc);
+    if (!lines.length) {
+      showToast('En az bir kalem girin (parça no veya açıklama).', 'error');
+      return null;
+    }
+    if (lines.some(it => !(it.qty > 0))) {
+      showToast('Kalem adedi 0’dan büyük olmalı.', 'error');
+      return null;
+    }
+    const order = {
+      id: nextDirectOrderId(activeCompany, date),
+      quoteId: null,
+      customerDbId: cust.dbId || null,
+      company: activeCompany,
+      customer: cust.name,
+      contact: String(contact || '').trim() || ((cust.contacts || [])[0]?.name || ''),
+      poNumber: String(poNumber || '').trim(),
+      currency: currency || cust.currency || '€',
+      approvalDate: date,
+      leadTimeDays: days,
+      deliveryDate: addBusinessDays(date, days),
+      items: lines,
+      terms: cust.quoteTerms || 'Teklif olmaksızın doğrudan sipariş kaydı.',
+      status: 'Onaylandı',
+      revisionNo: 0,
+      notifyLog: [],
+      costAnalysisId: null,
+    };
+    orders.push(order);
+    orderRevisionLog[order.id] = [{ date, note: 'Teklifsiz sipariş dashboard’dan oluşturuldu.' }];
+    cloudSave('saveOrder', order, companies);
+    return order;
+  }
+
   /** Siparişi sil → teklif Onaylandı kalır, yeniden dönüştürülebilir */
   function revertOrderFromQuote(quoteOrOrderId, { confirmMsg } = {}) {
     const order = orders.find(o =>
@@ -5498,8 +5697,10 @@ ${vadeLine}`;
     const linkedWO = workOrders.filter(w => w.orderId === order.id);
     const msg = confirmMsg || (
       linkedWO.length
-        ? `${order.id} siparişi iptal edilecek ve teklif yeniden siparişe açılabilir hale gelecek.\nBağlı ${linkedWO.length} iş emri sipariş bağlantısından koparılacak. Devam?`
-        : `${order.id} siparişi iptal edilsin mi?\nTeklif tekrar "Siparişe Dönüştür" ile kullanılabilir.`
+        ? `${order.id} siparişi iptal edilecek${order.quoteId ? ' ve teklif yeniden siparişe açılabilir hale gelecek' : ''}.\nBağlı ${linkedWO.length} iş emri sipariş bağlantısından koparılacak. Devam?`
+        : (order.quoteId
+          ? `${order.id} siparişi iptal edilsin mi?\nTeklif tekrar "Siparişe Dönüştür" ile kullanılabilir.`
+          : `${order.id} siparişi iptal edilsin mi?`)
     );
     if (!window.confirm(msg)) return false;
 
@@ -5539,7 +5740,12 @@ ${vadeLine}`;
     if (typeof renderOrdersPage === 'function') renderOrdersPage();
     if (typeof renderWorkOrderTable === 'function') renderWorkOrderTable();
     if (typeof renderDashboard === 'function') renderDashboard();
-    showToast(`${order.id} iptal edildi · teklif yeniden siparişe dönüştürülebilir.`, 'info');
+    showToast(
+      order.quoteId
+        ? `${order.id} iptal edildi · teklif yeniden siparişe dönüştürülebilir.`
+        : `${order.id} iptal edildi.`,
+      'info'
+    );
     return true;
   }
 
@@ -11218,7 +11424,7 @@ ${vadeLine}`;
         <tr>
           <td colspan="8" class="px-5 py-12 text-center">
             <p class="text-sm font-medium text-steel-400">Bu firma için henüz sipariş bulunmuyor.</p>
-            <p class="text-xs text-steel-300 mt-1">Onaylanan bir teklifi "Siparişe Dönüştür" ile buraya taşıyabilirsiniz.</p>
+            <p class="text-xs text-steel-300 mt-1">Onaylanan bir teklifi "Siparişe Dönüştür" ile taşıyın veya Dashboard’dan teklifsiz sipariş girin.</p>
           </td>
         </tr>`;
       return;
@@ -11363,7 +11569,7 @@ ${vadeLine}`;
           partName: (item.desc || item.partNo || '').trim(),
           material: '',
           orderId: o.id,
-          quoteId: o.quoteId || o.id,
+          quoteId: o.quoteId || null,
           techDrawing: item.techDrawing || '',
           itemIdx: idx,
         });
@@ -11413,7 +11619,7 @@ ${vadeLine}`;
       partName: (first.desc || first.partNo || '').trim(),
       material: '',
       orderId: order.id,
-      quoteId: order.quoteId || order.id,
+      quoteId: order.quoteId || null,
       techDrawing: first.techDrawing || '',
       itemIdx: 0,
     });
@@ -13315,7 +13521,245 @@ ${vadeLine}`;
         <p class="text-xs ${t.text} font-medium leading-snug">${a.text}</p>
       </div>`;
     }).join('') : `<p class="text-sm text-steel-400">Dikkat gerektiren bir durum yok.</p>`;
+
+    renderDashOrderBoard();
   }
+
+  function dashOrderLineRowHtml() {
+    return `
+      <div class="dash-order-line grid grid-cols-12 gap-2 items-end">
+        <label class="col-span-12 sm:col-span-2 block">
+          <span class="text-[11px] font-semibold text-steel-400">Parça No</span>
+          <input type="text" data-field="partNo" placeholder="FL-100" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+        </label>
+        <label class="col-span-12 sm:col-span-5 block">
+          <span class="text-[11px] font-semibold text-steel-400">Açıklama</span>
+          <input type="text" data-field="desc" placeholder="Flanş kapak" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+        </label>
+        <label class="col-span-5 sm:col-span-2 block">
+          <span class="text-[11px] font-semibold text-steel-400">Adet</span>
+          <input type="number" data-field="qty" min="0.001" step="any" value="1" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+        </label>
+        <label class="col-span-5 sm:col-span-2 block">
+          <span class="text-[11px] font-semibold text-steel-400">Birim Fiyat</span>
+          <input type="number" data-field="unitPrice" min="0" step="0.01" value="0" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
+        </label>
+        <div class="col-span-2 sm:col-span-1 flex justify-end">
+          <button type="button" data-remove-line class="mb-0.5 text-steel-300 hover:text-red-500 p-2 rounded-lg" title="Kalemi sil">✕</button>
+        </div>
+      </div>`;
+  }
+
+  function resetDashOrderLines() {
+    const wrap = document.getElementById('dashOrderLines');
+    if (!wrap) return;
+    wrap.innerHTML = dashOrderLineRowHtml();
+  }
+
+  function updateDashOrderDeliveryPreview() {
+    const date = document.getElementById('dashOrderDate')?.value;
+    const days = Number(document.getElementById('dashOrderLead')?.value) || 0;
+    const el = document.getElementById('dashOrderDelivery');
+    if (el) el.textContent = date ? fmtDate(addBusinessDays(date, days)) : '—';
+    const next = document.getElementById('dashOrderNextNo');
+    if (next && typeof nextDirectOrderId === 'function') next.textContent = nextDirectOrderId(activeCompany, date);
+  }
+
+  function applyDashCustomerDefaults() {
+    const name = document.getElementById('dashOrderCustomer')?.value || '';
+    const cust = customers.find(c => c.company === activeCompany && c.name === name);
+    const contact = document.getElementById('dashOrderContact');
+    const currency = document.getElementById('dashOrderCurrency');
+    const lead = document.getElementById('dashOrderLead');
+    if (!cust) return;
+    const primary = (cust.contacts || [])[0];
+    if (contact) contact.value = primary?.name || '';
+    if (currency) currency.value = cust.currency || '€';
+    if (lead) lead.value = cust.leadTimeDays || 15;
+    updateDashOrderDeliveryPreview();
+  }
+
+  function syncDashOrderForm() {
+    const sel = document.getElementById('dashOrderCustomer');
+    if (!sel) return;
+    const companyChanged = dashOrderCompanySeen !== activeCompany;
+    dashOrderCompanySeen = activeCompany;
+    const list = customers.filter(c => c.company === activeCompany);
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">Müşteri seçin</option>` + list.map(c => `<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join('');
+    const hint = document.getElementById('dashOrderNoCustomer');
+    if (hint) hint.classList.toggle('hidden', list.length > 0);
+    const label = document.getElementById('dashOrderCompany');
+    if (label) label.textContent = activeCompany;
+    const dateEl = document.getElementById('dashOrderDate');
+    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
+    if (!companyChanged && list.some(c => c.name === prev)) {
+      sel.value = prev;
+    } else {
+      sel.value = '';
+      const contact = document.getElementById('dashOrderContact');
+      if (contact) contact.value = '';
+      const lead = document.getElementById('dashOrderLead');
+      if (lead) lead.value = '15';
+      const po = document.getElementById('dashOrderPo');
+      if (po && companyChanged) po.value = '';
+      const currency = document.getElementById('dashOrderCurrency');
+      if (currency && companyChanged) currency.value = '€';
+      if (companyChanged) resetDashOrderLines();
+    }
+    const lines = document.getElementById('dashOrderLines');
+    if (lines && !lines.children.length) resetDashOrderLines();
+    updateDashOrderDeliveryPreview();
+  }
+
+  function renderDashDataTables() {
+    const custBody = document.getElementById('dashCustomersBody');
+    const orderBody = document.getElementById('dashOrdersBody');
+    const fasonBody = document.getElementById('dashFasonBody');
+    if (!custBody || !orderBody || !fasonBody) return;
+
+    const custList = customers.filter(c => c.company === activeCompany);
+    const orderList = orders.filter(o => o.company === activeCompany).sort((a, b) => String(b.approvalDate || '').localeCompare(String(a.approvalDate || '')) || String(b.id).localeCompare(String(a.id)));
+    const fasonList = fasonJobs.filter(f => f.company === activeCompany).sort((a, b) => String(b.sentDate || '').localeCompare(String(a.sentDate || '')));
+    const custCount = document.getElementById('dashCustomersCount');
+    const orderCount = document.getElementById('dashOrdersCount');
+    const fasonCount = document.getElementById('dashFasonCount');
+    if (custCount) custCount.textContent = `${custList.length} müşteri`;
+    if (orderCount) orderCount.textContent = `${orderList.length} sipariş`;
+    if (fasonCount) fasonCount.textContent = `${fasonList.length} kayıt`;
+
+    custBody.innerHTML = custList.length ? custList.map(c => {
+      const primary = (c.contacts || [])[0];
+      const n = orders.filter(o => o.company === c.company && o.customer === c.name).length;
+      return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-dash-page="customers">
+        <td class="px-5 py-3.5"><p class="font-semibold text-steel-800">${escapeHtml(c.name)}</p>${c.address ? `<p class="text-xs text-steel-400 mt-0.5 max-w-xs truncate">${escapeHtml(c.address)}</p>` : ''}</td>
+        <td class="px-4 py-3.5"><span class="inline-flex items-center text-xs font-bold bg-navy/10 text-navy px-2 py-0.5 rounded-full">${escapeHtml(c.currency || '₺')}</span><p class="text-[11px] text-steel-500 mt-1">Vade: ${escapeHtml(c.paymentTerms || '—')}</p></td>
+        <td class="px-4 py-3.5 text-xs text-steel-500">${primary ? escapeHtml(primary.name || '—') : '—'}${primary && primary.phone ? `<p class="mt-0.5">${escapeHtml(primary.phone)}</p>` : ''}</td>
+        <td class="px-4 py-3.5 font-semibold text-steel-800">${n}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="4" class="px-5 py-8 text-center text-sm text-steel-400">Bu firma için müşteri yok.</td></tr>`;
+
+    orderBody.innerHTML = orderList.length ? orderList.map(o => {
+      const late = o.status !== 'Tamamlandı' && o.deliveryDate && o.deliveryDate < new Date().toISOString().slice(0, 10);
+      const total = Array.isArray(o.items) ? orderGrandTotal(o) : 0;
+      const kaynak = o.quoteId ? 'Teklif' : 'Doğrudan';
+      const statusClass = {
+        'Onaylandı': 'text-emerald-700 bg-emerald-50',
+        'Revize Edildi': 'text-amber-700 bg-amber-50',
+        'Üretimde': 'text-emerald-700 bg-emerald-50',
+        'Tamamlandı': 'text-blue-700 bg-blue-50',
+      }[o.status] || 'text-emerald-700 bg-emerald-50';
+      return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-dash-order="${escapeHtml(o.id)}">
+        <td class="px-5 py-3.5 font-semibold text-steel-800 mono">${escapeHtml(o.id)}</td>
+        <td class="px-4 py-3.5"><p class="text-steel-700">${escapeHtml(o.customer || '')}</p><p class="text-xs text-steel-400 mt-0.5">${o.poNumber ? 'PO: ' + escapeHtml(o.poNumber) : 'PO yok'}</p></td>
+        <td class="px-4 py-3.5 ${late ? 'text-red-500 font-semibold' : 'text-steel-500'}">${fmtDate(o.deliveryDate)}${late ? ' ⚠' : ''}</td>
+        <td class="px-4 py-3.5 font-semibold text-steel-800 mono">${fmtMoney(total, o.currency || '€')}</td>
+        <td class="px-4 py-3.5"><span class="text-[11px] font-bold px-2 py-1 rounded-full ${statusClass}">${escapeHtml(o.status || 'Onaylandı')}</span></td>
+        <td class="px-4 py-3.5"><span class="text-[11px] font-bold px-2 py-1 rounded-full ${o.quoteId ? 'text-blue-700 bg-blue-50' : 'text-emerald-700 bg-emerald-50'}">${kaynak}</span></td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="6" class="px-5 py-8 text-center text-sm text-steel-400">Bu firma için sipariş yok. Yukarıdaki formdan teklifsiz kayıt açabilirsiniz.</td></tr>`;
+
+    fasonBody.innerHTML = fasonList.length ? fasonList.map(f => {
+      const tone = fasonEffectiveTone(f);
+      const label = fasonStatusLabel(f);
+      return `<tr class="hover:bg-steel-50/60 cursor-pointer" data-dash-fason="${escapeHtml(f.id)}">
+        <td class="px-5 py-3.5 font-semibold mono text-steel-800">${escapeHtml(f.id)}</td>
+        <td class="px-4 py-3.5"><p class="font-medium text-steel-700">${escapeHtml(f.part || '—')}</p><p class="text-[11px] text-steel-400">${escapeHtml(f.serial || '')}</p></td>
+        <td class="px-4 py-3.5"><p class="font-medium text-steel-700">${escapeHtml(f.process || '')}</p><p class="text-[11px] text-steel-400">${escapeHtml(f.processDetail || '')}</p></td>
+        <td class="px-4 py-3.5 text-steel-700">${escapeHtml(f.vendor || '—')}</td>
+        <td class="px-4 py-3.5 mono text-steel-600 text-[12px]">${fmtDate(f.sentDate)} → ${fmtDate(f.dueDate)}</td>
+        <td class="px-4 py-3.5">${statusToneBadgeHtml(tone, label)}</td>
+      </tr>`;
+    }).join('') : `<tr><td colspan="6" class="px-5 py-8 text-center text-sm text-steel-400">Bu firma için fason kaydı yok.</td></tr>`;
+  }
+
+  function renderDashOrderBoard() {
+    syncDashOrderForm();
+    renderDashDataTables();
+  }
+
+  function bindDashOrderEntry() {
+    const form = document.getElementById('dashOrderForm');
+    const page = document.getElementById('page-dashboard');
+    if (!form || !page || form.dataset.bound === '1') return;
+    form.dataset.bound = '1';
+    document.getElementById('dashOrderCustomer')?.addEventListener('change', applyDashCustomerDefaults);
+    document.getElementById('dashOrderDate')?.addEventListener('input', updateDashOrderDeliveryPreview);
+    document.getElementById('dashOrderLead')?.addEventListener('input', updateDashOrderDeliveryPreview);
+    document.getElementById('dashOrderAddLine')?.addEventListener('click', () => {
+      const wrap = document.getElementById('dashOrderLines');
+      if (!wrap) return;
+      wrap.insertAdjacentHTML('beforeend', dashOrderLineRowHtml());
+    });
+    document.getElementById('dashOrderLines')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-remove-line]');
+      if (!btn) return;
+      const wrap = document.getElementById('dashOrderLines');
+      const row = btn.closest('.dash-order-line');
+      if (!wrap || !row) return;
+      if (wrap.querySelectorAll('.dash-order-line').length <= 1) {
+        row.querySelectorAll('input').forEach(inp => { inp.value = inp.dataset.field === 'qty' ? '1' : (inp.dataset.field === 'unitPrice' ? '0' : ''); });
+        return;
+      }
+      row.remove();
+    });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const customer = (document.getElementById('dashOrderCustomer')?.value || '').trim();
+      if (!customer) {
+        showToast('Müşteri seçin.', 'error');
+        return;
+      }
+      const lines = [...document.querySelectorAll('#dashOrderLines .dash-order-line')].map(row => ({
+        partNo: row.querySelector('[data-field="partNo"]')?.value || '',
+        desc: row.querySelector('[data-field="desc"]')?.value || '',
+        qty: row.querySelector('[data-field="qty"]')?.value || '',
+        unitPrice: row.querySelector('[data-field="unitPrice"]')?.value || '',
+      }));
+      const order = createDirectOrder({
+        customer,
+        contact: document.getElementById('dashOrderContact')?.value || '',
+        poNumber: document.getElementById('dashOrderPo')?.value || '',
+        currency: document.getElementById('dashOrderCurrency')?.value || '€',
+        approvalDate: document.getElementById('dashOrderDate')?.value || '',
+        leadTimeDays: document.getElementById('dashOrderLead')?.value || '',
+        items: lines,
+      });
+      if (!order) return;
+      const po = document.getElementById('dashOrderPo');
+      if (po) po.value = '';
+      resetDashOrderLines();
+      if (typeof renderOrdersPage === 'function') renderOrdersPage();
+      if (typeof renderCustomersPage === 'function') renderCustomersPage();
+      renderDashboard();
+      showToast(`${order.id} kaydedildi · Termin ${fmtDate(order.deliveryDate)}`, 'success');
+    });
+    page.addEventListener('click', (e) => {
+      const pageBtn = e.target.closest('[data-dash-page]');
+      if (pageBtn && page.contains(pageBtn)) {
+        showPage(pageBtn.dataset.dashPage);
+        return;
+      }
+      const orderRow = e.target.closest('[data-dash-order]');
+      if (orderRow && page.contains(orderRow)) {
+        const id = orderRow.dataset.dashOrder;
+        const order = orders.find(o => o.id === id && o.company === activeCompany);
+        if (!order) return;
+        showPage('orders');
+        expandedOrders.add(order.id);
+        renderOrdersPage();
+        openOrderDrawer(order);
+        return;
+      }
+      const fasonRow = e.target.closest('[data-dash-fason]');
+      if (fasonRow && page.contains(fasonRow)) {
+        const id = fasonRow.dataset.dashFason;
+        showPage('fason');
+        if (typeof openFasonDetail === 'function') openFasonDetail(id);
+      }
+    });
+  }
+  bindDashOrderEntry();
 
   // ---------- Ayarlar sayfası (Firma / Döviz / Nakliye / Kullanıcı) ----------
   let activeSettingsTab = 'company';
@@ -15938,7 +16382,7 @@ ${vadeLine}`;
         openedAt: new Date().toISOString().slice(0, 10),
         status: 'Aktif',
         orderId: order.id,
-        quoteId: order.quoteId || order.id,
+        quoteId: order.quoteId || null,
         qrPayload: buildTraceUrl('WO', item.company, newId),
         parts: (order.items || []).map((it, i) => ({
           no: i + 1,
