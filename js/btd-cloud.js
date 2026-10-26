@@ -220,6 +220,169 @@
     replaceArray(ctx.customers, rows.map((r) => customerFromRow(r, ctx.companies)));
   }
 
+  // ─── Ürün kartı (urunler) ──────────────────────────────────────────────────
+  function productToRow(p, fid) {
+    return {
+      firma_id: fid,
+      kod: p.code,
+      ad: p.name,
+      birim: p.unit || 'adet',
+      birim_fiyat: Number(p.unitPrice) || 0,
+      para_birimi: currencyToDb(p.currency),
+      aciklama: p.note || null,
+      aktif: p.active !== false,
+    };
+  }
+  function productFromRow(r, companies) {
+    return {
+      dbId: r.id,
+      id: r.kod ? `UR-${r.kod}` : r.id,
+      company: companyNameById(companies, r.firma_id) || '',
+      code: r.kod,
+      name: r.ad,
+      unit: r.birim || 'adet',
+      unitPrice: Number(r.birim_fiyat) || 0,
+      currency: currencyToUi(r.para_birimi),
+      note: r.aciklama || '',
+      active: r.aktif !== false,
+    };
+  }
+  async function saveProduct(p, companies) {
+    try {
+      const client = sb();
+      if (!client || !p) return fail('no-client', 'saveProduct');
+      const fid = firmaId(companies, p.company);
+      if (!fid) return fail('firma_id yok', 'saveProduct');
+      const row = productToRow(p, fid);
+      let dbId = p.dbId;
+      if (dbId) {
+        const { error } = await client.from('urunler').update(row).eq('id', dbId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await client
+          .from('urunler')
+          .upsert(row, { onConflict: 'firma_id,kod' })
+          .select('id')
+          .single();
+        if (error) throw error;
+        dbId = data.id;
+        p.dbId = dbId;
+      }
+      return ok({ dbId });
+    } catch (e) { return fail(e, 'saveProduct'); }
+  }
+  async function deleteProduct(p) {
+    try {
+      const client = sb();
+      if (!client || !p?.dbId) return fail('no-id', 'deleteProduct');
+      const { error } = await client.from('urunler').delete().eq('id', p.dbId);
+      if (error) throw error;
+      return ok();
+    } catch (e) { return fail(e, 'deleteProduct'); }
+  }
+  async function hydrateProducts(ctx) {
+    const client = sb();
+    if (!client || !ctx.products) return;
+    const n = await countTable(client, 'urunler');
+    if (!n) {
+      if (ctx.products.length) {
+        progress(ctx, `Ürünler seed (${ctx.products.length})…`);
+        for (const p of ctx.products) await saveProduct(p, ctx.companies);
+      }
+      return;
+    }
+    progress(ctx, 'Ürünler hydrate…');
+    const rows = await selectAll(client, 'urunler', '*', 'kod');
+    const mapped = rows.map((r) => productFromRow(r, ctx.companies));
+    mapped.forEach((p) => {
+      const local = ctx.products.find((x) => x.company === p.company && x.code === p.code);
+      if (local?.id) p.id = local.id;
+    });
+    replaceArray(ctx.products, mapped);
+  }
+
+  // ─── Fasoncu ana listesi ───────────────────────────────────────────────────
+  function subconToRow(s, fid) {
+    return {
+      firma_id: fid,
+      unvan: s.name,
+      hizmet: s.service || null,
+      iletisim: s.contact || null,
+      telefon: s.phone || null,
+      whatsapp: s.phone || null,
+      eposta: s.email || null,
+      adres: s.address || null,
+      aktif: s.active !== false,
+    };
+  }
+  function subconFromRow(r, companies) {
+    return {
+      dbId: r.id,
+      id: r.id,
+      company: companyNameById(companies, r.firma_id) || '',
+      name: r.unvan,
+      service: r.hizmet || '',
+      contact: r.iletisim || '',
+      phone: r.telefon || '',
+      email: r.eposta || '',
+      address: r.adres || '',
+      active: r.aktif !== false,
+    };
+  }
+  async function saveSubcontractor(s, companies) {
+    try {
+      const client = sb();
+      if (!client || !s) return fail('no-client', 'saveSubcontractor');
+      const fid = firmaId(companies, s.company);
+      if (!fid) return fail('firma_id yok', 'saveSubcontractor');
+      const row = subconToRow(s, fid);
+      let dbId = s.dbId;
+      if (dbId) {
+        const { error } = await client.from('fasoncular').update(row).eq('id', dbId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await client
+          .from('fasoncular')
+          .upsert(row, { onConflict: 'firma_id,unvan' })
+          .select('id')
+          .single();
+        if (error) throw error;
+        dbId = data.id;
+        s.dbId = dbId;
+      }
+      return ok({ dbId });
+    } catch (e) { return fail(e, 'saveSubcontractor'); }
+  }
+  async function deleteSubcontractor(s) {
+    try {
+      const client = sb();
+      if (!client || !s?.dbId) return fail('no-id', 'deleteSubcontractor');
+      const { error } = await client.from('fasoncular').delete().eq('id', s.dbId);
+      if (error) throw error;
+      return ok();
+    } catch (e) { return fail(e, 'deleteSubcontractor'); }
+  }
+  async function hydrateSubcontractors(ctx) {
+    const client = sb();
+    if (!client || !ctx.subcontractors) return;
+    const n = await countTable(client, 'fasoncular');
+    if (!n) {
+      if (ctx.subcontractors.length) {
+        progress(ctx, `Fasoncular seed (${ctx.subcontractors.length})…`);
+        for (const s of ctx.subcontractors) await saveSubcontractor(s, ctx.companies);
+      }
+      return;
+    }
+    progress(ctx, 'Fasoncular hydrate…');
+    const rows = await selectAll(client, 'fasoncular', '*', 'unvan');
+    const mapped = rows.map((r) => subconFromRow(r, ctx.companies));
+    mapped.forEach((s) => {
+      const local = ctx.subcontractors.find((x) => x.company === s.company && x.name === s.name);
+      if (local?.id) s.id = local.id;
+    });
+    replaceArray(ctx.subcontractors, mapped);
+  }
+
   // ─── CRM · Suppliers ───────────────────────────────────────────────────────
   function supplierToRow(s, fid) {
     return {
@@ -1081,12 +1244,21 @@
         ek_gider: it.extraCost ?? 0,
         teknik_resim: it.techDrawing || null,
         qr_anahtar: it.qrKey || null,
+        urun_id: it.productDbId || null,
       }));
       if (itemsFull.length) {
-        let { error } = await client.from('siparis_kalemleri').insert(itemsFull);
-        if (error && /teknik_resim|qr_anahtar/i.test(error.message || '')) {
-          const itemsBasic = itemsFull.map(({ teknik_resim, qr_anahtar, ...rest }) => rest);
-          ({ error } = await client.from('siparis_kalemleri').insert(itemsBasic));
+        let payload = itemsFull;
+        let { error } = await client.from('siparis_kalemleri').insert(payload);
+        if (error && /urun_id|teknik_resim|qr_anahtar/i.test(error.message || '')) {
+          const msg = error.message || '';
+          payload = itemsFull.map((it) => {
+            const copy = { ...it };
+            if (/urun_id/i.test(msg)) delete copy.urun_id;
+            if (/teknik_resim/i.test(msg)) delete copy.teknik_resim;
+            if (/qr_anahtar/i.test(msg)) delete copy.qr_anahtar;
+            return copy;
+          });
+          ({ error } = await client.from('siparis_kalemleri').insert(payload));
         }
         if (error) throw error;
       }
@@ -1135,16 +1307,21 @@
         notifyLog: [],
         items: (r.siparis_kalemleri || [])
           .sort((a, b) => (a.sira || 0) - (b.sira || 0))
-          .map((it) => ({
-            partNo: it.parca_no || '',
-            desc: it.aciklama || '',
-            qty: Number(it.adet) || 1,
-            unitPrice: Number(it.birim_fiyat) || 0,
-            discountPct: Number(it.iskonto_pct) || 0,
-            extraCost: Number(it.ek_gider) || 0,
-            techDrawing: it.teknik_resim || '',
-            qrKey: it.qr_anahtar || '',
-          })),
+          .map((it) => {
+            const prod = (ctx.products || []).find((p) => p.dbId && p.dbId === it.urun_id);
+            return {
+              partNo: it.parca_no || '',
+              desc: it.aciklama || '',
+              qty: Number(it.adet) || 1,
+              unitPrice: Number(it.birim_fiyat) || 0,
+              discountPct: Number(it.iskonto_pct) || 0,
+              extraCost: Number(it.ek_gider) || 0,
+              techDrawing: it.teknik_resim || '',
+              qrKey: it.qr_anahtar || '',
+              productDbId: it.urun_id || null,
+              productId: prod?.id || '',
+            };
+          }),
       };
     });
     replaceArray(ctx.orders, mapped);
@@ -2275,6 +2452,8 @@
     const steps = [
       ['kataloglar', () => hydrateCatalogs(ctx)],
       ['müşteriler', () => hydrateCustomers(ctx)],
+      ['ürünler', () => hydrateProducts(ctx)],
+      ['fasoncular', () => hydrateSubcontractors(ctx)],
       ['tedarikçiler', () => hydrateSuppliers(ctx)],
       ['öncelikler', () => hydrateSupplierGroupPriorities(ctx)],
       ['personel', () => hydratePersonnel(ctx)],
@@ -2313,6 +2492,10 @@
     boot,
     saveCustomer,
     deleteCustomer,
+    saveProduct,
+    deleteProduct,
+    saveSubcontractor,
+    deleteSubcontractor,
     saveSupplier,
     deleteSupplier,
     savePersonnel,
