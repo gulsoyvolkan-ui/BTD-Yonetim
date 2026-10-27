@@ -5142,7 +5142,7 @@
   </div>
   <div class="letterhead-sub">
     <p class="meta-line">${info.address}</p>
-    <p class="meta-line">${info.taxOffice} · Vergi No: ${info.taxNo} &nbsp;·&nbsp; Tel: ${info.phone}</p>
+    <p class="meta-line">${info.taxOffice} · Vergi No: ${info.taxNo}${info.mersis ? ` · MERSİS: ${info.mersis}` : ''} &nbsp;·&nbsp; Tel: ${info.phone}</p>
   </div>`;
   }
   function docFooterHtml(info) {
@@ -11596,7 +11596,7 @@ ${vadeLine}`;
   ${bp.info.note ? `<p class="brand-note">${escapeHtml(bp.info.note)}</p>` : ''}
   <p class="firm-meta">
     ${escapeHtml(bp.info.address)}<br>
-    <strong>${escapeHtml(bp.info.taxOffice)}</strong> · Vergi No: ${escapeHtml(bp.info.taxNo)} · Tel: ${escapeHtml(bp.info.phone)}
+    <strong>${escapeHtml(bp.info.taxOffice)}</strong> · Vergi No: ${escapeHtml(bp.info.taxNo)}${bp.info.mersis ? ` · MERSİS: ${escapeHtml(bp.info.mersis)}` : ''} · Tel: ${escapeHtml(bp.info.phone)}
   </p>
 
   <div class="doc-body">
@@ -11680,7 +11680,7 @@ ${vadeLine}`;
   </div>
 
   <div class="doc-footer">
-    ${escapeHtml(bp.info.website)} &nbsp;·&nbsp; ${escapeHtml(bp.info.email)}
+    Web: ${escapeHtml(bp.info.website)} &nbsp;·&nbsp; E-posta: ${escapeHtml(bp.info.email)}
   </div>
 </div>
 </body>
@@ -13283,7 +13283,7 @@ ${vadeLine}`;
     <div class="sign-col"><p class="label">Kalite Kontrol</p><p class="line">İmza / Tarih</p></div>
   </div>
   </div>
-  ${docFooterHtml(bp.info)}
+  <div class="doc-footer">Web: ${bp.info.website} &nbsp;·&nbsp; E-posta: ${bp.info.email}</div>
 </div>
 </body>
 </html>`;

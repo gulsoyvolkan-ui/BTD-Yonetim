@@ -1,6 +1,7 @@
 /* Marka kimliği: Technomac, Bluemac, TE-CA, DEVORIAS.
    Teklif ve iş emri çıktısında logo, renk ve antet buradan gelir.
-   Yasal ünvan, adres ve vergi bilgisi markanın tüzel kişiliğinden (ENTITIES) gelir; telefon, web, e-posta ve banka bilgisi firmadan.
+   Yasal ünvan, adres ve vergi bilgisi markanın tüzel kişiliğinden (ENTITIES) gelir.
+   Telefon, web, e-posta ve MERSİS Volkan bildirene kadar "Bilinmiyor" basılır. Banka bilgisi firmadan gelir.
    TE-CA ve DEVORIAS Bluemac tüzel kişiliğiyle çalışır; antette Bluemac ünvanı ve vergi bilgisi basılır. */
 (function (root) {
   // Firma kaydındaki (firmalar) ünvan ve vergi no bunlardan farklı olabilir; teklif ve iş emri anteti buradakini basar.
@@ -26,7 +27,7 @@
       company: 'Technomac',
       entity: 'technomac',
       logo: 'assets/logos/brands/technomac.svg',
-      palette: { primary: '#404041', onPrimary: '#FFFFFF', accent: '#00AEEF', ink: '#404041' },
+      palette: { primary: '#393536', onPrimary: '#FFFFFF', accent: '#00ADEF', ink: '#393536' },
     },
     {
       key: 'bluemac',
@@ -34,7 +35,7 @@
       company: 'Bluemac',
       entity: 'bluemac',
       logo: 'assets/logos/brands/bluemac.svg',
-      palette: { primary: '#404041', onPrimary: '#FFFFFF', accent: '#00AEEF', ink: '#404041' },
+      palette: { primary: '#393536', onPrimary: '#FFFFFF', accent: '#00ADEF', ink: '#393536' },
     },
     {
       key: 'teca',
@@ -42,11 +43,8 @@
       company: 'Bluemac',
       entity: 'bluemac',
       logo: 'assets/logos/brands/teca.svg',
-      palette: { primary: '#030505', onPrimary: '#FFFFFF', accent: '#ED1C24', ink: '#030505' },
-      // Boş alan Bluemac firma bilgisinden gelir. TODO(Volkan): TE-CA web sitesi ve e-postası varsa yaz.
+      palette: { primary: '#110F0D', onPrimary: '#FFFFFF', accent: '#ED1C24', ink: '#110F0D' },
       letterhead: {
-        website: '',
-        email: '',
         note: 'TE-CA · Technological Camping Equipment · Bluemac tescilli markası',
       },
       // Bluemac belgesinde müşteri adı veya ürün metninde biri geçerse TE-CA seçilir.
@@ -59,7 +57,7 @@
       entity: 'bluemac',
       // Logo siyah zemin üzerine tasarlanmış; zemin logonun parçası.
       logo: 'assets/logos/brands/devorias.png',
-      palette: { primary: '#000000', onPrimary: '#BCA180', accent: '#BCA180', ink: '#000000' },
+      palette: { primary: '#000000', onPrimary: '#BCA281', accent: '#BCA281', ink: '#000000' },
     },
   ];
 
@@ -119,8 +117,11 @@
     const lh = brand.letterhead || {};
     return Object.assign({}, info, ENTITIES[brand.entity], {
       logo: brand.logo,
-      website: lh.website || info.website,
-      email: lh.email || info.email,
+      // TODO(Volkan): telefon, web, e-posta ve MERSİS gelince buraya yaz.
+      phone: 'Bilinmiyor',
+      website: 'Bilinmiyor',
+      email: 'Bilinmiyor',
+      mersis: 'Bilinmiyor',
       note: lh.note || '',
     });
   }
