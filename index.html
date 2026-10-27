@@ -17,6 +17,8 @@
 <script src="js/btd-cloud.js"></script>
 <script src="js/btd-prices.js"></script>
 <script src="js/btd-quote.js"></script>
+<script src="js/btd-load.js"></script>
+<script src="js/btd-tasks.js"></script>
 <script>
   tailwind.config = {
     theme: {
@@ -560,6 +562,10 @@
         <a href="#" data-page="manufacturing" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="İmalat">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="5" width="15" height="12" rx="1.5"></rect><path d="M16.5 9h2.2L21 11.5V15h-4.5"></path><circle cx="6" cy="19" r="1.4"></circle><circle cx="14" cy="19" r="1.4"></circle><path d="M8.5 9.5v4"></path><path d="M7 11.5h3"></path><path d="M12.5 8.5h2.5v3h-2.5z"></path></svg>
           <span class="sidebar-label text-sm font-medium flex-1">İmalat</span>
+        </a>
+        <a href="#" data-page="tasks" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Görevler">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"></path><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+          <span class="sidebar-label text-sm font-medium flex-1">Görevler</span>
         </a>
         <a href="#" data-page="fason" class="sidebar-item flex text-steel-500 hover:bg-steel-100 hover:text-steel-800 transition-colors group" title="Fason Takip">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17V7a2 2 0 0 1 2-2h7l5 5v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"></path><path d="M13 5v5h5"></path><path d="M8 13h6"></path><path d="M8 17h4"></path></svg>
@@ -1751,7 +1757,7 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div>
             <h1 class="text-2xl font-bold text-steel-800 tracking-tight">İmalat <span class="text-steel-400 font-medium">/ Üretim İlerleme Takibi</span></h1>
-            <p class="text-sm text-steel-400 mt-1">Aktif iş emirlerinin genel tamamlanma durumu · <span id="companyNameManufacturing" class="font-semibold text-navy">Technomac</span></p>
+            <p class="text-sm text-steel-400 mt-1"><span id="mfgLaneLabel">Tezgâh yükü</span> · <span id="companyNameManufacturing" class="font-semibold text-navy">Technomac</span></p>
           </div>
         </div>
 
@@ -1787,6 +1793,13 @@
           </div>
           <div id="mfgProgressList" class="divide-y divide-steel-100"></div>
         </div>
+        <div id="mfgLoadMount" class="mt-5"></div>
+        <div class="h-6"></div>
+      </div>
+
+      <!-- ============ PAGE: GÖREVLER ============ -->
+      <div id="page-tasks" class="hidden">
+        <div id="tasksMount"></div>
         <div class="h-6"></div>
       </div>
 
@@ -5315,6 +5328,12 @@ ${vadeLine}`;
   // ---------- Personel (HR) ----------
   let personnel = [];
   let personnelSeq = 1;
+  let tasks = [
+    { id: 'GV-TM-0001', company: 'Technomac', title: 'Hermle programını kontrol et', assignee: 'Ahmet Yıldız', due: '2026-10-28', status: 'Açık', note: 'Flanş gövde iş emri' },
+    { id: 'GV-TM-0002', company: 'Technomac', title: 'Ölçü raporu', assignee: 'Elif Kara', due: '2026-10-25', status: 'Devam', note: 'Termin geçti' },
+    { id: 'GV-BM-0001', company: 'Bluemac', title: 'Kriko montaj kontrolü', assignee: 'Selin Arslan', due: '2026-10-30', status: 'Açık', note: 'TE-CA şase' },
+    { id: 'GV-DV-0001', company: 'Devorias', title: 'Lumi-Wall baskı sırası', assignee: 'Kerem Polat', due: '2026-10-29', status: 'Açık', note: 'Brilliant panel' },
+  ];
   let attendanceLogs = [];
   let attendanceSeq = 1;
   let leaveRequests = [];
@@ -5800,6 +5819,62 @@ ${vadeLine}`;
     cloudSave('saveOrder', order, companies);
     return order;
   }
+
+  function saveSeriesQuote(draft, opts) {
+    const asOrder = !!(opts && opts.asOrder);
+    if (!draft || !Array.isArray(draft.items) || !draft.items.length) {
+      showToast('Önce kalem ekleyin.', 'error');
+      return null;
+    }
+    const customer = String(draft.customer || '').trim();
+    if (!customer || customer === '—') {
+      showToast('Müşteri seçin.', 'error');
+      return null;
+    }
+    const company = draft.company || activeCompany;
+    const quote = {
+      id: quoteId(company, nextQuoteSeq(company)),
+      company,
+      customer,
+      contact: draft.contact || '',
+      date: draft.date || new Date().toISOString().slice(0, 10),
+      currency: draft.currency || '€',
+      items: draft.items.map((it) => ({
+        partNo: it.partNo,
+        desc: it.desc,
+        unit: it.unit || '',
+        qty: it.qty,
+        unitPrice: it.unitPrice,
+        note: it.note || '',
+      })),
+      grossSum: draft.grossSum,
+      discount: draft.discount,
+      discountPct: draft.discountPct,
+      paymentTerms: draft.paymentTerms || '30 gün',
+      paymentType: draft.paymentType || paymentTypeLabel(draft.paymentTerms || '30 gün'),
+      leadTimeDays: draft.leadTimeDays || 15,
+      manufacturingType: draft.manufacturingType || 'Malzemeli',
+      validityDays: draft.validityDays || 15,
+      vatRate: draft.vatRate != null ? draft.vatRate : 20,
+      terms: draft.terms || '',
+      deliveryPlace: draft.deliveryPlace,
+      warranty: draft.warranty,
+      status: asOrder ? 'Onaylandı' : 'Taslak',
+      sentChannels: { email: false, whatsapp: false },
+    };
+    if (typeof ensureQuoteQr === 'function') ensureQuoteQr(quote);
+    quotes.push(quote);
+    cloudSave('saveQuote', quote, companies);
+    if (typeof renderQuotesPage === 'function') renderQuotesPage();
+    if (asOrder && typeof openConvertOrderModal === 'function') {
+      showToast(`${quote.id} kaydedildi. Sipariş terminini onaylayın.`, 'success');
+      openConvertOrderModal(quote);
+    } else {
+      showToast(`${quote.id} teklif olarak kaydedildi.`, 'success');
+    }
+    return quote;
+  }
+  window.saveSeriesQuote = saveSeriesQuote;
 
   /** Teklif zorunlu değil. Numara SP-{firma}-{sıra}-{yıl}; teklif no ile çakışmaz. */
   function nextDirectOrderId(company, approvalDate) {
@@ -6872,7 +6947,7 @@ ${vadeLine}`;
     setTxt('companyBadgeLegal', info.legal || name);
 
     const safeRender = (fn) => {
-      try { if (typeof fn === 'function') fn(); } catch (e) { console.warn('[BTD] render', e); }
+      try { if (typeof fn === 'function') fn(); } catch (e) { console.warn('[BTD] render', e && e.stack ? e.stack : e); }
     };
     safeRender(renderWorkOrderTable);
     safeRender(renderMachinePark);
@@ -6887,6 +6962,7 @@ ${vadeLine}`;
     safeRender(renderHrPage);
     safeRender(renderStockPage);
     safeRender(renderManufacturingPage);
+    safeRender(renderTasksPage);
     safeRender(renderQualityPage);
     safeRender(renderShippingPage);
     safeRender(renderInvoicingPage);
@@ -7179,15 +7255,15 @@ ${vadeLine}`;
 
   const roleNavAccess = {
     'Yönetici': null,
-    'Operatör': ['dashboard', 'workorders', 'manufacturing', 'fason', 'procurement', 'costing', 'machinepark', 'hr', 'quality', 'shipping'],
-    'Kalite Kontrol': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason'],
-    'Kalite Kontrol Uzmanı': ['dashboard', 'quality', 'workorders', 'manufacturing', 'fason'],
-    'Sevkiyat': ['dashboard', 'shipping', 'orders'],
-    'Muhasebe': ['dashboard', 'invoicing', 'orders', 'quotes', 'costing', 'customers', 'hr'],
+    'Operatör': ['dashboard', 'workorders', 'manufacturing', 'tasks', 'fason', 'procurement', 'costing', 'machinepark', 'hr', 'quality', 'shipping'],
+    'Kalite Kontrol': ['dashboard', 'quality', 'workorders', 'manufacturing', 'tasks', 'fason'],
+    'Kalite Kontrol Uzmanı': ['dashboard', 'quality', 'workorders', 'manufacturing', 'tasks', 'fason'],
+    'Sevkiyat': ['dashboard', 'shipping', 'orders', 'tasks'],
+    'Muhasebe': ['dashboard', 'invoicing', 'orders', 'quotes', 'costing', 'customers', 'hr', 'tasks'],
   };
   const roleLabels = { 'Yönetici': 'Sistem Yöneticisi', 'Kalite Kontrol': 'Kalite Kontrol Uzmanı', 'Sevkiyat': 'Sevkiyat Sorumlusu' };
   const NAV_REGION2_CRITICAL = ['customers', 'suppliers', 'hr', 'settings'];
-  const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'fason', 'quality', 'shipping', 'machinepark'];
+  const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'tasks', 'fason', 'quality', 'shipping', 'machinepark'];
   const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders', 'products'];
 
   function isGroupAdmin(user) {
@@ -8474,6 +8550,7 @@ ${vadeLine}`;
     workorders: 'page-workorders',
     procurement: 'page-procurement',
     manufacturing: 'page-manufacturing',
+    tasks: 'page-tasks',
     fason: 'page-fason',
     quality: 'page-quality',
     shipping: 'page-shipping',
@@ -8528,6 +8605,7 @@ ${vadeLine}`;
     if (page === 'orders') renderOrdersPage();
     if (page === 'procurement') renderProcurementPage();
     if (page === 'manufacturing') renderManufacturingPage();
+    if (page === 'tasks') renderTasksPage();
     if (page === 'fason') renderFasonPage();
     if (page === 'quality') renderQualityPage();
     if (page === 'shipping') renderShippingPage();
@@ -10425,6 +10503,14 @@ ${vadeLine}`;
     const vat = Math.round(subtotal * vatRate) / 100;
     return { subtotal, vatRate, vat, grand: subtotal + vat };
   }
+  function quoteLineUnit(it) {
+    if (it && it.unit) return String(it.unit);
+    if (it && String(it.partNo || '').toUpperCase() === 'ISK') return '—';
+    const desc = String((it && it.desc) || '');
+    const m = desc.match(/·\s*(m²|m2|saat|adet)\s*$/i);
+    if (!m) return 'ADET';
+    return m[1].toLowerCase() === 'm2' ? 'm²' : m[1];
+  }
   function fmtMoney(n, currency) {
     return `${Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${currency}`;
   }
@@ -10445,8 +10531,6 @@ ${vadeLine}`;
     const ones = ['', 'BİR', 'İKİ', 'ÜÇ', 'DÖRT', 'BEŞ', 'ALTI', 'YEDİ', 'SEKİZ', 'DOKUZ'];
     const tens = ['', 'ON', 'YİRMİ', 'OTUZ', 'KIRK', 'ELLİ', 'ALTMIŞ', 'YETMİŞ', 'SEKSEN', 'DOKSAN'];
     const scales = ['', 'BİN', 'MİLYON', 'MİLYAR', 'TRİLYON'];
-    const n = Math.max(0, Math.round(Number(amount) || 0));
-    if (n === 0) return `SIFIR ${currencyWordLabel(currency)}`;
     function underThousand(x) {
       const parts = [];
       const h = Math.floor(x / 100);
@@ -10458,22 +10542,35 @@ ${vadeLine}`;
       if (o) parts.push(ones[o]);
       return parts.join(' ');
     }
-    const groups = [];
-    let rest = n;
-    let scale = 0;
-    while (rest > 0 && scale < scales.length) {
-      const chunk = rest % 1000;
-      if (chunk) {
-        if (scale === 1 && chunk === 1) groups.unshift('BİN');
-        else {
-          const w = underThousand(chunk);
-          groups.unshift(scales[scale] ? `${w} ${scales[scale]}` : w);
+    function integerWords(n) {
+      if (!n) return 'SIFIR';
+      const groups = [];
+      let rest = n;
+      let scale = 0;
+      while (rest > 0 && scale < scales.length) {
+        const chunk = rest % 1000;
+        if (chunk) {
+          if (scale === 1 && chunk === 1) groups.unshift('BİN');
+          else {
+            const w = underThousand(chunk);
+            groups.unshift(scales[scale] ? `${w} ${scales[scale]}` : w);
+          }
         }
+        rest = Math.floor(rest / 1000);
+        scale++;
       }
-      rest = Math.floor(rest / 1000);
-      scale++;
+      return groups.join(' ');
     }
-    return `${groups.join(' ')} ${currencyWordLabel(currency)}`;
+    const centsTotal = Math.round(Math.max(0, Number(amount) || 0) * 100);
+    const whole = Math.floor(centsTotal / 100);
+    const frac = centsTotal % 100;
+    const major = currencyWordLabel(currency);
+    const minor = currency === '₺' ? 'KURUŞ' : 'SENT';
+    if (!centsTotal) return `SIFIR ${major}`;
+    const parts = [];
+    if (whole) parts.push(`${integerWords(whole)} ${major}`);
+    if (frac) parts.push(`${integerWords(frac)} ${minor}`);
+    return parts.join(' ');
   }
   function paymentTypeLabel(paymentTerms) {
     const v = (paymentTerms || '30 gün').trim();
@@ -11375,7 +11472,7 @@ ${vadeLine}`;
           ${it.note ? `<div class="item-note">${escapeHtml(it.note)}</div>` : ''}
         </td>
         <td class="c">${it.qty}</td>
-        <td class="c">ADET</td>
+        <td class="c">${escapeHtml(quoteLineUnit(it))}</td>
         <td class="r">${fmtMoneyFixed(it.unitPrice, quote.currency)}</td>
         <td class="r">${fmtMoneyFixed(quoteItemTotal(it), quote.currency)}</td>
       </tr>
@@ -13198,6 +13295,79 @@ ${vadeLine}`;
     return Math.round(wo.parts.reduce((sum, p) => sum + partCompletionPct(p), 0) / wo.parts.length);
   }
 
+  function enqueueLaneJob(input) {
+    const company = activeCompany;
+    const customer = String(input && input.customer || '').trim();
+    const partName = String(input && input.part || '').trim();
+    const machine = String(input && input.machine || '').trim();
+    const minutes = Number(input && input.minutes);
+    if (!customer || !partName || !machine) {
+      showToast('Müşteri, parça ve tezgâh gerekli.', 'error');
+      return false;
+    }
+    const seqs = workOrders.filter(w => w.company === company).map(w => {
+      const m = String(w.id).match(/^[A-Z]{2}-\d{4}-(\d+)/i);
+      return m ? parseInt(m[1], 10) : 0;
+    });
+    const seq = (seqs.length ? Math.max(...seqs) : 0) + 1;
+    const lane = window.BtdLoad && window.BtdLoad.laneFor ? window.BtdLoad.laneFor(company) : null;
+    const wo = {
+      id: woId(company, seq),
+      company,
+      customer,
+      openedAt: new Date().toISOString().slice(0, 10),
+      status: 'Aktif',
+      parts: [{
+        no: 1,
+        name: partName,
+        material: '—',
+        operator: '',
+        activeCam: 0,
+        cam: [{
+          label: (lane && lane.stepLabel) || 'İşlem',
+          plannedMachine: machine,
+          machine: null,
+          durationMin: Number.isFinite(minutes) && minutes > 0 ? minutes : null,
+        }],
+      }],
+    };
+    normalizeWorkOrderCam(wo);
+    wo.qrPayload = buildTraceUrl('WO', company, wo.id);
+    workOrders.push(wo);
+    cloudSave('saveWorkOrder', wo, companies);
+    showToast(`${wo.id} kuyruğa alındı.`, 'success');
+    renderWorkOrderTable();
+    renderManufacturingPage();
+    return true;
+  }
+
+  function prepareFloorApi() {
+    window.BtdFloorApi = {
+      get company() { return activeCompany; },
+      get workOrders() { return workOrders; },
+      get activeWorkOrders() { return companyActiveWorkOrders(); },
+      get machinePark() { return machinePark; },
+      machineLabel,
+      switchCompany(name) {
+        if (companies[name]) setActiveCompany(name);
+      },
+      enqueue: enqueueLaneJob,
+      toast: showToast,
+    };
+  }
+
+  function renderTasksPage() {
+    if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
+    window.BtdTasksApi = {
+      get company() { return activeCompany; },
+      get tasks() { return tasks; },
+      get personnel() { return personnel; },
+      get companies() { return companies; },
+      toast: showToast,
+    };
+    if (window.BtdTasks) window.BtdTasks.render();
+  }
+
   function renderManufacturingPage() {
     document.getElementById('companyNameManufacturing').textContent = activeCompany;
     const list = companyActiveWorkOrders();
@@ -13211,25 +13381,30 @@ ${vadeLine}`;
     const el = document.getElementById('mfgProgressList');
     if (!list.length) {
       el.innerHTML = `<div class="px-5 py-12 text-center"><p class="text-sm font-medium text-steel-400">Bu firma için aktif iş emri bulunmuyor.</p></div>`;
-      return;
-    }
-    el.innerHTML = list.map(wo => {
-      const pct = woCompletionPct(wo);
-      const barColor = pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-navy' : 'bg-amber-500';
-      return `
-        <div class="px-5 py-4">
-          <div class="flex items-center justify-between mb-2">
-            <div>
-              <p class="text-sm font-semibold text-steel-800">${wo.id} <span class="text-steel-400 font-normal">· ${wo.customer}</span></p>
-              <p class="text-xs text-steel-400 mt-0.5">${wo.parts.length} parça</p>
+    } else {
+      el.innerHTML = list.map(wo => {
+        const pct = woCompletionPct(wo);
+        const barColor = pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-navy' : 'bg-amber-500';
+        return `
+          <div class="px-5 py-4">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <p class="text-sm font-semibold text-steel-800">${wo.id} <span class="text-steel-400 font-normal">· ${wo.customer}</span></p>
+                <p class="text-xs text-steel-400 mt-0.5">${wo.parts.length} parça</p>
+              </div>
+              <span class="text-sm font-bold ${pct >= 100 ? 'text-emerald-600' : 'text-steel-700'}">${pct}%</span>
             </div>
-            <span class="text-sm font-bold ${pct >= 100 ? 'text-emerald-600' : 'text-steel-700'}">${pct}%</span>
-          </div>
-          <div class="w-full h-2.5 bg-steel-100 rounded-full overflow-hidden">
-            <div class="h-full ${barColor} rounded-full transition-all" style="width:${pct}%"></div>
-          </div>
-        </div>`;
-    }).join('');
+            <div class="w-full h-2.5 bg-steel-100 rounded-full overflow-hidden">
+              <div class="h-full ${barColor} rounded-full transition-all" style="width:${pct}%"></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+    prepareFloorApi();
+    const lane = window.BtdLoad && window.BtdLoad.laneFor ? window.BtdLoad.laneFor(activeCompany) : null;
+    const laneEl = document.getElementById('mfgLaneLabel');
+    if (laneEl && lane) laneEl.textContent = lane.title;
+    if (window.BtdLoad) window.BtdLoad.render();
   }
 
   // ---------- Kalite Kontrol Sayfası ----------
@@ -18799,6 +18974,7 @@ ${vadeLine}`;
         orders,
         orderRevisionLog,
         workOrders,
+        tasks,
         procurementItems,
         materialRfqs,
         reprocRequests,
@@ -18819,6 +18995,7 @@ ${vadeLine}`;
         turkishHolidays2026,
       });
       console.info('[BTD] Cloud boot', bootRes);
+      window.__btdBootDone = true;
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
       // Hydrate sonrası kullanıcı bayraklarını düzelterek oturumu taze tut
       if (currentUser && typeof applyDemoLoginOverrides === 'function') {
@@ -18832,6 +19009,7 @@ ${vadeLine}`;
       }
     } catch (err) {
       console.warn('[BTD] Cloud boot failed — yerel veri ile devam', err);
+      window.__btdBootDone = true;
       if (!currentUser && typeof tryRestoreAuthSession === 'function') {
         try { tryRestoreAuthSession(); } catch (_) { /* ignore */ }
       }
