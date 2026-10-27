@@ -68,6 +68,7 @@
       items.push({
         partNo: row.code,
         desc: `${row.name} · ${row.unit}`,
+        unit: row.unit,
         qty,
         unitPrice: row.unitPrice,
         note: '',
@@ -79,6 +80,7 @@
       items.push({
         partNo: 'ISK',
         desc: `İskonto %${pct}`,
+        unit: '—',
         qty: 1,
         unitPrice: -discount,
         note: '',
@@ -166,7 +168,7 @@
           <select id="pqProduct" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 bg-white focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy">${options}</select>
         </label>
         <label class="block">
-          <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Adet</span>
+          <span class="text-[11px] font-semibold text-steel-400 uppercase tracking-wide">Miktar</span>
           <input id="pqQty" type="number" min="0.01" step="0.01" value="1" class="mt-1 w-full rounded-xl border border-steel-200 px-3 py-2.5 text-sm text-steel-800 focus:outline-none focus:ring-2 focus:ring-navy/30 focus:border-navy" />
         </label>
         <button type="button" id="pqAdd" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-4 py-2.5 rounded-xl">Kalem ekle</button>
@@ -176,7 +178,7 @@
           <thead>
             <tr class="bg-steel-50/80 text-left text-[11px] text-steel-400 font-semibold uppercase tracking-wide">
               <th class="px-3 py-2">Ürün</th>
-              <th class="px-3 py-2">Adet</th>
+              <th class="px-3 py-2">Miktar</th>
               <th class="px-3 py-2">Birim fiyat</th>
               <th class="px-3 py-2">Satır tutarı</th>
               <th class="px-3 py-2"></th>
@@ -192,7 +194,11 @@
           <p>KDV <span id="pqVat" class="font-semibold text-steel-800 mono">—</span></p>
           <p>Genel toplam <span id="pqGrand" class="font-semibold text-navy mono">—</span></p>
         </div>
-        <button type="button" id="pqPreview" class="bg-white border border-steel-200 hover:border-navy/30 text-steel-800 text-sm font-semibold px-4 py-2.5 rounded-xl">Müşteri önizlemesi</button>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="pqSave" class="bg-white border border-steel-200 hover:border-navy/30 text-steel-800 text-sm font-semibold px-4 py-2.5 rounded-xl">Teklifi kaydet</button>
+          <button type="button" id="pqOrder" class="bg-navy hover:bg-navy-light text-white text-sm font-semibold px-4 py-2.5 rounded-xl">Siparişe dönüştür</button>
+          <button type="button" id="pqPreview" class="bg-white border border-steel-200 hover:border-navy/30 text-steel-800 text-sm font-semibold px-4 py-2.5 rounded-xl">Müşteri önizlemesi</button>
+        </div>
       </div>
     </section>`;
   }
@@ -277,13 +283,32 @@
       state.lines.splice(Number(btn.dataset.pqDel), 1);
       paint(mount);
     });
-    mount.querySelector('#pqPreview')?.addEventListener('click', () => {
+    function draftOrWarn() {
       if (!state.lines.length) {
         if (typeof root.showToast === 'function') root.showToast('Önce kalem ekleyin.', 'error');
-        return;
+        return null;
       }
-      if (typeof root.openQuotePreview !== 'function') return;
-      const draft = buildDraft();
+      if (!state.customer) {
+        if (typeof root.showToast === 'function') root.showToast('Müşteri seçin.', 'error');
+        return null;
+      }
+      return buildDraft();
+    }
+    mount.querySelector('#pqSave')?.addEventListener('click', () => {
+      const draft = draftOrWarn();
+      if (!draft || typeof root.saveSeriesQuote !== 'function') return;
+      root.saveSeriesQuote(draft, { asOrder: false });
+      resetLines();
+    });
+    mount.querySelector('#pqOrder')?.addEventListener('click', () => {
+      const draft = draftOrWarn();
+      if (!draft || typeof root.saveSeriesQuote !== 'function') return;
+      root.saveSeriesQuote(draft, { asOrder: true });
+      resetLines();
+    });
+    mount.querySelector('#pqPreview')?.addEventListener('click', () => {
+      const draft = draftOrWarn();
+      if (!draft || typeof root.openQuotePreview !== 'function') return;
       root.openQuotePreview(draft);
     });
   }
@@ -309,5 +334,11 @@
     paint(mount);
   }
 
-  root.BtdPriceQuote = { render, buildDraft };
+  function resetLines() {
+    state.lines = [];
+    const mount = document.getElementById('priceQuoteMount');
+    if (mount) paint(mount);
+  }
+
+  root.BtdPriceQuote = { render, buildDraft, resetLines };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -1094,7 +1094,9 @@
         adet: it.qty ?? 1,
         birim_fiyat: it.unitPrice ?? 0,
         iskonto_pct: it.discountPct ?? 0,
-        not_metni: it.note || null,
+        not_metni: it.unit
+          ? (it.note ? `birim:${it.unit}\n${it.note}` : `birim:${it.unit}`)
+          : (it.note || null),
       }));
       if (items.length) {
         const { error } = await client.from('teklif_kalemleri').insert(items);
@@ -1161,13 +1163,19 @@
       quoteBankMode: r.banka_mod || null,
       items: (r.teklif_kalemleri || [])
         .sort((a, b) => (a.sira || 0) - (b.sira || 0))
-        .map((it) => ({
-          partNo: it.parca_no || '',
-          desc: it.aciklama || '',
-          qty: Number(it.adet) || 1,
-          unitPrice: Number(it.birim_fiyat) || 0,
-          discountPct: Number(it.iskonto_pct) || 0,
-        })),
+        .map((it) => {
+          const noteRaw = it.not_metni || '';
+          const unitMatch = String(noteRaw).match(/^birim:([^\n]*)\n?([\s\S]*)$/);
+          return {
+            partNo: it.parca_no || '',
+            desc: it.aciklama || '',
+            unit: unitMatch ? unitMatch[1] : '',
+            qty: Number(it.adet) || 1,
+            unitPrice: Number(it.birim_fiyat) || 0,
+            discountPct: Number(it.iskonto_pct) || 0,
+            note: unitMatch ? (unitMatch[2] || '') : noteRaw,
+          };
+        }),
     })));
   }
 
@@ -1233,32 +1241,42 @@
         o.dbId = dbId;
       }
       await client.from('siparis_kalemleri').delete().eq('siparis_id', dbId);
-      const itemsFull = (o.items || []).map((it, i) => ({
-        siparis_id: dbId,
-        sira: i + 1,
-        parca_no: it.partNo || null,
-        aciklama: it.desc || null,
-        adet: it.qty ?? 1,
-        birim_fiyat: it.unitPrice ?? 0,
-        iskonto_pct: it.discountPct ?? 0,
-        ek_gider: it.extraCost ?? 0,
-        teknik_resim: it.techDrawing || null,
-        qr_anahtar: it.qrKey || null,
-        urun_id: it.productDbId || null,
-      }));
+      const itemsFull = (o.items || []).map((it, i) => {
+        const note = it.unit
+          ? (it.note ? `birim:${it.unit}\n${it.note}` : `birim:${it.unit}`)
+          : (it.note || null);
+        return {
+          siparis_id: dbId,
+          sira: i + 1,
+          parca_no: it.partNo || null,
+          aciklama: it.desc || null,
+          adet: it.qty ?? 1,
+          birim_fiyat: it.unitPrice ?? 0,
+          iskonto_pct: it.discountPct ?? 0,
+          ek_gider: it.extraCost ?? 0,
+          not_metni: note,
+          teknik_resim: it.techDrawing || null,
+          qr_anahtar: it.qrKey || null,
+          urun_id: it.productDbId || null,
+        };
+      });
       if (itemsFull.length) {
         let payload = itemsFull;
-        let { error } = await client.from('siparis_kalemleri').insert(payload);
-        if (error && /urun_id|teknik_resim|qr_anahtar/i.test(error.message || '')) {
+        let error = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          ({ error } = await client.from('siparis_kalemleri').insert(payload));
+          if (!error) break;
           const msg = error.message || '';
-          payload = itemsFull.map((it) => {
-            const copy = { ...it };
-            if (/urun_id/i.test(msg)) delete copy.urun_id;
-            if (/teknik_resim/i.test(msg)) delete copy.teknik_resim;
-            if (/qr_anahtar/i.test(msg)) delete copy.qr_anahtar;
+          if (!/schema cache|column|Could not find/i.test(msg)) break;
+          const missing = [...msg.matchAll(/'([A-Za-z0-9_]+)'/g)].map((m) => m[1]);
+          if (!missing.length) break;
+          const next = payload.map((row) => {
+            const copy = { ...row };
+            missing.forEach((key) => { if (key in copy) delete copy[key]; });
             return copy;
           });
-          ({ error } = await client.from('siparis_kalemleri').insert(payload));
+          if (JSON.stringify(next) === JSON.stringify(payload)) break;
+          payload = next;
         }
         if (error) throw error;
       }
@@ -1309,13 +1327,17 @@
           .sort((a, b) => (a.sira || 0) - (b.sira || 0))
           .map((it) => {
             const prod = (ctx.products || []).find((p) => p.dbId && p.dbId === it.urun_id);
+            const noteRaw = it.not_metni || '';
+            const unitMatch = String(noteRaw).match(/^birim:([^\n]*)\n?([\s\S]*)$/);
             return {
               partNo: it.parca_no || '',
               desc: it.aciklama || '',
+              unit: unitMatch ? unitMatch[1] : '',
               qty: Number(it.adet) || 1,
               unitPrice: Number(it.birim_fiyat) || 0,
               discountPct: Number(it.iskonto_pct) || 0,
               extraCost: Number(it.ek_gider) || 0,
+              note: unitMatch ? (unitMatch[2] || '') : noteRaw,
               techDrawing: it.teknik_resim || '',
               qrKey: it.qr_anahtar || '',
               productDbId: it.urun_id || null,
@@ -1484,6 +1506,75 @@
         });
       }
     });
+  }
+
+  const TASK_STATUSES = new Set(['Açık', 'Devam', 'Bitti', 'İptal']);
+
+  async function saveTask(task, companies) {
+    try {
+      const client = sb();
+      if (!client || !task) return fail('no-client', 'saveTask');
+      const fid = firmaId(companies, task.company);
+      if (!fid) return fail('firma_id yok', 'saveTask');
+      const durum = TASK_STATUSES.has(task.status) ? task.status : 'Açık';
+      const row = {
+        firma_id: fid,
+        kod: task.id,
+        baslik: task.title || 'Görev',
+        aciklama: task.note || null,
+        atanan: task.assignee || null,
+        termin: task.due || null,
+        durum,
+      };
+      if (task.dbId) {
+        const { error } = await client.from('gorevler').update(row).eq('id', task.dbId);
+        if (error) throw error;
+        return ok({ dbId: task.dbId });
+      }
+      const { data, error } = await client
+        .from('gorevler')
+        .upsert(row, { onConflict: 'firma_id,kod' })
+        .select('id')
+        .single();
+      if (error) throw error;
+      task.dbId = data.id;
+      return ok({ dbId: data.id });
+    } catch (e) { return fail(e, 'saveTask'); }
+  }
+
+  async function deleteTask(task) {
+    try {
+      const client = sb();
+      if (!client || !task?.dbId) return fail('no-id', 'deleteTask');
+      const { error } = await client.from('gorevler').delete().eq('id', task.dbId);
+      if (error) throw error;
+      return ok();
+    } catch (e) { return fail(e, 'deleteTask'); }
+  }
+
+  async function hydrateTasks(ctx) {
+    const client = sb();
+    if (!client || !ctx.tasks) return;
+    const n = await countTable(client, 'gorevler');
+    if (!n) {
+      if (ctx.tasks.length) {
+        progress(ctx, `Görev seed (${ctx.tasks.length})…`);
+        for (const task of ctx.tasks) await saveTask(task, ctx.companies);
+      }
+      return;
+    }
+    progress(ctx, 'Görevler hydrate…');
+    const rows = await selectAll(client, 'gorevler', '*');
+    replaceArray(ctx.tasks, rows.map((r) => ({
+      dbId: r.id,
+      id: r.kod || r.id,
+      company: companyNameById(ctx.companies, r.firma_id) || '',
+      title: r.baslik || '',
+      note: r.aciklama || '',
+      assignee: r.atanan || '',
+      due: r.termin || '',
+      status: r.durum || 'Açık',
+    })));
   }
 
   // ─── Procurement / RFQ / Reproc / Unforeseen ────────────────────────────────
@@ -2463,6 +2554,7 @@
       ['teklifler', () => hydrateQuotes(ctx)],
       ['siparişler', () => hydrateOrders(ctx)],
       ['iş emirleri', () => hydrateWorkOrders(ctx)],
+      ['görevler', () => hydrateTasks(ctx)],
       ['tedarik', () => hydrateProcurement(ctx)],
       ['rfq', () => hydrateMaterialRfqs(ctx)],
       ['yeniden/beklenmeyen', () => hydrateReprocUnforeseen(ctx)],
@@ -2505,6 +2597,8 @@
     deleteQuote,
     saveOrder,
     saveWorkOrder,
+    saveTask,
+    deleteTask,
     saveProcurementItem,
     saveMaterialRfq,
     saveReproc,
