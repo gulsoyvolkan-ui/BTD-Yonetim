@@ -75,6 +75,13 @@
     if (error) throw error;
     return count || 0;
   }
+  // supabase/011_marka.sql uygulanmadan marka kolonu yoktur; belge markasız yine kaydolur.
+  async function retryWithoutMarka(run, row) {
+    const res = await run(row);
+    if (!res.error || !('marka' in row) || !/marka/i.test(res.error.message || '')) return res;
+    const { marka, ...rest } = row;
+    return run(rest);
+  }
   async function selectAll(client, table, select, orderCol) {
     let q = client.from(table).select(select || '*');
     if (orderCol) q = q.order(orderCol);
@@ -1070,17 +1077,18 @@
         gonderim_eposta: !!(q.sentChannels?.email),
         gonderim_whatsapp: !!(q.sentChannels?.whatsapp),
         banka_mod: q.quoteBankMode || null,
+        marka: q.brand || null,
       };
       let dbId = q.dbId;
       if (dbId) {
-        const { error } = await client.from('teklifler').update(row).eq('id', dbId);
+        const { error } = await retryWithoutMarka((r) => client.from('teklifler').update(r).eq('id', dbId), row);
         if (error) throw error;
       } else {
-        const { data, error } = await client
+        const { data, error } = await retryWithoutMarka((r) => client
           .from('teklifler')
-          .upsert(row, { onConflict: 'firma_id,belge_no' })
+          .upsert(r, { onConflict: 'firma_id,belge_no' })
           .select('id')
-          .single();
+          .single(), row);
         if (error) throw error;
         dbId = data.id;
         q.dbId = dbId;
@@ -1161,6 +1169,7 @@
       qrPayload: r.qr_payload || null,
       sentChannels: { email: !!r.gonderim_eposta, whatsapp: !!r.gonderim_whatsapp },
       quoteBankMode: r.banka_mod || null,
+      brand: r.marka || '',
       items: (r.teklif_kalemleri || [])
         .sort((a, b) => (a.sira || 0) - (b.sira || 0))
         .map((it) => {
@@ -1375,18 +1384,19 @@
         teklif_id: teklifId || null,
         qr_payload: wo.qrPayload || null,
         tedarikten: !!wo.fromProcurement,
+        marka: wo.brand || null,
       };
       let dbId = wo.dbId;
       if (dbId) {
-        const { error } = await client.from('is_emirleri').update(row).eq('id', dbId);
+        const { error } = await retryWithoutMarka((r) => client.from('is_emirleri').update(r).eq('id', dbId), row);
         if (error) throw error;
         await client.from('is_emri_parcalari').delete().eq('is_emri_id', dbId);
       } else {
-        const { data, error } = await client
+        const { data, error } = await retryWithoutMarka((r) => client
           .from('is_emirleri')
-          .upsert(row, { onConflict: 'firma_id,belge_no' })
+          .upsert(r, { onConflict: 'firma_id,belge_no' })
           .select('id')
-          .single();
+          .single(), row);
         if (error) throw error;
         dbId = data.id;
         wo.dbId = dbId;
@@ -1465,6 +1475,7 @@
       orderId: r.siparisler?.belge_no || null,
       quoteId: r.teklifler?.belge_no || null,
       qrPayload: r.qr_payload || null,
+      brand: r.marka || '',
       notifyLog: [],
       parts: (r.is_emri_parcalari || [])
         .sort((a, b) => (a.parca_no || 0) - (b.parca_no || 0))

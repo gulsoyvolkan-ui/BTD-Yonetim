@@ -16,6 +16,7 @@
 <script src="js/btd-supabase.js"></script>
 <script src="js/btd-cloud.js"></script>
 <script src="js/btd-prices.js"></script>
+<script src="js/btd-brands.js"></script>
 <script src="js/btd-quote.js"></script>
 <script src="js/btd-load.js"></script>
 <script src="js/btd-tasks.js"></script>
@@ -2634,6 +2635,7 @@
           </div>
           <span class="ml-auto text-[11px] text-steel-400">Üst menüden değiştirilir</span>
         </div>
+        <div id="newWOBrandMount"></div>
 
         <!-- Parça / Müşteri bilgileri -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2968,6 +2970,7 @@
           <p id="newQuoteRef" class="text-sm font-bold text-navy mono">TM-0001-2026</p>
         </div>
       </div>
+      <div id="newQuoteBrandMount"></div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
@@ -3111,6 +3114,7 @@
       <iframe id="quotePreviewFrame" title="Teklif Önizleme" class="w-full h-full bg-white rounded-xl shadow-sm border border-steel-200"></iframe>
     </div>
     <div class="p-4 border-t border-steel-100 flex flex-wrap items-center justify-end gap-2 shrink-0">
+      <div id="quotePreviewBrandMount" class="mr-auto"></div>
       <button id="quotePreviewEditBtn" class="flex items-center gap-1.5 text-sm font-medium text-steel-500 hover:text-steel-700 px-4 py-2.5 rounded-xl transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z"></path></svg>
         Düzenle
@@ -3419,6 +3423,7 @@
       <iframe id="woPreviewFrame" title="İş Emri Önizleme" class="w-full h-full bg-white rounded-xl shadow-sm border border-steel-200"></iframe>
     </div>
     <div class="p-4 border-t border-steel-100 flex items-center justify-end gap-2 shrink-0">
+      <div id="woPreviewBrandMount" class="mr-auto"></div>
       <button id="woPreviewPdfBtn" class="flex items-center gap-1.5 text-sm font-semibold text-steel-600 bg-steel-100 hover:bg-steel-200 px-4 py-2.5 rounded-xl transition-colors">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M12 18v-6"></path><path d="m9 15 3 3 3-3"></path></svg>
         PDF İndir
@@ -5097,6 +5102,10 @@
     openPrintDocument(buildDymoOrderLabelHtml(order, payload), `Etiket · ${order.id}`);
     showToast(`${idxs.length} kalem QR etiketi hazırlandı (her biri benzersiz).`, 'success');
   }
+  function brandPrint(doc, info, linked) {
+    if (window.BtdBrands) return window.BtdBrands.printParts(doc, info, linked);
+    return { name: doc.company, info, scope: '', style: '', logo: `<img src="${new URL(info.logo, window.location.href).href}" alt="${doc.company}" />` };
+  }
   function docLetterheadCss() {
     return `
   .sheet { width: 210mm; max-width: 210mm; margin: 0 auto; padding: 12mm; box-sizing: border-box; min-height: 273mm; display: flex; flex-direction: column; }
@@ -5113,8 +5122,8 @@
   .doc-body { flex: 1 1 auto; }
   .doc-footer { margin-top: auto; padding-top: 8pt; border-top: 0.5pt solid #e2e8f0; text-align: center; font-size: 8pt; color: #64748b; letter-spacing: 0.15pt; }`;
   }
-  function docLetterheadHtml(info, companyName, qrPayload) {
-    const logoHref = new URL(info.logo, window.location.href).href;
+  function docLetterheadHtml(info, companyName, qrPayload, logoHtml) {
+    const logoTag = logoHtml || `<img src="${new URL(info.logo, window.location.href).href}" alt="${companyName}" />`;
     const qrSrc = qrPayload ? qrDataUrl(qrPayload, 3) : '';
     const qrBox = qrSrc
       ? `<div class="logo-box qr-box"><img src="${qrSrc}" alt="QR ${companyName}" /></div>`
@@ -5124,9 +5133,10 @@
     <div class="company-block">
       <p class="brand-name">${companyName}</p>
       <p class="legal-name">${info.legal}</p>
+      ${info.note ? `<p class="brand-note">${info.note}</p>` : ''}
     </div>
     <div class="mark-row">
-      <div class="logo-box"><img src="${logoHref}" alt="${companyName}" /></div>
+      <div class="logo-box">${logoTag}</div>
       ${qrBox}
     </div>
   </div>
@@ -9574,6 +9584,16 @@ ${vadeLine}`;
   const newWOModalOverlay = document.getElementById('newWOModalOverlay');
   let newWOPrefill = null; // Sipariş kaleminden açıldığında { orderId, quoteId } izlenebilirlik bilgisi tutar.
   let newWOTechDrawingDraft = '';
+  const woBrandSel = window.BtdBrands ? window.BtdBrands.selector(document.getElementById('newWOBrandMount')) : null;
+  function inferWOBrand() {
+    woBrandSel?.infer({
+      customer: document.getElementById('newWOCustomer').value,
+      texts: [document.getElementById('newWOPartName').value],
+    });
+  }
+  newWOModalOverlay.addEventListener('input', (e) => {
+    if (e.target.id === 'newWOCustomer' || e.target.id === 'newWOPartName') inferWOBrand();
+  });
 
   function setNewWOTechPreview(dataUrl) {
     newWOTechDrawingDraft = dataUrl || '';
@@ -9627,6 +9647,8 @@ ${vadeLine}`;
       techDrawing: prefill.techDrawing || '',
       itemIdx: prefill.itemIdx != null ? prefill.itemIdx : null,
     } : null;
+    woBrandSel?.reset(company, '', prefill && prefill.quoteId ? quotes.find(q => q.id === prefill.quoteId) : null);
+    inferWOBrand();
     if (prefill && prefill.orderId) {
       showToast(`${prefill.orderId} numaralı siparişten iş emri hazırlanıyor. Lütfen operasyon rotasını seçin.`, 'info');
     }
@@ -9710,6 +9732,7 @@ ${vadeLine}`;
       status: 'Aktif',
       orderId: (newWOPrefill && newWOPrefill.orderId) || null,
       quoteId: (newWOPrefill && newWOPrefill.quoteId) || null,
+      brand: woBrandSel ? woBrandSel.value : '',
       qrPayload: buildTraceUrl('PT', woCompany, partQrKey),
       parts: [{
         no: partNo,
@@ -11223,6 +11246,16 @@ ${vadeLine}`;
   const newQuoteModalOverlay = document.getElementById('newQuoteModalOverlay');
   let quoteItemsDraft = [];
   let quoteModalEditingTarget = null;
+  const quoteBrandSel = window.BtdBrands ? window.BtdBrands.selector(document.getElementById('newQuoteBrandMount')) : null;
+  function inferQuoteBrand() {
+    quoteBrandSel?.infer({
+      customer: document.getElementById('newQuoteCustomer').value,
+      texts: quoteItemsDraft.map(it => `${it.partNo || ''} ${it.desc || ''}`),
+    });
+  }
+  newQuoteModalOverlay.addEventListener('input', (e) => {
+    if (e.target.id === 'newQuoteCustomer' || e.target.closest('#quoteItemsBody')) inferQuoteBrand();
+  });
 
   function renderQuoteItemsList() {
     const tbody = document.getElementById('quoteItemsBody');
@@ -11357,6 +11390,8 @@ ${vadeLine}`;
     quoteItemsDraft = existingQuote ? existingQuote.items.map(it => ({ ...it })) : [{ partNo: '', desc: '', qty: 1, unitPrice: 0 }];
     renderQuoteItemsList();
     fillQuoteBankDeliveryForm(company, existingQuote);
+    quoteBrandSel?.reset(company, existingQuote ? existingQuote.brand : '');
+    inferQuoteBrand();
 
     if (!existingQuote) {
       document.getElementById('newQuoteLeadTime').value = 15;
@@ -11410,6 +11445,7 @@ ${vadeLine}`;
       sentChannels: editing ? (editing.sentChannels || { email: false, whatsapp: false }) : { email: false, whatsapp: false },
       costAnalysisId: editing ? editing.costAnalysisId : null,
       qrPayload: editing ? editing.qrPayload : null,
+      brand: quoteBrandSel ? quoteBrandSel.value : ((editing && editing.brand) || ''),
       ...bankDelivery,
     };
     ensureQuoteQr(quoteData);
@@ -11431,7 +11467,7 @@ ${vadeLine}`;
     const info = companies[quote.company];
     if (!info) return '';
     const qrPayload = ensureQuoteQr(quote);
-    const logoHref = new URL(info.logo, window.location.href).href;
+    const bp = brandPrint(quote, info);
     const qrSrc = qrDataUrl(qrPayload, 3);
     const cust = findCustomerByName(quote.company, quote.customer);
     const contactRec = (() => {
@@ -11550,16 +11586,17 @@ ${vadeLine}`;
 </style>
 </head>
 <body>
-<div class="sheet">
+<div class="sheet ${bp.scope}">${bp.style}
   <div class="head">
-    <div class="logo-hero"><img src="${logoHref}" alt="${escapeHtml(quote.company)}" /></div>
+    <div class="logo-hero">${bp.logo}</div>
     ${qrSrc ? `<div class="qr-box"><img src="${qrSrc}" alt="QR ${escapeHtml(quote.id)}" /></div>` : ''}
   </div>
   <div class="head-rule"></div>
-  <p class="legal-name">${escapeHtml(info.legal)}</p>
+  <p class="legal-name">${escapeHtml(bp.info.legal)}</p>
+  ${bp.info.note ? `<p class="brand-note">${escapeHtml(bp.info.note)}</p>` : ''}
   <p class="firm-meta">
-    ${escapeHtml(info.address)}<br>
-    <strong>${escapeHtml(info.taxOffice)}</strong> · Vergi No: ${escapeHtml(info.taxNo)} · Tel: ${escapeHtml(info.phone)}
+    ${escapeHtml(bp.info.address)}<br>
+    <strong>${escapeHtml(bp.info.taxOffice)}</strong> · Vergi No: ${escapeHtml(bp.info.taxNo)} · Tel: ${escapeHtml(bp.info.phone)}
   </p>
 
   <div class="doc-body">
@@ -11643,7 +11680,7 @@ ${vadeLine}`;
   </div>
 
   <div class="doc-footer">
-    ${escapeHtml(info.website)} &nbsp;·&nbsp; ${escapeHtml(info.email)}
+    ${escapeHtml(bp.info.website)} &nbsp;·&nbsp; ${escapeHtml(bp.info.email)}
   </div>
 </div>
 </body>
@@ -11654,6 +11691,20 @@ ${vadeLine}`;
   const quotePreviewModalOverlay = document.getElementById('quotePreviewModalOverlay');
   const quotePreviewFrame = document.getElementById('quotePreviewFrame');
   let previewingQuote = null;
+  const quotePreviewBrandSel = window.BtdBrands ? window.BtdBrands.selector(document.getElementById('quotePreviewBrandMount'), {
+    compact: true,
+    onChange(key) {
+      if (!previewingQuote) return;
+      if (findOrderForQuote(previewingQuote.id)) {
+        showToast('Sipariş varken teklifi doğrudan düzenleyemezsiniz. Siparişi iptal edin veya siparişten revize edin.', 'error');
+        quotePreviewBrandSel.reset(previewingQuote.company, window.BtdBrands.resolveDoc(previewingQuote)?.key);
+        return;
+      }
+      previewingQuote.brand = key;
+      if (!String(previewingQuote.id || '').includes('ONIZ')) cloudSave('saveQuote', previewingQuote, companies);
+      quotePreviewFrame.srcdoc = buildQuoteHtml(previewingQuote);
+    },
+  }) : null;
 
   function quoteSentChannels(quote) {
     return (quote && quote.sentChannels) || { email: false, whatsapp: false };
@@ -11696,6 +11747,7 @@ ${vadeLine}`;
   function openQuotePreview(quote) {
     previewingQuote = quote;
     document.getElementById('quotePreviewTitle').textContent = `${quote.id} · ${quote.customer}`;
+    quotePreviewBrandSel?.reset(quote.company, window.BtdBrands.resolveDoc(quote)?.key);
     quotePreviewFrame.srcdoc = buildQuoteHtml(quote);
     refreshQuoteSendButtons();
     quotePreviewModalOverlay.classList.remove('hidden');
@@ -13108,6 +13160,15 @@ ${vadeLine}`;
   let previewingWO = null;
   const woPreviewModalOverlay = document.getElementById('woPreviewModalOverlay');
   const woPreviewFrame = document.getElementById('woPreviewFrame');
+  const woPreviewBrandSel = window.BtdBrands ? window.BtdBrands.selector(document.getElementById('woPreviewBrandMount'), {
+    compact: true,
+    onChange(key) {
+      if (!previewingWO || previewingWO._batch) return;
+      previewingWO.brand = key;
+      cloudSave('saveWorkOrder', previewingWO, companies);
+      woPreviewFrame.srcdoc = buildWorkOrderHtml(previewingWO);
+    },
+  }) : null;
 
   function buildWorkOrderHtml(wo) {
     const info = companies[wo.company];
@@ -13115,6 +13176,7 @@ ${vadeLine}`;
     const linkedQuote = wo.quoteId ? quotes.find(q => q.id === wo.quoteId) : null;
     const qrPayload = wo.qrPayload || (linkedQuote ? ensureQuoteQr(linkedQuote) : buildTraceUrl('WO', wo.company, wo.id));
     if (!wo.qrPayload) wo.qrPayload = qrPayload;
+    const bp = brandPrint(wo, info, linkedQuote);
     const partsHtml = wo.parts.map(part => {
       const steps = part.cam.map((s, i) => {
         const state = i < part.activeCam ? 'Tamam' : (i === part.activeCam ? 'Aktif' : 'Bekliyor');
@@ -13196,8 +13258,8 @@ ${vadeLine}`;
 </style>
 </head>
 <body>
-<div class="sheet">
-  ${docLetterheadHtml(info, wo.company, qrPayload)}
+<div class="sheet ${bp.scope}">${bp.style}
+  ${docLetterheadHtml(bp.info, bp.name, qrPayload, bp.logo)}
   <div class="doc-body">
   <div class="title-row">
     <h1>İŞ EMRİ FİŞİ</h1>
@@ -13221,7 +13283,7 @@ ${vadeLine}`;
     <div class="sign-col"><p class="label">Kalite Kontrol</p><p class="line">İmza / Tarih</p></div>
   </div>
   </div>
-  ${docFooterHtml(info)}
+  ${docFooterHtml(bp.info)}
 </div>
 </body>
 </html>`;
@@ -13244,6 +13306,7 @@ ${vadeLine}`;
     if (!wo || !wo.id) { showToast('İş emri seçilemedi.', 'error'); return; }
     previewingWO = wo;
     document.getElementById('woPreviewTitle').textContent = `${wo.id} · ${wo.customer || ''}`;
+    woPreviewBrandSel?.reset(wo.company, window.BtdBrands.resolveDoc(wo, wo.quoteId ? quotes.find(q => q.id === wo.quoteId) : null)?.key);
     const html = buildWorkOrderHtml(wo);
     woPreviewFrame.onload = null;
     woPreviewFrame.srcdoc = html;
@@ -13253,6 +13316,7 @@ ${vadeLine}`;
     const list = companyActiveWorkOrders();
     if (!list.length) { showToast('Aktif iş emri yok.', 'info'); return; }
     previewingWO = { id: 'TOPLU', customer: `${list.length} iş emri`, _batch: list };
+    woPreviewBrandSel?.reset('');
     document.getElementById('woPreviewTitle').textContent = `Toplu çıktı · ${list.length} iş emri`;
     woPreviewFrame.srcdoc = buildBatchWorkOrdersHtml(list);
     woPreviewModalOverlay.classList.remove('hidden');
