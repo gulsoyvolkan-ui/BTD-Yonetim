@@ -1,0 +1,280 @@
+/* BTD Andon TV — MES Core navy/steel dili, 32" Full HD */
+:root {
+  --pad: clamp(8px, 1.1vh, 14px);
+  --gap: clamp(6px, 0.9vh, 12px);
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #f5f7f9;
+  color: #282e33;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+.shell {
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: var(--gap);
+  padding: var(--pad);
+  background:
+    radial-gradient(900px 400px at 0% 0%, rgba(13, 71, 161, 0.07), transparent 55%),
+    #f5f7f9;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #0d47a1;
+  color: #fff;
+  border-radius: 14px;
+  padding: 10px 16px;
+  box-shadow: 0 10px 30px -10px rgba(13, 71, 161, 0.35);
+}
+.brand-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+.brand-title {
+  margin: 2px 0 0;
+  font-size: clamp(20px, 2.8vh, 30px);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.brand-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  opacity: 0.8;
+}
+.clock-block { text-align: right; }
+.clock {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(28px, 4.2vh, 44px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.clock-meta {
+  margin-top: 4px;
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.nav-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #d3dae1;
+  color: #4f5a63;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.nav-chip:hover { border-color: #0d47a1; color: #0d47a1; }
+.nav-chip-on {
+  background: #0d47a1;
+  border-color: #0d47a1;
+  color: #fff;
+}
+
+.main {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--gap);
+  flex-shrink: 0;
+}
+.kpi-card {
+  background: #fff;
+  border: 1px solid #d3dae1;
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.kpi-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: #8a97a3;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.kpi-val {
+  margin: 4px 0 0;
+  font-size: clamp(26px, 3.6vh, 36px);
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1;
+}
+
+.section-head { flex-shrink: 0; }
+.section-title {
+  margin: 0;
+  font-size: clamp(16px, 2vh, 20px);
+  font-weight: 800;
+  color: #282e33;
+}
+.section-sub {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #8a97a3;
+}
+
+.machine-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), 1fr);
+  gap: var(--gap);
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.machine-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.machine-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+/* Kart boyutu S / M / L — Andon ayarlarından */
+.shell[data-card-size="s"] .machine-card { padding: 8px 10px; border-radius: 10px; }
+.shell[data-card-size="s"] .name-val { font-size: 14px !important; }
+.shell[data-card-size="s"] .wo-val { font-size: 16px !important; }
+.shell[data-card-size="s"] .part-val { font-size: 13px !important; }
+.shell[data-card-size="s"] .pct-val { font-size: 18px !important; }
+
+.shell[data-card-size="l"] .machine-card { padding: 16px 18px; }
+.shell[data-card-size="l"] .name-val { font-size: 22px !important; }
+.shell[data-card-size="l"] .wo-val { font-size: 28px !important; }
+.shell[data-card-size="l"] .part-val { font-size: 18px !important; }
+.shell[data-card-size="l"] .pct-val { font-size: 32px !important; }
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--gap);
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.overview-card {
+  background: #fff;
+  border: 1px solid #d3dae1;
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-decoration: none;
+  color: inherit;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.overview-card:hover {
+  border-color: rgba(13, 71, 161, 0.45);
+  box-shadow: 0 10px 30px -14px rgba(13, 71, 161, 0.35);
+}
+.mini-kpi {
+  background: #f5f7f9;
+  border-radius: 10px;
+  padding: 6px 8px;
+  text-align: center;
+}
+.mini-kpi span {
+  display: block;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+.mini-kpi small {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a97a3;
+  text-transform: uppercase;
+}
+
+.table-wrap {
+  background: #fff;
+  border: 1px solid #d3dae1;
+  border-radius: 14px;
+  overflow: hidden;
+  flex-shrink: 0;
+  max-height: 28vh;
+  overflow-y: auto;
+}
+.andon-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.andon-table th {
+  text-align: left;
+  background: #f5f7f9;
+  color: #8a97a3;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e9edf1;
+}
+.andon-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e9edf1;
+  color: #3d454c;
+}
+.andon-table tr:last-child td { border-bottom: 0; }
+.empty-panel {
+  background: #fff;
+  border: 1px dashed #d3dae1;
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  color: #8a97a3;
+  font-size: 14px;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(1.25); }
+}
+.pulse-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+.pulse-soft { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+@media (max-width: 1280px) {
+  .overview-grid { grid-template-columns: repeat(3, 1fr); }
+  .machine-grid { grid-template-columns: repeat(2, 1fr); }
+}
