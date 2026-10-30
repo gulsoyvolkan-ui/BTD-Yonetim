@@ -1,5 +1,6 @@
 -- CRM: çift yönlü cari bağlantısı (müşteri ↔ tedarikçi) + Paraşüt / vergi alanları
--- Supabase SQL Editor'de çalıştırın.
+-- 020'den sonra. 009–019 güvenlik dosyalarının yerine geçmez.
+-- demo_all_access yazılmaz. anon rolüne GRANT verilmez.
 
 ALTER TABLE public.tedarikciler
   ADD COLUMN IF NOT EXISTS vergi_no TEXT,

@@ -1,5 +1,6 @@
 -- CRM: Paraşüt / cari bakiye + rol grubu (müşteri / tedarikçi / çift yönlü)
--- Supabase SQL Editor'de çalıştırın (010'dan sonra).
+-- 021'den sonra. 009–019 güvenlik dosyalarının yerine geçmez.
+-- demo_all_access yazılmaz. anon rolüne GRANT verilmez.
 
 ALTER TABLE public.musteriler
   ADD COLUMN IF NOT EXISTS tl_bakiye NUMERIC,

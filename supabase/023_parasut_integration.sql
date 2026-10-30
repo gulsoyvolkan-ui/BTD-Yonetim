@@ -1,6 +1,7 @@
 -- Paraşüt entegrasyon: firma bazlı bağlantı + eşleme tabloları
--- Supabase SQL Editor'de çalıştırın (010/011'den sonra).
+-- 021'den sonra. 009–019 güvenlik dosyalarının yerine geçmez.
 -- client_secret burada TUTULMAZ → Edge Function Secrets / Vault.
+-- demo_all_access yazılmaz. anon rolüne GRANT verilmez.
 
 CREATE TABLE IF NOT EXISTS public.parasut_baglantilar (
   firma_id UUID PRIMARY KEY REFERENCES public.firmalar(id) ON DELETE CASCADE,
@@ -42,3 +43,14 @@ CREATE TABLE IF NOT EXISTS public.parasut_fatura_eslesme (
 
 COMMENT ON TABLE public.parasut_baglantilar IS 'BTD firma ↔ Paraşüt company_id bağlantı durumu (secret yok)';
 COMMENT ON COLUMN public.parasut_baglantilar.durum IS 'bekliyor|hazir|bagli|hata';
+
+-- RLS açık, politika yok: anon okuyamaz. demo_all_access yok.
+ALTER TABLE public.parasut_baglantilar ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parasut_cari_eslesme ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.parasut_fatura_eslesme ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS demo_all_access ON public.parasut_baglantilar;
+DROP POLICY IF EXISTS demo_all_access ON public.parasut_cari_eslesme;
+DROP POLICY IF EXISTS demo_all_access ON public.parasut_fatura_eslesme;
+REVOKE ALL ON TABLE public.parasut_baglantilar FROM PUBLIC, anon;
+REVOKE ALL ON TABLE public.parasut_cari_eslesme FROM PUBLIC, anon;
+REVOKE ALL ON TABLE public.parasut_fatura_eslesme FROM PUBLIC, anon;

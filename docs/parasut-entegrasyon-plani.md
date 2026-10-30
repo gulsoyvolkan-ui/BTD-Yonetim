@@ -159,7 +159,7 @@ Mevcut `musteriler` / `tedarikciler` için opsiyonel:
 
 | Function | İş |
 |----------|-----|
-| `parasut-oauth` | token al / yenile (firma bazlı) |
+| `parasut-oauth` | Bu PR’de yalnız durum sorar. Parola ile token alma kapalı. |
 | `parasut-sync-contacts` | pull/push cariler |
 | `parasut-create-invoice` | siparişten sales_invoice + e-belge başlat |
 | `parasut-invoice-status` | async job poll |

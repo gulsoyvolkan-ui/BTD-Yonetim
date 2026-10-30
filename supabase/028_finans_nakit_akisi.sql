@@ -1,7 +1,8 @@
 -- Finans & Nakit Akışı (çoklu şirket + kişisel)
--- Supabase SQL Editor'de çalıştırın.
 -- Varlıklar: Technomac, Bluemac, Devorias, BTD Core, Kişisel (Volkan)
 -- Mevcut firmalar tablosuna zorunlu bağımlılık yok; isteğe bağlı firma_id eşlemesi vardır.
+-- 009–019 güvenlik dosyalarının yerine geçmez.
+-- demo_all_access yazılmaz. anon rolüne GRANT verilmez.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -231,29 +232,20 @@ WHERE NOT EXISTS (
 );
 
 -- ---------------------------------------------------------------------------
--- 8) RLS (mevcut demo politikası ile uyumlu)
+-- 8) RLS: anon kapalı. demo_all_access yeniden yazılmaz.
+-- Politika yok → anon ve authenticated satır göremez.
+-- Kiracı politikası bu dosyada açılmaz.
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.finans_varliklar ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.finans_kategoriler ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.finans_hareketler ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS demo_all_access ON public.finans_varliklar;
-CREATE POLICY demo_all_access ON public.finans_varliklar
-  FOR ALL TO anon, authenticated
-  USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS demo_all_access ON public.finans_kategoriler;
-CREATE POLICY demo_all_access ON public.finans_kategoriler
-  FOR ALL TO anon, authenticated
-  USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS demo_all_access ON public.finans_hareketler;
-CREATE POLICY demo_all_access ON public.finans_hareketler
-  FOR ALL TO anon, authenticated
-  USING (true) WITH CHECK (true);
 
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.finans_varliklar TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.finans_kategoriler TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.finans_hareketler TO anon, authenticated;
-GRANT SELECT ON public.v_finans_aylik_net TO anon, authenticated;
-GRANT SELECT ON public.v_finans_yaklasan_vadeler TO anon, authenticated;
+REVOKE ALL ON TABLE public.finans_varliklar FROM PUBLIC, anon;
+REVOKE ALL ON TABLE public.finans_kategoriler FROM PUBLIC, anon;
+REVOKE ALL ON TABLE public.finans_hareketler FROM PUBLIC, anon;
+REVOKE ALL ON public.v_finans_aylik_net FROM PUBLIC, anon;
+REVOKE ALL ON public.v_finans_yaklasan_vadeler FROM PUBLIC, anon;

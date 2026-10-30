@@ -8,16 +8,10 @@
 
   const CURRENCY_TO_DB = { '₺': 'TRY', '€': 'EUR', '$': 'USD', '£': 'GBP', TRY: 'TRY', EUR: 'EUR', USD: 'USD', GBP: 'GBP' };
   const CURRENCY_TO_UI = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', '₺': '₺', '€': '€', '$': '$', '£': '£' };
-  const PROTECTED_USERS = new Set(['volkan']); // Canlı: yalnızca ana yönetici korunur
-  const SEED_FLAG = 'btd_cloud_seeded_v1';
+  let bootReadOnly = false;
+  let sensitiveReads = false;
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
-  function alreadySeeded() {
-    try { return localStorage.getItem(SEED_FLAG) === '1'; } catch (_) { return false; }
-  }
-  function markSeeded() {
-    try { localStorage.setItem(SEED_FLAG, '1'); } catch (_) { /* ignore */ }
-  }
   function currencyToDb(sym) {
     if (!sym) return 'EUR';
     return CURRENCY_TO_DB[sym] || CURRENCY_TO_DB[String(sym).toUpperCase()] || String(sym).toUpperCase();
@@ -30,37 +24,54 @@
     if (!companies || !name) return null;
     return companies[name]?.dbId || null;
   }
-  const FIRMA_KOD = { Technomac: 'TM', Bluemac: 'BM', Devorias: 'DV' };
-  /** Firma UUID yoksa Supabase’ten ad/kod ile çözüp companies’e yaz */
-  async function resolveFirmaId(companies, name) {
-    let fid = firmaId(companies, name);
-    if (fid) return fid;
-    const client = sb();
-    if (!client || !name) return null;
-    try {
-      let { data, error } = await client.from('firmalar').select('id').eq('ad', name).maybeSingle();
-      if (error) throw error;
-      if (!data?.id && FIRMA_KOD[name]) {
-        ({ data, error } = await client.from('firmalar').select('id').eq('kod', FIRMA_KOD[name]).maybeSingle());
-        if (error) throw error;
-      }
-      if (data?.id) {
-        if (companies[name]) companies[name].dbId = data.id;
-        else if (companies) companies[name] = { dbId: data.id };
-        return data.id;
-      }
-    } catch (e) {
-      console.warn('[BtdCloud] resolveFirmaId', name, e?.message || e);
-    }
-    return null;
+  function freezeWrites(query) {
+    const blocked = { message: 'boot-write-blocked' };
+    const response = {
+      data: null,
+      error: blocked,
+      select() { return response; },
+      eq() { return response; },
+      single() { return Promise.resolve({ data: null, error: blocked }); },
+      then(resolve, reject) { return Promise.resolve({ data: null, error: blocked }).then(resolve, reject); },
+    };
+    ['insert', 'upsert', 'update', 'delete'].forEach((name) => {
+      query[name] = () => response;
+    });
+    return query;
+  }
+  function wrapReadOnly(client) {
+    return {
+      from(table) {
+        return freezeWrites(client.from(table));
+      },
+      rpc(...args) {
+        return client.rpc(...args);
+      },
+      auth: client.auth,
+    };
   }
   function sb() {
     try {
-      return global.BtdSupabase?.getClient?.() || null;
+      const client = global.BtdSupabase?.getClient?.() || null;
+      if (!client || !bootReadOnly) return client;
+      return wrapReadOnly(client);
     } catch (e) {
       console.warn('[BtdCloud] sb()', e);
       return null;
     }
+  }
+  async function withSession(label, fn) {
+    let allowed = false;
+    try {
+      allowed = !!(global.BtdSupabase && await global.BtdSupabase.hasUserSession());
+    } catch (e) {
+      allowed = false;
+    }
+    if (!allowed) return fail('no-auth-session', label);
+    return fn();
+  }
+  function setSensitiveAccess(flag) {
+    sensitiveReads = !!flag;
   }
   function progress(ctx, msg) {
     try { ctx?.onProgress?.(msg); } catch (_) { /* ignore */ }
@@ -78,79 +89,6 @@
     if (!Array.isArray(target)) return;
     target.length = 0;
     (rows || []).forEach((r) => target.push(r));
-  }
-  /**
-   * Canlı modda bulut hydrate yerel/cache kayıtlarını silmesin.
-   */
-  function hydrateInto(target, rows, keyFn) {
-    if (!Array.isArray(target)) return;
-    const remote = Array.isArray(rows) ? rows : [];
-    if (!alreadySeeded()) {
-      replaceArray(target, remote);
-      return;
-    }
-    if (!remote.length) return;
-    if (!target.length) {
-      replaceArray(target, remote);
-      return;
-    }
-    const kf = typeof keyFn === 'function'
-      ? keyFn
-      : ((x) => (x && (x.id || x.dbId || x.username || x.name || x.sku)) || '');
-    const map = new Map();
-    for (const row of target) {
-      const k = String(kf(row) || '');
-      map.set(k || `__l${map.size}`, row);
-    }
-    for (const row of remote) {
-      const k = String(kf(row) || '');
-      if (!k) {
-        map.set(`__r${map.size}`, row);
-        continue;
-      }
-      const local = map.get(k);
-      if (!local) {
-        map.set(k, row);
-        continue;
-      }
-      map.set(k, Object.assign({}, local, row, {
-        photo: (row.photo != null && row.photo !== '') ? row.photo : local.photo,
-        perms: row.perms || local.perms,
-        shortName: row.shortName || local.shortName,
-        password: row.password || local.password,
-        contacts: (Array.isArray(row.contacts) && row.contacts.length) ? row.contacts : local.contacts,
-        items: (Array.isArray(row.items) && row.items.length) ? row.items : local.items,
-        parts: (Array.isArray(row.parts) && row.parts.length) ? row.parts : local.parts,
-      }));
-    }
-    replaceArray(target, Array.from(map.values()));
-  }
-  /**
-   * İlk seed sonrası boş tabloları tekrar demo veriyle doldurmayı engeller.
-   * Diziyi silmez — yerel/cache kayıtları (yeni eklenen, henüz buluta yazılamayan) korunur.
-   */
-  function blockReseed(/* arr */) {
-    return alreadySeeded();
-  }
-  async function deleteBelgeRow(table, entity, companies, label) {
-    try {
-      const client = sb();
-      if (!client || !entity) return fail('no-client', label);
-      if (entity.dbId) {
-        const { error } = await client.from(table).delete().eq('id', entity.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      const fid = firmaId(companies, entity.company);
-      if (fid && entity.id) {
-        const { error } = await client.from(table).delete().eq('firma_id', fid).eq('belge_no', entity.id);
-        if (error) throw error;
-        return ok();
-      }
-      return fail('no-id', label);
-    } catch (e) {
-      return fail(e, label);
-    }
   }
   function assignObject(target, src) {
     if (!target || !src || typeof target !== 'object') return;
@@ -178,6 +116,13 @@
     const { count, error } = await client.from(table).select('id', { count: 'exact', head: true });
     if (error) throw error;
     return count || 0;
+  }
+  // supabase/011_marka.sql uygulanmadan marka kolonu yoktur; belge markasız yine kaydolur.
+  async function retryWithoutMarka(run, row) {
+    const res = await run(row);
+    if (!res.error || !('marka' in row) || !/marka/i.test(res.error.message || '')) return res;
+    const { marka, ...rest } = row;
+    return run(rest);
   }
   async function selectAll(client, table, select, orderCol) {
     let q = client.from(table).select(select || '*');
@@ -215,7 +160,6 @@
     return {
       firma_id: fid,
       unvan: c.name,
-      kisa_ad: c.shortName || null,
       adres: c.address || null,
       telefon: c.phone || null,
       vergi_no: c.taxNo || null,
@@ -227,12 +171,6 @@
       teklif_kosullari: c.quoteTerms || null,
       notify_whatsapp: !!(c.notifyPrefs?.whatsapp ?? true),
       notify_eposta: !!(c.notifyPrefs?.email ?? true),
-      party_key: c.partyKey || null,
-      intercompany: !!c.intercompany,
-      kaynak: c.source || null,
-      linked_tedarikci_id: c.linkedSupplierDbId || null,
-      tl_bakiye: c.tlBalance == null || c.tlBalance === '' ? null : Number(c.tlBalance),
-      cari_rol: c.cariRole || null,
     };
   }
   function customerFromRow(r, companies) {
@@ -240,7 +178,6 @@
       dbId: r.id,
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
-      shortName: r.kisa_ad || '',
       address: r.adres || '',
       phone: r.telefon || '',
       taxNo: r.vergi_no || '',
@@ -251,12 +188,6 @@
       manufacturingType: r.imalat_tipi || 'Malzemeli',
       quoteTerms: r.teklif_kosullari || '',
       notifyPrefs: { whatsapp: !!r.notify_whatsapp, email: !!r.notify_eposta },
-      partyKey: r.party_key || '',
-      intercompany: !!r.intercompany,
-      source: r.kaynak || '',
-      linkedSupplierDbId: r.linked_tedarikci_id || null,
-      tlBalance: r.tl_bakiye == null ? null : Number(r.tl_bakiye),
-      cariRole: r.cari_rol || '',
       contacts: (r.musteri_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -270,80 +201,23 @@
       }),
     };
   }
-  function stripOptionalCrmCols(row) {
-    const next = { ...row };
-    delete next.cari_rol;
-    delete next.tl_bakiye;
-    delete next.kaynak;
-    delete next.party_key;
-    delete next.intercompany;
-    delete next.linked_tedarikci_id;
-    delete next.linked_musteri_id;
-    delete next.kisa_ad;
-    return next;
-  }
-  function missingColumnFromError(msg) {
-    const s = String(msg || '');
-    const m = s.match(/Could not find the '([^']+)' column/i)
-      || s.match(/column ["'`]?([a-z_][a-z0-9_]*)["'`]?/i);
-    return m ? m[1] : null;
-  }
-  /** Eksik kolonlarda (şema güncellenmemiş) satırı incelterek tekrar dener */
-  async function upsertCrmRow(client, table, row, onConflict) {
-    let attempt = { ...row };
-    let lastErr = null;
-    for (let i = 0; i < 10; i++) {
-      const { data, error } = await client.from(table).upsert(attempt, { onConflict }).select('id').single();
-      if (!error) return { data, error: null };
-      lastErr = error;
-      if (!/column|schema cache|does not exist/i.test(error.message || '')) {
-        return { data, error };
-      }
-      const col = missingColumnFromError(error.message);
-      if (col && Object.prototype.hasOwnProperty.call(attempt, col)) {
-        delete attempt[col];
-        continue;
-      }
-      const slim = stripOptionalCrmCols(attempt);
-      if (Object.keys(slim).length >= Object.keys(attempt).length) break;
-      attempt = slim;
-    }
-    return { data: null, error: lastErr };
-  }
-  async function updateCrmRow(client, table, row, dbId) {
-    let attempt = { ...row };
-    let lastErr = null;
-    for (let i = 0; i < 10; i++) {
-      const { error } = await client.from(table).update(attempt).eq('id', dbId);
-      if (!error) return { error: null };
-      lastErr = error;
-      if (!/column|schema cache|does not exist/i.test(error.message || '')) {
-        return { error };
-      }
-      const col = missingColumnFromError(error.message);
-      if (col && Object.prototype.hasOwnProperty.call(attempt, col)) {
-        delete attempt[col];
-        continue;
-      }
-      const slim = stripOptionalCrmCols(attempt);
-      if (Object.keys(slim).length >= Object.keys(attempt).length) break;
-      attempt = slim;
-    }
-    return { error: lastErr };
-  }
   async function saveCustomer(c, companies) {
     try {
       const client = sb();
       if (!client || !c) return fail('no-client', 'saveCustomer');
-      const fid = (await resolveFirmaId(companies, c.company)) || firmaId(companies, c.company);
+      const fid = firmaId(companies, c.company);
       if (!fid) return fail('firma_id yok', 'saveCustomer');
       const row = customerToRow(c, fid);
       let dbId = c.dbId;
       if (dbId) {
-        const { error } = await updateCrmRow(client, 'musteriler', row, dbId);
+        const { error } = await client.from('musteriler').update(row).eq('id', dbId);
         if (error) throw error;
       } else {
-        const { data, error } = await upsertCrmRow(client, 'musteriler', row, 'firma_id,unvan');
+        const { data, error } = await client
+          .from('musteriler')
+          .upsert(row, { onConflict: 'firma_id,unvan' })
+          .select('id')
+          .single();
         if (error) throw error;
         dbId = data.id;
         c.dbId = dbId;
@@ -370,22 +244,13 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveCustomer'); }
   }
-  async function deleteCustomer(c, companies) {
+  async function deleteCustomer(c) {
     try {
       const client = sb();
-      if (!client || !c) return fail('no-client', 'deleteCustomer');
-      if (c.dbId) {
-        const { error } = await client.from('musteriler').delete().eq('id', c.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      const fid = (await resolveFirmaId(companies, c.company)) || firmaId(companies, c.company);
-      if (fid && c.name) {
-        const { error } = await client.from('musteriler').delete().eq('firma_id', fid).eq('unvan', c.name);
-        if (error) throw error;
-        return ok();
-      }
-      return ok({ localOnly: true });
+      if (!client || !c?.dbId) return fail('no-id', 'deleteCustomer');
+      const { error } = await client.from('musteriler').delete().eq('id', c.dbId);
+      if (error) throw error;
+      return ok();
     } catch (e) { return fail(e, 'deleteCustomer'); }
   }
   async function hydrateCustomers(ctx) {
@@ -393,7 +258,6 @@
     if (!client || !ctx.customers) return;
     const n = await countTable(client, 'musteriler');
     if (!n) {
-      if (blockReseed(ctx.customers)) return;
       if (ctx.customers.length) {
         progress(ctx, `Müşteriler seed (${ctx.customers.length})…`);
         for (const c of ctx.customers) await saveCustomer(c, ctx.companies);
@@ -402,7 +266,170 @@
     }
     progress(ctx, 'Müşteriler hydrate…');
     const rows = await selectAll(client, 'musteriler', '*, musteri_kisiler(*)');
-    hydrateInto(ctx.customers, rows.map((r) => customerFromRow(r, ctx.companies)));
+    replaceArray(ctx.customers, rows.map((r) => customerFromRow(r, ctx.companies)));
+  }
+
+  // ─── Ürün kartı (urunler) ──────────────────────────────────────────────────
+  function productToRow(p, fid) {
+    return {
+      firma_id: fid,
+      kod: p.code,
+      ad: p.name,
+      birim: p.unit || 'adet',
+      birim_fiyat: Number(p.unitPrice) || 0,
+      para_birimi: currencyToDb(p.currency),
+      aciklama: p.note || null,
+      aktif: p.active !== false,
+    };
+  }
+  function productFromRow(r, companies) {
+    return {
+      dbId: r.id,
+      id: r.kod ? `UR-${r.kod}` : r.id,
+      company: companyNameById(companies, r.firma_id) || '',
+      code: r.kod,
+      name: r.ad,
+      unit: r.birim || 'adet',
+      unitPrice: Number(r.birim_fiyat) || 0,
+      currency: currencyToUi(r.para_birimi),
+      note: r.aciklama || '',
+      active: r.aktif !== false,
+    };
+  }
+  async function saveProduct(p, companies) {
+    try {
+      const client = sb();
+      if (!client || !p) return fail('no-client', 'saveProduct');
+      const fid = firmaId(companies, p.company);
+      if (!fid) return fail('firma_id yok', 'saveProduct');
+      const row = productToRow(p, fid);
+      let dbId = p.dbId;
+      if (dbId) {
+        const { error } = await client.from('urunler').update(row).eq('id', dbId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await client
+          .from('urunler')
+          .upsert(row, { onConflict: 'firma_id,kod' })
+          .select('id')
+          .single();
+        if (error) throw error;
+        dbId = data.id;
+        p.dbId = dbId;
+      }
+      return ok({ dbId });
+    } catch (e) { return fail(e, 'saveProduct'); }
+  }
+  async function deleteProduct(p) {
+    try {
+      const client = sb();
+      if (!client || !p?.dbId) return fail('no-id', 'deleteProduct');
+      const { error } = await client.from('urunler').delete().eq('id', p.dbId);
+      if (error) throw error;
+      return ok();
+    } catch (e) { return fail(e, 'deleteProduct'); }
+  }
+  async function hydrateProducts(ctx) {
+    const client = sb();
+    if (!client || !ctx.products) return;
+    const n = await countTable(client, 'urunler');
+    if (!n) {
+      if (ctx.products.length) {
+        progress(ctx, `Ürünler seed (${ctx.products.length})…`);
+        for (const p of ctx.products) await saveProduct(p, ctx.companies);
+      }
+      return;
+    }
+    progress(ctx, 'Ürünler hydrate…');
+    const rows = await selectAll(client, 'urunler', '*', 'kod');
+    const mapped = rows.map((r) => productFromRow(r, ctx.companies));
+    mapped.forEach((p) => {
+      const local = ctx.products.find((x) => x.company === p.company && x.code === p.code);
+      if (local?.id) p.id = local.id;
+    });
+    replaceArray(ctx.products, mapped);
+  }
+
+  // ─── Fasoncu ana listesi ───────────────────────────────────────────────────
+  function subconToRow(s, fid) {
+    return {
+      firma_id: fid,
+      unvan: s.name,
+      hizmet: s.service || null,
+      iletisim: s.contact || null,
+      telefon: s.phone || null,
+      whatsapp: s.phone || null,
+      eposta: s.email || null,
+      adres: s.address || null,
+      aktif: s.active !== false,
+    };
+  }
+  function subconFromRow(r, companies) {
+    return {
+      dbId: r.id,
+      id: r.id,
+      company: companyNameById(companies, r.firma_id) || '',
+      name: r.unvan,
+      service: r.hizmet || '',
+      contact: r.iletisim || '',
+      phone: r.telefon || '',
+      email: r.eposta || '',
+      address: r.adres || '',
+      active: r.aktif !== false,
+    };
+  }
+  async function saveSubcontractor(s, companies) {
+    try {
+      const client = sb();
+      if (!client || !s) return fail('no-client', 'saveSubcontractor');
+      const fid = firmaId(companies, s.company);
+      if (!fid) return fail('firma_id yok', 'saveSubcontractor');
+      const row = subconToRow(s, fid);
+      let dbId = s.dbId;
+      if (dbId) {
+        const { error } = await client.from('fasoncular').update(row).eq('id', dbId);
+        if (error) throw error;
+      } else {
+        const { data, error } = await client
+          .from('fasoncular')
+          .upsert(row, { onConflict: 'firma_id,unvan' })
+          .select('id')
+          .single();
+        if (error) throw error;
+        dbId = data.id;
+        s.dbId = dbId;
+      }
+      return ok({ dbId });
+    } catch (e) { return fail(e, 'saveSubcontractor'); }
+  }
+  async function deleteSubcontractor(s) {
+    try {
+      const client = sb();
+      if (!client || !s?.dbId) return fail('no-id', 'deleteSubcontractor');
+      const { error } = await client.from('fasoncular').delete().eq('id', s.dbId);
+      if (error) throw error;
+      return ok();
+    } catch (e) { return fail(e, 'deleteSubcontractor'); }
+  }
+  async function hydrateSubcontractors(ctx) {
+    const client = sb();
+    if (!client || !ctx.subcontractors) return;
+    const n = await countTable(client, 'fasoncular');
+    if (!n) {
+      if (ctx.subcontractors.length) {
+        progress(ctx, `Fasoncular seed (${ctx.subcontractors.length})…`);
+        for (const s of ctx.subcontractors) await saveSubcontractor(s, ctx.companies);
+      }
+      return;
+    }
+    progress(ctx, 'Fasoncular hydrate…');
+    const rows = await selectAll(client, 'fasoncular', '*', 'unvan');
+    const mapped = rows.map((r) => subconFromRow(r, ctx.companies));
+    mapped.forEach((s) => {
+      const local = ctx.subcontractors.find((x) => x.company === s.company && x.name === s.name);
+      if (local?.id) s.id = local.id;
+    });
+    replaceArray(ctx.subcontractors, mapped);
   }
 
   // ─── CRM · Suppliers ───────────────────────────────────────────────────────
@@ -410,7 +437,6 @@
     return {
       firma_id: fid,
       unvan: s.name,
-      kisa_ad: s.shortName || null,
       kategori: s.category || 'Hammadde',
       iletisim: s.contact || null,
       telefon: s.phone || null,
@@ -419,14 +445,6 @@
       adres: s.address || null,
       banka: s.bank || null,
       iban: s.iban || null,
-      vergi_no: s.taxNo || null,
-      vergi_dairesi: s.taxOffice || null,
-      party_key: s.partyKey || null,
-      intercompany: !!s.intercompany,
-      kaynak: s.source || null,
-      linked_musteri_id: s.linkedCustomerDbId || null,
-      tl_bakiye: s.tlBalance == null || s.tlBalance === '' ? null : Number(s.tlBalance),
-      cari_rol: s.cariRole || null,
     };
   }
   function supplierFromRow(r, companies) {
@@ -434,7 +452,6 @@
       dbId: r.id,
       company: companyNameById(companies, r.firma_id) || '',
       name: r.unvan,
-      shortName: r.kisa_ad || '',
       category: r.kategori || 'Hammadde',
       contact: r.iletisim || '',
       phone: r.telefon || '',
@@ -443,25 +460,10 @@
       address: r.adres || '',
       bank: r.banka || '',
       iban: r.iban || '',
-      taxNo: r.vergi_no || '',
-      taxOffice: r.vergi_dairesi || '',
-      partyKey: r.party_key || '',
-      intercompany: !!r.intercompany,
-      source: r.kaynak || '',
-      linkedCustomerDbId: r.linked_musteri_id || null,
-      tlBalance: r.tl_bakiye == null ? null : Number(r.tl_bakiye),
-      cariRole: r.cari_rol || '',
       materialGroups: (r.tedarikci_malzeme_gruplari || [])
         .map((x) => x.malzeme_gruplari?.ad)
         .filter(Boolean),
-      fasonServices: (r.tedarikci_fason_hizmetleri || [])
-        .filter((x) => (x.hizmet_tipi || 'dis') !== 'imalat')
-        .map((x) => x.hizmet_adi)
-        .filter(Boolean),
-      fasonMfgServices: (r.tedarikci_fason_hizmetleri || [])
-        .filter((x) => x.hizmet_tipi === 'imalat')
-        .map((x) => x.hizmet_adi)
-        .filter(Boolean),
+      fasonServices: (r.tedarikci_fason_hizmetleri || []).map((x) => x.hizmet_adi).filter(Boolean),
       contacts: (r.tedarikci_kisiler || []).map((k) => {
         const mobile = k.whatsapp || k.telefon || '';
         return {
@@ -479,16 +481,20 @@
     try {
       const client = sb();
       if (!client || !s) return fail('no-client', 'saveSupplier');
-      const fid = (await resolveFirmaId(companies, s.company)) || firmaId(companies, s.company);
+      const fid = firmaId(companies, s.company);
       if (!fid) return fail('firma_id yok', 'saveSupplier');
       const groups = await ensureMaterialGroups(client, s.materialGroups || []);
       const row = supplierToRow(s, fid);
       let dbId = s.dbId;
       if (dbId) {
-        const { error } = await updateCrmRow(client, 'tedarikciler', row, dbId);
+        const { error } = await client.from('tedarikciler').update(row).eq('id', dbId);
         if (error) throw error;
       } else {
-        const { data, error } = await upsertCrmRow(client, 'tedarikciler', row, 'firma_id,unvan');
+        const { data, error } = await client
+          .from('tedarikciler')
+          .upsert(row, { onConflict: 'firma_id,unvan' })
+          .select('id')
+          .single();
         if (error) throw error;
         dbId = data.id;
         s.dbId = dbId;
@@ -521,34 +527,23 @@
         );
         if (error) throw error;
       }
-      const services = [
-        ...(s.fasonServices || []).filter(Boolean).map((h) => ({ tedarikci_id: dbId, hizmet_adi: h, hizmet_tipi: 'dis' })),
-        ...(s.fasonMfgServices || []).filter(Boolean).map((h) => ({ tedarikci_id: dbId, hizmet_adi: h, hizmet_tipi: 'imalat' })),
-      ];
+      const services = (s.fasonServices || []).filter(Boolean);
       if (services.length) {
-        const { error } = await client.from('tedarikci_fason_hizmetleri').insert(services);
+        const { error } = await client.from('tedarikci_fason_hizmetleri').insert(
+          services.map((h) => ({ tedarikci_id: dbId, hizmet_adi: h }))
+        );
         if (error) throw error;
       }
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveSupplier'); }
   }
-  async function deleteSupplier(s, companies) {
+  async function deleteSupplier(s) {
     try {
       const client = sb();
-      if (!client || !s) return fail('no-client', 'deleteSupplier');
-      if (s.dbId) {
-        const { error } = await client.from('tedarikciler').delete().eq('id', s.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      const fid = (await resolveFirmaId(companies, s.company)) || firmaId(companies, s.company);
-      if (fid && s.name) {
-        const { error } = await client.from('tedarikciler').delete().eq('firma_id', fid).eq('unvan', s.name);
-        if (error) throw error;
-        return ok();
-      }
-      // Bulutta hiç olmamış yerel kayıt — silme başarılı sayılsın
-      return ok({ localOnly: true });
+      if (!client || !s?.dbId) return fail('no-id', 'deleteSupplier');
+      const { error } = await client.from('tedarikciler').delete().eq('id', s.dbId);
+      if (error) throw error;
+      return ok();
     } catch (e) { return fail(e, 'deleteSupplier'); }
   }
   async function hydrateSuppliers(ctx) {
@@ -557,7 +552,6 @@
     await ensureMaterialGroups(client, []);
     const n = await countTable(client, 'tedarikciler');
     if (!n) {
-      if (blockReseed(ctx.suppliers)) return;
       if (ctx.suppliers.length) {
         progress(ctx, `Tedarikçiler seed (${ctx.suppliers.length})…`);
         for (const s of ctx.suppliers) await saveSupplier(s, ctx.companies);
@@ -570,7 +564,7 @@
       'tedarikciler',
       '*, tedarikci_kisiler(*), tedarikci_fason_hizmetleri(*), tedarikci_malzeme_gruplari(malzeme_grup_id, malzeme_gruplari(ad))'
     );
-    hydrateInto(ctx.suppliers, rows.map((r) => supplierFromRow(r, ctx.companies)));
+    replaceArray(ctx.suppliers, rows.map((r) => supplierFromRow(r, ctx.companies)));
   }
 
   async function saveSupplierGroupPriorities(company, prioritiesObj, companies, suppliers) {
@@ -663,9 +657,7 @@
         departman: p.dept || null,
         yaka: collarToDb(p.collar),
         ise_baslama: p.startDate || null,
-        maas: p.salary != null ? Number(p.salary) : null,
         durum: p.status || 'Aktif',
-        tc_no: p.tcNo || null,
         telefon: p.phone || p.whatsapp || null,
         whatsapp: p.whatsapp || p.phone || null,
         eposta: p.email || null,
@@ -677,47 +669,48 @@
       if (p.dbId) {
         const { error } = await client.from('personel').update(row).eq('id', p.dbId);
         if (error) throw error;
+        await writeSensitivePersonnel(client, p);
         return ok({ dbId: p.dbId });
       }
       const { data, error } = await client.from('personel').insert(row).select('id').single();
       if (error) throw error;
       p.dbId = data.id;
+      await writeSensitivePersonnel(client, p);
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'savePersonnel'); }
   }
-  async function deletePersonnel(p, companies) {
+  async function writeSensitivePersonnel(client, p) {
+    if (!sensitiveReads || !p?.dbId || !client?.rpc) return;
     try {
-      const client = sb();
-      if (!client || !p) return fail('no-client', 'deletePersonnel');
-      if (p.dbId) {
-        const { error } = await client.from('personel').delete().eq('id', p.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      const fid = firmaId(companies, p.company);
-      if (fid && p.id) {
-        const { error } = await client.from('personel').delete().eq('firma_id', fid).eq('personel_kodu', p.id);
-        if (error) throw error;
-        return ok();
-      }
-      return fail('no-id', 'deletePersonnel');
-    } catch (e) { return fail(e, 'deletePersonnel'); }
+      const res = await client.rpc('btd_personel_hassas_yaz', {
+        p_id: p.dbId,
+        p_tc: p.tcNo || null,
+        p_maas: p.salary != null ? Number(p.salary) : null,
+      });
+      if (res && res.error) console.warn('[BtdCloud] hassas personel yazılamadı');
+    } catch (e) {
+      console.warn('[BtdCloud] hassas personel yazılamadı');
+    }
   }
   async function hydratePersonnel(ctx) {
     const client = sb();
     if (!client || !ctx.personnel) return;
     const n = await countTable(client, 'personel');
     if (!n) {
-      if (blockReseed(ctx.personnel)) return;
-      if (ctx.personnel.length) {
-        progress(ctx, `Personel seed (${ctx.personnel.length})…`);
-        for (const p of ctx.personnel) await savePersonnel(p, ctx.companies);
-      }
+      progress(ctx, 'Personel tablosu boş — yerel tohum yazılmaz');
       return;
     }
     progress(ctx, 'Personel hydrate…');
-    const rows = await selectAll(client, 'personel', '*');
-    hydrateInto(ctx.personnel, rows.map((r) => {
+    const full = global.BtdAuth?.PERSONNEL_COLUMNS;
+    const base = global.BtdAuth?.PERSONNEL_COLUMNS_BASE;
+    let rows;
+    try {
+      rows = await selectAll(client, 'personel', full || base);
+    } catch (e) {
+      if (!base || full === base) throw e;
+      rows = await selectAll(client, 'personel', base);
+    }
+    replaceArray(ctx.personnel, rows.map((r) => {
       const mobile = r.whatsapp || r.telefon || '';
       return {
         dbId: r.id,
@@ -727,9 +720,9 @@
         dept: r.departman || '',
         collar: collarToUi(r.yaka),
         startDate: r.ise_baslama || '',
-        salary: Number(r.maas) || 0,
+        salary: 0,
         status: r.durum || 'Aktif',
-        tcNo: r.tc_no || '',
+        tcNo: '',
         phone: mobile,
         whatsapp: mobile,
         email: r.eposta || '',
@@ -740,20 +733,20 @@
         userId: null,
       };
     }));
-    // Aynı personel_kodu çakışmalarını ayır (UI yanlış kişi açmasın)
-    const seenCodes = new Set();
-    for (const p of ctx.personnel) {
-      const code = String(p.id || '');
-      if (code && !seenCodes.has(code)) {
-        seenCodes.add(code);
-        continue;
+    if (sensitiveReads && client.rpc) {
+      try {
+        const extra = await client.rpc('btd_personel_hassas_liste');
+        const list = extra && !extra.error && Array.isArray(extra.data) ? extra.data : [];
+        const byId = Object.fromEntries(list.map((item) => [item.id, item]));
+        ctx.personnel.forEach((person) => {
+          const row = byId[person.dbId];
+          if (!row) return;
+          person.tcNo = row.tc_no || '';
+          person.salary = row.maas != null ? Number(row.maas) || 0 : 0;
+        });
+      } catch (e) {
+        console.warn('[BtdCloud] hassas personel listesi yok');
       }
-      const co = (p.company || 'XX').slice(0, 2).toUpperCase();
-      const short = String(p.dbId || '').replace(/-/g, '').slice(0, 6).toUpperCase() || String(Date.now()).slice(-6);
-      p.id = `P-${co}-${short}`;
-      seenCodes.add(p.id);
-      try { await savePersonnel(p, ctx.companies); } catch (_) { /* ignore */ }
-      console.warn('[BtdCloud] Yinelenen personel_kodu düzeltildi →', p.id, p.name);
     }
   }
   async function hydrateAttendanceLeave(ctx) {
@@ -762,9 +755,6 @@
     if (ctx.attendanceLogs) {
       const { count } = await client.from('personel_devam').select('id', { count: 'exact', head: true });
       if (!count && ctx.attendanceLogs.length) {
-        if (blockReseed(ctx.attendanceLogs)) {
-          /* canlı kurulumda boş tabloya demo devam yazma */
-        } else {
         progress(ctx, 'Devam seed…');
         const byCode = Object.fromEntries((ctx.personnel || []).map((p) => [p.id, p.dbId]));
         const rows = ctx.attendanceLogs
@@ -786,11 +776,10 @@
           })
           .filter(Boolean);
         if (rows.length) await client.from('personel_devam').upsert(rows, { onConflict: 'personel_id,tarih' });
-        }
       } else if (count) {
         const rows = await selectAll(client, 'personel_devam', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
-        hydrateInto(ctx.attendanceLogs, rows.map((r) => ({
+        replaceArray(ctx.attendanceLogs, rows.map((r) => ({
           dbId: r.id,
           id: `A-${r.id.slice(0, 8)}`,
           personnelId: byDb[r.personel_id]?.id || r.personel_id,
@@ -808,9 +797,6 @@
     if (ctx.leaveRequests) {
       const { count } = await client.from('personel_izin').select('id', { count: 'exact', head: true });
       if (!count && ctx.leaveRequests.length) {
-        if (blockReseed(ctx.leaveRequests)) {
-          /* canlı kurulumda boş tabloya demo izin yazma */
-        } else {
         progress(ctx, 'İzin seed…');
         const byCode = Object.fromEntries((ctx.personnel || []).map((p) => [p.id, p.dbId]));
         const rows = ctx.leaveRequests
@@ -829,11 +815,10 @@
           })
           .filter(Boolean);
         if (rows.length) await client.from('personel_izin').insert(rows);
-        }
       } else if (count) {
         const rows = await selectAll(client, 'personel_izin', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
-        hydrateInto(ctx.leaveRequests, rows.map((r) => ({
+        replaceArray(ctx.leaveRequests, rows.map((r) => ({
           dbId: r.id,
           id: `L-${r.id.slice(0, 8)}`,
           personnelId: byDb[r.personel_id]?.id || r.personel_id,
@@ -847,158 +832,73 @@
     }
   }
 
-  async function saveUser(u, companies) {
+  async function saveUser(u) {
     try {
+      if (!u) return fail('no-user', 'saveUser');
+      if (u.password) delete u.password;
       const client = sb();
-      if (!client || !u) return fail('no-client', 'saveUser');
+      if (!client) return fail('no-client', 'saveUser');
+      if (!u.dbId) return fail('auth-account-required', 'saveUser');
       const uname = (u.username || '').toLowerCase();
       const row = {
         kullanici_adi: uname,
         ad_soyad: u.name || uname,
-        sifre_hash: u.password || null,
-        rol: u.role || 'Operatör',
-        kapsam: u.scope || 'Firma',
-        tum_grup: !!(u.isGod || u.scope === 'Tüm Grup'),
-        is_god: !!u.isGod,
-        erisim_kritik: !!u.accessCritical,
-        yaka: collarToDb(u.collar),
-        tc_no: u.tcNo || null,
         telefon: u.phone || null,
         eposta: u.email || null,
         adres: u.address || null,
-        aktif: true,
+        yaka: collarToDb(u.collar),
       };
-      let dbId = u.dbId;
-      if (dbId) {
-        const { error } = await client.from('kullanicilar').update(row).eq('id', dbId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await client
-          .from('kullanicilar')
-          .upsert(row, { onConflict: 'kullanici_adi' })
-          .select('id')
-          .single();
-        if (error) throw error;
-        dbId = data.id;
-        u.dbId = dbId;
-      }
-      await client.from('kullanici_firmalar').delete().eq('kullanici_id', dbId);
-      const firmNames = u.isGod || u.scope === 'Tüm Grup'
-        ? Object.keys(companies || {})
-        : (u.companies || []);
-      const links = firmNames
-        .map((n) => firmaId(companies, n))
-        .filter(Boolean)
-        .map((fid) => ({ kullanici_id: dbId, firma_id: fid }));
-      if (links.length) {
-        const { error } = await client.from('kullanici_firmalar').insert(links);
-        if (error) throw error;
-      }
-      return ok({ dbId });
+      const { error } = await client.from('kullanicilar').update(row).eq('id', u.dbId);
+      if (error) throw error;
+      return ok({ dbId: u.dbId });
     } catch (e) { return fail(e, 'saveUser'); }
-  }
-  async function deleteUser(u) {
-    try {
-      const client = sb();
-      if (!client || !u) return fail('no-client', 'deleteUser');
-      const uname = (u.username || '').toLowerCase();
-      if (PROTECTED_USERS.has(uname)) return fail('Korumalı kullanıcı silinemez', 'deleteUser');
-      if (u.dbId) {
-        const { error } = await client.from('kullanicilar').delete().eq('id', u.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      if (uname) {
-        const { error } = await client.from('kullanicilar').delete().eq('kullanici_adi', uname);
-        if (error) throw error;
-        return ok();
-      }
-      return fail('no-id', 'deleteUser');
-    } catch (e) { return fail(e, 'deleteUser'); }
   }
   async function hydrateUsers(ctx) {
     const client = sb();
     if (!client || !ctx.users) return;
     const n = await countTable(client, 'kullanicilar');
     if (!n) {
-      if (blockReseed(ctx.users)) return;
-      if (ctx.users.length) {
-        progress(ctx, `Kullanıcılar seed (${ctx.users.length})…`);
-        for (const u of ctx.users) await saveUser(u, ctx.companies);
-      }
+      progress(ctx, 'Kullanıcı tablosu boş — yerel tohum yazılmaz');
       return;
     }
     progress(ctx, 'Kullanıcılar hydrate…');
     const rows = await selectAll(
       client,
       'kullanicilar',
-      '*, kullanici_firmalar(firma_id, firmalar(ad))'
+      'id, kullanici_adi, ad_soyad, rol, kapsam, tum_grup, erisim_kritik, yaka, eposta, telefon, adres, aktif, auth_user_id, kullanici_firmalar(firma_id, firmalar(ad))'
     );
     const localByUser = Object.fromEntries((ctx.users || []).map((u) => [(u.username || '').toLowerCase(), u]));
     const mapped = rows.map((r) => {
       const uname = (r.kullanici_adi || '').toLowerCase();
       const prev = localByUser[uname];
       const firmNames = (r.kullanici_firmalar || []).map((kf) => kf.firmalar?.ad).filter(Boolean);
+      const group = r.rol === 'Yönetici' && !!r.tum_grup;
       return {
         dbId: r.id,
         username: r.kullanici_adi,
         name: r.ad_soyad,
-        password: r.sifre_hash || (prev?.password || ''),
+        password: '',
         role: r.rol || 'Operatör',
-        scope: (r.tum_grup || r.kapsam === 'Tüm Grup') ? 'Tüm Grup' : (r.kapsam || firmNames[0] || 'Firma'),
+        scope: group ? 'Tüm Grup' : (r.kapsam || firmNames[0] || 'Firma'),
         companies: firmNames,
-        isGod: !!(r.is_god || r.tum_grup),
+        isGod: group,
         accessCritical: !!r.erisim_kritik,
         collar: collarToUi(r.yaka),
         email: r.eposta || '',
         phone: r.telefon || '',
-        tcNo: r.tc_no || '',
+        tcNo: '',
         address: r.adres || '',
         dept: prev?.dept || '',
         personnelId: prev?.personnelId || null,
         perms: prev?.perms,
+        authUserId: r.auth_user_id || null,
       };
     });
-    // Korunan yönetici: yalnızca ilk seed’te eksikse enjekte et (canlıda silineni geri getirme)
-    PROTECTED_USERS.forEach((uname) => {
-      const local = localByUser[uname];
-      if (!local) return;
-      const idx = mapped.findIndex((u) => (u.username || '').toLowerCase() === uname);
-      if (idx < 0) {
-        if (alreadySeeded()) return;
-        mapped.push({ ...local });
-        return;
-      }
-      const row = mapped[idx];
-      if (local.password) row.password = local.password;
-      if (local.isGod) {
-        row.isGod = true;
-        row.scope = 'Tüm Grup';
-        row.role = local.role || row.role || 'Yönetici';
-        row.accessCritical = true;
-        if (!row.companies || row.companies.length < (local.companies || []).length) {
-          row.companies = (local.companies || []).slice();
-        }
-      }
-      if (local.personnelId && !row.personnelId) row.personnelId = local.personnelId;
-      if (local.collar) row.collar = local.collar;
-      if (local.perms) row.perms = local.perms;
-    });
-    hydrateInto(ctx.users, mapped);
+    replaceArray(ctx.users, mapped);
   }
 
   // ─── Cost analyses ─────────────────────────────────────────────────────────
   function costItemToRow(it, maliyetId, sira) {
-    const mfg = { ...(it.mfgDims || {}) };
-    if (it.excelAllInUnit != null || it.source || it.excelSplitNote || it.excelSupplier) {
-      mfg.__btd = {
-        excelAllInUnit: it.excelAllInUnit,
-        source: it.source || null,
-        excelSplitNote: it.excelSplitNote || null,
-        excelSupplier: it.excelSupplier || null,
-        vatExcluded: it.vatExcluded !== false,
-      };
-    }
     return {
       maliyet_id: maliyetId,
       sira,
@@ -1009,34 +909,30 @@
       alacim: it.alloy || null,
       sekil_kodu: it.shapeId || null,
       sekil_adi: it.shapeName || null,
-      imalat_olculeri: mfg,
+      imalat_olculeri: it.mfgDims || {},
       siparis_olculeri: it.ordDims || {},
       ozkutle: it.density ?? null,
       birim_kg: it.unitKg ?? null,
       toplam_kg: it.totalKg ?? null,
       imalat_birim_kg: it.mfgUnitKg ?? null,
       imalat_toplam_kg: it.mfgTotalKg ?? null,
-      fiyat_eur_kg: it.priceEurPerKg ?? it.pricePerKg ?? null,
-      malzeme_birim: it.materialUnit ?? it.matUnit ?? 0,
-      malzeme_toplam: it.materialTotal ?? it.matTotal ?? 0,
+      fiyat_eur_kg: it.pricePerKg ?? null,
+      malzeme_birim: it.matUnit ?? 0,
+      malzeme_toplam: it.matTotal ?? 0,
       iscilik_birim: it.laborUnit ?? 0,
       iscilik_toplam: it.laborTotal ?? 0,
       isil_tip: it.heatType || null,
       isil_mod: it.heatMode || null,
-      isil_eur: it.heatEurRate ?? it.heatEur ?? 0,
-      isil_tutar: it.heat ?? it.heatAmt ?? 0,
-      kaplama_tip: it.coatingType || it.coatType || null,
-      kaplama_mod: it.coatingMode || it.coatMode || null,
-      kaplama_eur: it.coatingEurRate ?? it.coatEur ?? 0,
-      kaplama_tutar: (() => {
-        const c2 = Number(it.coating2 ?? it.coat2Amt) || 0;
-        const cAll = Number(it.coating ?? it.coatAmt) || 0;
-        return Math.max(0, cAll - c2);
-      })(),
-      kaplama2_tip: it.coatingType2 || it.coat2Type || null,
-      kaplama2_mod: it.coating2Mode || it.coat2Mode || null,
-      kaplama2_eur: it.coating2EurRate ?? it.coat2Eur ?? 0,
-      kaplama2_tutar: it.coating2 ?? it.coat2Amt ?? 0,
+      isil_eur: it.heatEur ?? 0,
+      isil_tutar: it.heatAmt ?? 0,
+      kaplama_tip: it.coatType || null,
+      kaplama_mod: it.coatMode || null,
+      kaplama_eur: it.coatEur ?? 0,
+      kaplama_tutar: it.coatAmt ?? 0,
+      kaplama2_tip: it.coat2Type || null,
+      kaplama2_mod: it.coat2Mode || null,
+      kaplama2_eur: it.coat2Eur ?? 0,
+      kaplama2_tutar: it.coat2Amt ?? 0,
       nakliye: it.shipping ?? 0,
       maliyet_ara: it.costSubtotal ?? 0,
       birim_toplam: it.unitTotal ?? 0,
@@ -1047,11 +943,6 @@
     };
   }
   function costItemFromRow(r) {
-    const mfgRaw = { ...(r.imalat_olculeri || {}) };
-    const meta = mfgRaw.__btd || {};
-    delete mfgRaw.__btd;
-    const coat1 = Number(r.kaplama_tutar) || 0;
-    const coat2 = Number(r.kaplama2_tutar) || 0;
     return {
       partNo: r.parca_no || '',
       desc: r.aciklama || '',
@@ -1060,7 +951,7 @@
       alloy: r.alacim || '',
       shapeId: r.sekil_kodu || '',
       shapeName: r.sekil_adi || '',
-      mfgDims: mfgRaw,
+      mfgDims: r.imalat_olculeri || {},
       ordDims: r.siparis_olculeri || {},
       density: Number(r.ozkutle) || 0,
       unitKg: Number(r.birim_kg) || 0,
@@ -1068,23 +959,22 @@
       mfgUnitKg: Number(r.imalat_birim_kg) || 0,
       mfgTotalKg: Number(r.imalat_toplam_kg) || 0,
       pricePerKg: Number(r.fiyat_eur_kg) || 0,
-      priceEurPerKg: Number(r.fiyat_eur_kg) || 0,
-      materialUnit: Number(r.malzeme_birim) || 0,
-      materialTotal: Number(r.malzeme_toplam) || 0,
+      matUnit: Number(r.malzeme_birim) || 0,
+      matTotal: Number(r.malzeme_toplam) || 0,
       laborUnit: Number(r.iscilik_birim) || 0,
       laborTotal: Number(r.iscilik_toplam) || 0,
       heatType: r.isil_tip || '',
       heatMode: r.isil_mod || '',
-      heatEurRate: Number(r.isil_eur) || 0,
-      heat: Number(r.isil_tutar) || 0,
-      coatingType: r.kaplama_tip || '',
-      coatingMode: r.kaplama_mod || '',
-      coatingEurRate: Number(r.kaplama_eur) || 0,
-      coatingType2: r.kaplama2_tip || '',
-      coating2Mode: r.kaplama2_mod || '',
-      coating2EurRate: Number(r.kaplama2_eur) || 0,
-      coating2: coat2,
-      coating: coat1 + coat2,
+      heatEur: Number(r.isil_eur) || 0,
+      heatAmt: Number(r.isil_tutar) || 0,
+      coatType: r.kaplama_tip || '',
+      coatMode: r.kaplama_mod || '',
+      coatEur: Number(r.kaplama_eur) || 0,
+      coatAmt: Number(r.kaplama_tutar) || 0,
+      coat2Type: r.kaplama2_tip || '',
+      coat2Mode: r.kaplama2_mod || '',
+      coat2Eur: Number(r.kaplama2_eur) || 0,
+      coat2Amt: Number(r.kaplama2_tutar) || 0,
       shipping: Number(r.nakliye) || 0,
       costSubtotal: Number(r.maliyet_ara) || 0,
       unitTotal: Number(r.birim_toplam) || 0,
@@ -1092,11 +982,6 @@
       profitAmt: Number(r.kar_tutari) || 0,
       quoteUnit: Number(r.teklif_birim) || 0,
       quoteTotal: Number(r.teklif_toplam) || 0,
-      excelAllInUnit: meta.excelAllInUnit != null ? Number(meta.excelAllInUnit) : null,
-      excelSplitNote: meta.excelSplitNote || '',
-      excelSupplier: meta.excelSupplier || '',
-      source: meta.source || '',
-      vatExcluded: meta.vatExcluded !== false,
     };
   }
   async function saveCostAnalysis(a, companies) {
@@ -1140,30 +1025,11 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveCostAnalysis'); }
   }
-  async function deleteCostAnalysis(a, companies) {
-    try {
-      const client = sb();
-      if (!client || !a) return fail('no-client', 'deleteCostAnalysis');
-      if (a.dbId) {
-        const { error } = await client.from('maliyet_analizleri').delete().eq('id', a.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      const fid = firmaId(companies, a.company);
-      if (fid && a.id) {
-        const { error } = await client.from('maliyet_analizleri').delete().eq('firma_id', fid).eq('belge_no', a.id);
-        if (error) throw error;
-        return ok();
-      }
-      return fail('no-id', 'deleteCostAnalysis');
-    } catch (e) { return fail(e, 'deleteCostAnalysis'); }
-  }
   async function hydrateCostAnalyses(ctx) {
     const client = sb();
     if (!client || !ctx.costAnalyses) return;
     const n = await countTable(client, 'maliyet_analizleri');
     if (!n) {
-      if (blockReseed(ctx.costAnalyses)) return;
       if (ctx.costAnalyses.length) {
         progress(ctx, `Maliyet seed (${ctx.costAnalyses.length})…`);
         for (const a of ctx.costAnalyses) await saveCostAnalysis(a, ctx.companies);
@@ -1172,7 +1038,7 @@
     }
     progress(ctx, 'Maliyet hydrate…');
     const rows = await selectAll(client, 'maliyet_analizleri', '*, maliyet_kalemleri(*)');
-    hydrateInto(ctx.costAnalyses, rows.map((r) => ({
+    replaceArray(ctx.costAnalyses, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1232,17 +1098,18 @@
         gonderim_eposta: !!(q.sentChannels?.email),
         gonderim_whatsapp: !!(q.sentChannels?.whatsapp),
         banka_mod: q.quoteBankMode || null,
+        marka: q.brand || null,
       };
       let dbId = q.dbId;
       if (dbId) {
-        const { error } = await client.from('teklifler').update(row).eq('id', dbId);
+        const { error } = await retryWithoutMarka((r) => client.from('teklifler').update(r).eq('id', dbId), row);
         if (error) throw error;
       } else {
-        const { data, error } = await client
+        const { data, error } = await retryWithoutMarka((r) => client
           .from('teklifler')
-          .upsert(row, { onConflict: 'firma_id,belge_no' })
+          .upsert(r, { onConflict: 'firma_id,belge_no' })
           .select('id')
-          .single();
+          .single(), row);
         if (error) throw error;
         dbId = data.id;
         q.dbId = dbId;
@@ -1256,7 +1123,9 @@
         adet: it.qty ?? 1,
         birim_fiyat: it.unitPrice ?? 0,
         iskonto_pct: it.discountPct ?? 0,
-        not_metni: it.note || null,
+        not_metni: it.unit
+          ? (it.note ? `birim:${it.unit}\n${it.note}` : `birim:${it.unit}`)
+          : (it.note || null),
       }));
       if (items.length) {
         const { error } = await client.from('teklif_kalemleri').insert(items);
@@ -1265,22 +1134,13 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveQuote'); }
   }
-  async function deleteQuote(q, companies) {
+  async function deleteQuote(q) {
     try {
       const client = sb();
-      if (!client || !q) return fail('no-client', 'deleteQuote');
-      if (q.dbId) {
-        const { error } = await client.from('teklifler').delete().eq('id', q.dbId);
-        if (error) throw error;
-        return ok();
-      }
-      const fid = firmaId(companies, q.company);
-      if (fid && q.id) {
-        const { error } = await client.from('teklifler').delete().eq('firma_id', fid).eq('belge_no', q.id);
-        if (error) throw error;
-        return ok();
-      }
-      return fail('no-id', 'deleteQuote');
+      if (!client || !q?.dbId) return fail('no-id', 'deleteQuote');
+      const { error } = await client.from('teklifler').delete().eq('id', q.dbId);
+      if (error) throw error;
+      return ok();
     } catch (e) { return fail(e, 'deleteQuote'); }
   }
   async function hydrateQuotes(ctx) {
@@ -1288,7 +1148,6 @@
     if (!client || !ctx.quotes) return;
     const n = await countTable(client, 'teklifler');
     if (!n) {
-      if (blockReseed(ctx.quotes)) return;
       if (ctx.quotes.length) {
         progress(ctx, `Teklifler seed (${ctx.quotes.length})…`);
         for (const q of ctx.quotes) await saveQuote(q, ctx.companies);
@@ -1308,7 +1167,7 @@
       if (mErr) throw mErr;
       (mrows || []).forEach((m) => { maliyetBelge[m.id] = m.belge_no; });
     }
-    hydrateInto(ctx.quotes, rows.map((r) => ({
+    replaceArray(ctx.quotes, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1331,15 +1190,22 @@
       qrPayload: r.qr_payload || null,
       sentChannels: { email: !!r.gonderim_eposta, whatsapp: !!r.gonderim_whatsapp },
       quoteBankMode: r.banka_mod || null,
+      brand: r.marka || '',
       items: (r.teklif_kalemleri || [])
         .sort((a, b) => (a.sira || 0) - (b.sira || 0))
-        .map((it) => ({
-          partNo: it.parca_no || '',
-          desc: it.aciklama || '',
-          qty: Number(it.adet) || 1,
-          unitPrice: Number(it.birim_fiyat) || 0,
-          discountPct: Number(it.iskonto_pct) || 0,
-        })),
+        .map((it) => {
+          const noteRaw = it.not_metni || '';
+          const unitMatch = String(noteRaw).match(/^birim:([^\n]*)\n?([\s\S]*)$/);
+          return {
+            partNo: it.parca_no || '',
+            desc: it.aciklama || '',
+            unit: unitMatch ? unitMatch[1] : '',
+            qty: Number(it.adet) || 1,
+            unitPrice: Number(it.birim_fiyat) || 0,
+            discountPct: Number(it.iskonto_pct) || 0,
+            note: unitMatch ? (unitMatch[2] || '') : noteRaw,
+          };
+        }),
     })));
   }
 
@@ -1354,27 +1220,30 @@
       .maybeSingle();
     return data?.id || null;
   }
+  async function lookupMusteriId(client, fid, unvan) {
+    if (!fid || !unvan) return null;
+    const { data } = await client
+      .from('musteriler')
+      .select('id')
+      .eq('firma_id', fid)
+      .eq('unvan', unvan)
+      .maybeSingle();
+    return data?.id || null;
+  }
   async function saveOrder(o, companies) {
     try {
       const client = sb();
       if (!client || !o) return fail('no-client', 'saveOrder');
-      const fid = (await resolveFirmaId(companies, o.company)) || firmaId(companies, o.company);
+      const fid = firmaId(companies, o.company);
       if (!fid) return fail('firma_id yok', 'saveOrder');
-      const teklifId = o.quoteDbId || (await lookupTeklifId(client, fid, o.quoteId || o.id));
-      const ALLOWED_ORDER_STATUS = new Set(['Onaylandı', 'Revize Edildi', 'Üretimde', 'Tamamlandı', 'İptal']);
-      let durum = o.status || 'Onaylandı';
-      if (!ALLOWED_ORDER_STATUS.has(durum)) {
-        // UI “Sipariş Verildi” vb. ise geçerli DB değerine çevir
-        if (/iptal/i.test(durum)) durum = 'İptal';
-        else if (/tamam/i.test(durum)) durum = 'Tamamlandı';
-        else if (/reviz/i.test(durum)) durum = 'Revize Edildi';
-        else if (/üretim|uretim/i.test(durum)) durum = 'Üretimde';
-        else durum = 'Onaylandı';
-      }
+      const teklifId = o.quoteDbId || (o.quoteId ? await lookupTeklifId(client, fid, o.quoteId) : null);
+      const musteriId = o.customerDbId || await lookupMusteriId(client, fid, o.customer);
+      if (musteriId) o.customerDbId = musteriId;
       const row = {
         firma_id: fid,
         belge_no: o.id,
         teklif_id: teklifId,
+        musteri_id: musteriId,
         musteri_unvan: o.customer,
         ilgili_kisi: o.contact || null,
         po_no: o.poNumber || null,
@@ -1383,7 +1252,7 @@
         termin_gun: o.leadTimeDays ?? 15,
         teslim_tarihi: o.deliveryDate || null,
         kosullar: o.terms || null,
-        durum,
+        durum: o.status || 'Onaylandı',
         revizyon_no: o.revisionNo ?? 0,
         beklenmeyen_toplam: o.unforeseenTotal ?? 0,
       };
@@ -1402,38 +1271,53 @@
         o.dbId = dbId;
       }
       await client.from('siparis_kalemleri').delete().eq('siparis_id', dbId);
-      const itemsFull = (o.items || []).map((it, i) => ({
-        siparis_id: dbId,
-        sira: i + 1,
-        parca_no: it.partNo || null,
-        aciklama: it.desc || null,
-        adet: it.qty ?? 1,
-        birim_fiyat: it.unitPrice ?? 0,
-        iskonto_pct: it.discountPct ?? 0,
-        ek_gider: it.extraCost ?? 0,
-        teknik_resim: it.techDrawing || null,
-        qr_anahtar: it.qrKey || null,
-      }));
+      const itemsFull = (o.items || []).map((it, i) => {
+        const note = it.unit
+          ? (it.note ? `birim:${it.unit}\n${it.note}` : `birim:${it.unit}`)
+          : (it.note || null);
+        return {
+          siparis_id: dbId,
+          sira: i + 1,
+          parca_no: it.partNo || null,
+          aciklama: it.desc || null,
+          adet: it.qty ?? 1,
+          birim_fiyat: it.unitPrice ?? 0,
+          iskonto_pct: it.discountPct ?? 0,
+          ek_gider: it.extraCost ?? 0,
+          not_metni: note,
+          teknik_resim: it.techDrawing || null,
+          qr_anahtar: it.qrKey || null,
+          urun_id: it.productDbId || null,
+        };
+      });
       if (itemsFull.length) {
-        let { error } = await client.from('siparis_kalemleri').insert(itemsFull);
-        if (error && /teknik_resim|qr_anahtar/i.test(error.message || '')) {
-          const itemsBasic = itemsFull.map(({ teknik_resim, qr_anahtar, ...rest }) => rest);
-          ({ error } = await client.from('siparis_kalemleri').insert(itemsBasic));
+        let payload = itemsFull;
+        let error = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+          ({ error } = await client.from('siparis_kalemleri').insert(payload));
+          if (!error) break;
+          const msg = error.message || '';
+          if (!/schema cache|column|Could not find/i.test(msg)) break;
+          const missing = [...msg.matchAll(/'([A-Za-z0-9_]+)'/g)].map((m) => m[1]);
+          if (!missing.length) break;
+          const next = payload.map((row) => {
+            const copy = { ...row };
+            missing.forEach((key) => { if (key in copy) delete copy[key]; });
+            return copy;
+          });
+          if (JSON.stringify(next) === JSON.stringify(payload)) break;
+          payload = next;
         }
         if (error) throw error;
       }
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveOrder'); }
   }
-  async function deleteOrder(o, companies) {
-    return deleteBelgeRow('siparisler', o, companies, 'deleteOrder');
-  }
   async function hydrateOrders(ctx) {
     const client = sb();
     if (!client || !ctx.orders) return;
     const n = await countTable(client, 'siparisler');
     if (!n) {
-      if (blockReseed(ctx.orders)) return;
       if (ctx.orders.length) {
         progress(ctx, `Siparişler seed (${ctx.orders.length})…`);
         for (const o of ctx.orders) await saveOrder(o, ctx.companies);
@@ -1454,7 +1338,8 @@
       return {
         dbId: r.id,
         id,
-        quoteId: r.teklifler?.belge_no || id,
+        quoteId: r.teklifler?.belge_no || (r.teklif_id ? id : null),
+        customerDbId: r.musteri_id || null,
         company: companyNameById(ctx.companies, r.firma_id) || '',
         customer: r.musteri_unvan,
         contact: r.ilgili_kisi || '',
@@ -1470,19 +1355,28 @@
         notifyLog: [],
         items: (r.siparis_kalemleri || [])
           .sort((a, b) => (a.sira || 0) - (b.sira || 0))
-          .map((it) => ({
-            partNo: it.parca_no || '',
-            desc: it.aciklama || '',
-            qty: Number(it.adet) || 1,
-            unitPrice: Number(it.birim_fiyat) || 0,
-            discountPct: Number(it.iskonto_pct) || 0,
-            extraCost: Number(it.ek_gider) || 0,
-            techDrawing: it.teknik_resim || '',
-            qrKey: it.qr_anahtar || '',
-          })),
+          .map((it) => {
+            const prod = (ctx.products || []).find((p) => p.dbId && p.dbId === it.urun_id);
+            const noteRaw = it.not_metni || '';
+            const unitMatch = String(noteRaw).match(/^birim:([^\n]*)\n?([\s\S]*)$/);
+            return {
+              partNo: it.parca_no || '',
+              desc: it.aciklama || '',
+              unit: unitMatch ? unitMatch[1] : '',
+              qty: Number(it.adet) || 1,
+              unitPrice: Number(it.birim_fiyat) || 0,
+              discountPct: Number(it.iskonto_pct) || 0,
+              extraCost: Number(it.ek_gider) || 0,
+              note: unitMatch ? (unitMatch[2] || '') : noteRaw,
+              techDrawing: it.teknik_resim || '',
+              qrKey: it.qr_anahtar || '',
+              productDbId: it.urun_id || null,
+              productId: prod?.id || '',
+            };
+          }),
       };
     });
-    hydrateInto(ctx.orders, mapped);
+    replaceArray(ctx.orders, mapped);
     if (ctx.orderRevisionLog) assignObject(ctx.orderRevisionLog, revLog);
   }
 
@@ -1511,18 +1405,19 @@
         teklif_id: teklifId || null,
         qr_payload: wo.qrPayload || null,
         tedarikten: !!wo.fromProcurement,
+        marka: wo.brand || null,
       };
       let dbId = wo.dbId;
       if (dbId) {
-        const { error } = await client.from('is_emirleri').update(row).eq('id', dbId);
+        const { error } = await retryWithoutMarka((r) => client.from('is_emirleri').update(r).eq('id', dbId), row);
         if (error) throw error;
         await client.from('is_emri_parcalari').delete().eq('is_emri_id', dbId);
       } else {
-        const { data, error } = await client
+        const { data, error } = await retryWithoutMarka((r) => client
           .from('is_emirleri')
-          .upsert(row, { onConflict: 'firma_id,belge_no' })
+          .upsert(r, { onConflict: 'firma_id,belge_no' })
           .select('id')
-          .single();
+          .single(), row);
         if (error) throw error;
         dbId = data.id;
         wo.dbId = dbId;
@@ -1573,15 +1468,11 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveWorkOrder'); }
   }
-  async function deleteWorkOrder(wo, companies) {
-    return deleteBelgeRow('is_emirleri', wo, companies, 'deleteWorkOrder');
-  }
   async function hydrateWorkOrders(ctx) {
     const client = sb();
     if (!client || !ctx.workOrders) return;
     const n = await countTable(client, 'is_emirleri');
     if (!n) {
-      if (blockReseed(ctx.workOrders)) return;
       if (ctx.workOrders.length) {
         progress(ctx, `İş emirleri seed (${ctx.workOrders.length})…`);
         for (const wo of ctx.workOrders) await saveWorkOrder(wo, ctx.companies);
@@ -1594,7 +1485,7 @@
       'is_emirleri',
       '*, is_emri_parcalari(*, is_emri_cam_adimlari(*)), siparisler(belge_no), teklifler(belge_no)'
     );
-    hydrateInto(ctx.workOrders, rows.map((r) => ({
+    replaceArray(ctx.workOrders, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1605,6 +1496,7 @@
       orderId: r.siparisler?.belge_no || null,
       quoteId: r.teklifler?.belge_no || null,
       qrPayload: r.qr_payload || null,
+      brand: r.marka || '',
       notifyLog: [],
       parts: (r.is_emri_parcalari || [])
         .sort((a, b) => (a.parca_no || 0) - (b.parca_no || 0))
@@ -1646,6 +1538,75 @@
         });
       }
     });
+  }
+
+  const TASK_STATUSES = new Set(['Açık', 'Devam', 'Bitti', 'İptal']);
+
+  async function saveTask(task, companies) {
+    try {
+      const client = sb();
+      if (!client || !task) return fail('no-client', 'saveTask');
+      const fid = firmaId(companies, task.company);
+      if (!fid) return fail('firma_id yok', 'saveTask');
+      const durum = TASK_STATUSES.has(task.status) ? task.status : 'Açık';
+      const row = {
+        firma_id: fid,
+        kod: task.id,
+        baslik: task.title || 'Görev',
+        aciklama: task.note || null,
+        atanan: task.assignee || null,
+        termin: task.due || null,
+        durum,
+      };
+      if (task.dbId) {
+        const { error } = await client.from('gorevler').update(row).eq('id', task.dbId);
+        if (error) throw error;
+        return ok({ dbId: task.dbId });
+      }
+      const { data, error } = await client
+        .from('gorevler')
+        .upsert(row, { onConflict: 'firma_id,kod' })
+        .select('id')
+        .single();
+      if (error) throw error;
+      task.dbId = data.id;
+      return ok({ dbId: data.id });
+    } catch (e) { return fail(e, 'saveTask'); }
+  }
+
+  async function deleteTask(task) {
+    try {
+      const client = sb();
+      if (!client || !task?.dbId) return fail('no-id', 'deleteTask');
+      const { error } = await client.from('gorevler').delete().eq('id', task.dbId);
+      if (error) throw error;
+      return ok();
+    } catch (e) { return fail(e, 'deleteTask'); }
+  }
+
+  async function hydrateTasks(ctx) {
+    const client = sb();
+    if (!client || !ctx.tasks) return;
+    const n = await countTable(client, 'gorevler');
+    if (!n) {
+      if (ctx.tasks.length) {
+        progress(ctx, `Görev seed (${ctx.tasks.length})…`);
+        for (const task of ctx.tasks) await saveTask(task, ctx.companies);
+      }
+      return;
+    }
+    progress(ctx, 'Görevler hydrate…');
+    const rows = await selectAll(client, 'gorevler', '*');
+    replaceArray(ctx.tasks, rows.map((r) => ({
+      dbId: r.id,
+      id: r.kod || r.id,
+      company: companyNameById(ctx.companies, r.firma_id) || '',
+      title: r.baslik || '',
+      note: r.aciklama || '',
+      assignee: r.atanan || '',
+      due: r.termin || '',
+      status: r.durum || 'Açık',
+    })));
   }
 
   // ─── Procurement / RFQ / Reproc / Unforeseen ────────────────────────────────
@@ -1695,15 +1656,11 @@
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveProcurementItem'); }
   }
-  async function deleteProcurementItem(item, companies) {
-    return deleteBelgeRow('tedarik_kalemleri', item, companies, 'deleteProcurementItem');
-  }
   async function hydrateProcurement(ctx) {
     const client = sb();
     if (!client || !ctx.procurementItems) return;
     const n = await countTable(client, 'tedarik_kalemleri');
     if (!n) {
-      if (blockReseed(ctx.procurementItems)) return;
       if (ctx.procurementItems.length) {
         progress(ctx, `Tedarik seed (${ctx.procurementItems.length})…`);
         for (const it of ctx.procurementItems) await saveProcurementItem(it, ctx.companies);
@@ -1712,7 +1669,7 @@
     }
     progress(ctx, 'Tedarik hydrate…');
     const rows = await selectAll(client, 'tedarik_kalemleri', '*, is_emirleri(belge_no)');
-    hydrateInto(ctx.procurementItems, rows.map((r) => ({
+    replaceArray(ctx.procurementItems, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1826,7 +1783,6 @@
     if (!client || !ctx.materialRfqs) return;
     const n = await countTable(client, 'rfq_paketleri');
     if (!n) {
-      if (blockReseed(ctx.materialRfqs)) return;
       if (ctx.materialRfqs.length) {
         progress(ctx, `RFQ seed (${ctx.materialRfqs.length})…`);
         for (const r of ctx.materialRfqs) await saveMaterialRfq(r, ctx.companies);
@@ -1839,7 +1795,7 @@
       'rfq_paketleri',
       '*, rfq_gruplari(*, rfq_grup_kalemleri(*), rfq_grup_tedarikcileri(*)), rfq_yanitlari(*)'
     );
-    hydrateInto(ctx.materialRfqs, rows.map((r) => ({
+    replaceArray(ctx.materialRfqs, rows.map((r) => ({
       dbId: r.id,
       id: r.belge_no,
       company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1955,12 +1911,10 @@
     if (ctx.reprocRequests) {
       const n = await countTable(client, 'yeniden_tedarik_talepleri');
       if (!n && ctx.reprocRequests.length) {
-        if (!blockReseed(ctx.reprocRequests)) {
-          for (const r of ctx.reprocRequests) await saveReproc(r, ctx.companies);
-        }
+        for (const r of ctx.reprocRequests) await saveReproc(r, ctx.companies);
       } else if (n) {
         const rows = await selectAll(client, 'yeniden_tedarik_talepleri', '*');
-        hydrateInto(ctx.reprocRequests, rows.map((r) => ({
+        replaceArray(ctx.reprocRequests, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -1980,12 +1934,10 @@
     if (ctx.unforeseenCosts) {
       const n = await countTable(client, 'beklenmeyen_giderler');
       if (!n && ctx.unforeseenCosts.length) {
-        if (!blockReseed(ctx.unforeseenCosts)) {
-          for (const u of ctx.unforeseenCosts) await saveUnforeseen(u, ctx.companies);
-        }
+        for (const u of ctx.unforeseenCosts) await saveUnforeseen(u, ctx.companies);
       } else if (n) {
         const rows = await selectAll(client, 'beklenmeyen_giderler', '*');
-        hydrateInto(ctx.unforeseenCosts, rows.map((r) => ({
+        replaceArray(ctx.unforeseenCosts, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2050,9 +2002,6 @@
       return ok({ dbId });
     } catch (e) { return fail(e, 'saveFason'); }
   }
-  async function deleteFason(f, companies) {
-    return deleteBelgeRow('fason_isler', f, companies, 'deleteFason');
-  }
   async function saveQc(r, companies) {
     try {
       const client = sb();
@@ -2082,9 +2031,6 @@
       r.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveQc'); }
-  }
-  async function deleteQc(r, companies) {
-    return deleteBelgeRow('kalite_kayitlari', r, companies, 'deleteQc');
   }
   async function saveShipment(s, companies) {
     try {
@@ -2118,9 +2064,6 @@
       s.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveShipment'); }
-  }
-  async function deleteShipment(s, companies) {
-    return deleteBelgeRow('sevkiyatlar', s, companies, 'deleteShipment');
   }
   async function saveInvoice(inv, companies) {
     try {
@@ -2170,9 +2113,6 @@
       inv.dbId = data.id;
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'saveInvoice'); }
-  }
-  async function deleteInvoice(inv, companies) {
-    return deleteBelgeRow('faturalar', inv, companies, 'deleteInvoice');
   }
   async function saveStockItem(item, companies) {
     try {
@@ -2241,15 +2181,13 @@
 
     if (ctx.fasonJobs) {
       const n = await countTable(client, 'fason_isler');
-      if (!n) {
-        if (!blockReseed(ctx.fasonJobs) && ctx.fasonJobs.length) {
-          progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
-          for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
-        }
+      if (!n && ctx.fasonJobs.length) {
+        progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
+        for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
       } else if (n) {
         progress(ctx, 'Fason hydrate…');
         const rows = await selectAll(client, 'fason_isler', '*, fason_log(*)');
-        hydrateInto(ctx.fasonJobs, rows.map((r) => ({
+        replaceArray(ctx.fasonJobs, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2274,13 +2212,11 @@
 
     if (ctx.qcRecords) {
       const n = await countTable(client, 'kalite_kayitlari');
-      if (!n) {
-        if (!blockReseed(ctx.qcRecords) && ctx.qcRecords.length) {
-          for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
-        }
+      if (!n && ctx.qcRecords.length) {
+        for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
       } else if (n) {
         const rows = await selectAll(client, 'kalite_kayitlari', '*');
-        hydrateInto(ctx.qcRecords, rows.map((r) => ({
+        replaceArray(ctx.qcRecords, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2295,13 +2231,11 @@
 
     if (ctx.shipments) {
       const { count } = await client.from('sevkiyatlar').select('id', { count: 'exact', head: true });
-      if (!count) {
-        if (!blockReseed(ctx.shipments) && ctx.shipments.length) {
-          for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
-        }
+      if (!count && ctx.shipments.length) {
+        for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
       } else if (count) {
         const rows = await selectAll(client, 'sevkiyatlar', '*, siparisler(belge_no)');
-        hydrateInto(ctx.shipments, rows.map((r) => ({
+        replaceArray(ctx.shipments, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no || r.id,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2320,13 +2254,11 @@
 
     if (ctx.invoices) {
       const n = await countTable(client, 'faturalar');
-      if (!n) {
-        if (!blockReseed(ctx.invoices) && ctx.invoices.length) {
-          for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
-        }
+      if (!n && ctx.invoices.length) {
+        for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
       } else if (n) {
         const rows = await selectAll(client, 'faturalar', '*, siparisler(belge_no), maliyet_analizleri(belge_no)');
-        hydrateInto(ctx.invoices, rows.map((r) => ({
+        replaceArray(ctx.invoices, rows.map((r) => ({
           dbId: r.id,
           id: r.belge_no,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2350,15 +2282,13 @@
 
     if (ctx.stockItems) {
       const n = await countTable(client, 'stok_kartlari');
-      if (!n) {
-        if (!blockReseed(ctx.stockItems) && ctx.stockItems.length) {
-          progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
-          for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
-        }
+      if (!n && ctx.stockItems.length) {
+        progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
+        for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
       } else if (n) {
         progress(ctx, 'Stok hydrate…');
         const rows = await selectAll(client, 'stok_kartlari', '*');
-        hydrateInto(ctx.stockItems, rows.map((r) => ({
+        replaceArray(ctx.stockItems, rows.map((r) => ({
           dbId: r.id,
           id: r.sku,
           sku: r.sku,
@@ -2384,7 +2314,7 @@
         for (const m of ctx.stockMoves) await saveStockMove(m, ctx.companies);
       } else if (count) {
         const rows = await selectAll(client, 'stok_hareketleri', '*');
-        hydrateInto(ctx.stockMoves, rows.map((r) => ({
+        replaceArray(ctx.stockMoves, rows.map((r) => ({
           dbId: r.id,
           id: `MV-${r.id.slice(0, 8)}`,
           company: companyNameById(ctx.companies, r.firma_id) || '',
@@ -2400,243 +2330,6 @@
     }
   }
 
-  // ─── Catalogs (persist) ────────────────────────────────────────────────────
-  /** Materyal kataloğunu Supabase'e yazar (grup + alaşım ekle/güncelle/sil). */
-  async function saveMaterialCatalog(catalog) {
-    try {
-      const client = sb();
-      if (!client || !catalog || typeof catalog !== 'object') return fail('no-client', 'saveMaterialCatalog');
-      const groupNames = Object.keys(catalog);
-      const groups = await ensureMaterialGroups(client, groupNames);
-      const existing = await selectAll(client, 'malzemeler', 'id');
-      const keepIds = new Set();
-
-      for (const [gName, alloys] of Object.entries(catalog)) {
-        const gid = groups[gName];
-        if (!gid) continue;
-        for (const a of alloys || []) {
-          if (!a?.name) continue;
-          const row = {
-            malzeme_grup_id: gid,
-            ad: a.name,
-            ozkutle: a.density ?? 0,
-            fiyat_eur_kg: a.priceEurPerKg ?? 0,
-            aktif: true,
-          };
-          if (a.dbId) {
-            const { error } = await client.from('malzemeler').update(row).eq('id', a.dbId);
-            if (error) throw error;
-            keepIds.add(a.dbId);
-          } else {
-            const { data, error } = await client
-              .from('malzemeler')
-              .upsert(row, { onConflict: 'malzeme_grup_id,ad' })
-              .select('id')
-              .single();
-            if (error) throw error;
-            a.dbId = data.id;
-            keepIds.add(data.id);
-          }
-        }
-      }
-
-      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
-      if (toDelete.length) {
-        const { error } = await client.from('malzemeler').delete().in('id', toDelete);
-        if (error) throw error;
-      }
-      return ok({ saved: keepIds.size, deleted: toDelete.length });
-    } catch (e) {
-      return fail(e, 'saveMaterialCatalog');
-    }
-  }
-
-  async function saveNamedPriceCatalog(table, arr, label) {
-    try {
-      const client = sb();
-      if (!client || !Array.isArray(arr)) return fail('no-client', label);
-      const existing = await selectAll(client, table, 'id');
-      const keepIds = new Set();
-      for (const h of arr) {
-        if (!h?.name) continue;
-        const row = {
-          ad: h.name,
-          fiyat_eur_kg: h.priceEurPerKg || 0,
-          fiyat_eur_adet: h.priceEurPerPcs || 0,
-          aktif: true,
-        };
-        if (h.dbId) {
-          const { error } = await client.from(table).update(row).eq('id', h.dbId);
-          if (error) throw error;
-          keepIds.add(h.dbId);
-        } else {
-          const { data, error } = await client
-            .from(table)
-            .upsert(row, { onConflict: 'ad' })
-            .select('id')
-            .single();
-          if (error) throw error;
-          h.dbId = data.id;
-          keepIds.add(data.id);
-        }
-      }
-      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
-      if (toDelete.length) {
-        const { error } = await client.from(table).delete().in('id', toDelete);
-        if (error) throw error;
-      }
-      return ok({ saved: keepIds.size, deleted: toDelete.length });
-    } catch (e) {
-      return fail(e, label);
-    }
-  }
-
-  async function saveHeatTreatmentCatalog(arr) {
-    return saveNamedPriceCatalog('isil_islem_katalogu', arr, 'saveHeatTreatmentCatalog');
-  }
-  async function saveCoatingCatalog(arr) {
-    return saveNamedPriceCatalog('kaplama_katalogu', arr, 'saveCoatingCatalog');
-  }
-  async function saveFasonMfgCatalog(arr) {
-    try {
-      const client = sb();
-      const label = 'saveFasonMfgCatalog';
-      if (!client || !Array.isArray(arr)) return fail('no-client', label);
-      let existing = [];
-      try {
-        existing = await selectAll(client, 'fason_imalat_katalogu', 'id');
-      } catch (e) {
-        return fail(e?.message || e || 'fason_imalat_katalogu tablosu yok — SQL 016 çalıştırın', label);
-      }
-      const keepIds = new Set();
-      for (const h of arr) {
-        if (!h?.name) continue;
-        const row = {
-          ad: h.name,
-          fiyat_eur_saat: h.priceEurPerHour || 0,
-          fiyat_eur_adet: h.priceEurPerPcs || 0,
-          aktif: true,
-        };
-        if (h.dbId) {
-          const { error } = await client.from('fason_imalat_katalogu').update(row).eq('id', h.dbId);
-          if (error) throw error;
-          keepIds.add(h.dbId);
-        } else {
-          const { data, error } = await client
-            .from('fason_imalat_katalogu')
-            .upsert(row, { onConflict: 'ad' })
-            .select('id')
-            .single();
-          if (error) throw error;
-          h.dbId = data.id;
-          keepIds.add(data.id);
-        }
-      }
-      const toDelete = (existing || []).map((r) => r.id).filter((id) => !keepIds.has(id));
-      if (toDelete.length) {
-        const { error } = await client.from('fason_imalat_katalogu').delete().in('id', toDelete);
-        if (error) throw error;
-      }
-      return ok({ saved: keepIds.size, deleted: toDelete.length });
-    } catch (e) {
-      return fail(e, 'saveFasonMfgCatalog');
-    }
-  }
-
-  async function upsertMachineRow(client, row, dbId) {
-    const withFns = { ...row };
-    if (dbId) {
-      let { error } = await client.from('makineler').update(withFns).eq('id', dbId);
-      if (error && /fonksiyonlar/i.test(error.message || '')) {
-        delete withFns.fonksiyonlar;
-        ({ error } = await client.from('makineler').update(withFns).eq('id', dbId));
-      }
-      if (error) throw error;
-      return dbId;
-    }
-    let { data, error } = await client.from('makineler').insert(withFns).select('id').single();
-    if (error && /fonksiyonlar/i.test(error.message || '')) {
-      delete withFns.fonksiyonlar;
-      ({ data, error } = await client.from('makineler').insert(withFns).select('id').single());
-    }
-    if (error) throw error;
-    return data.id;
-  }
-
-  /** Makine parkı tam senkron: atölye + firma paylaşımı + makineler */
-  async function saveMachinePark(park, companies) {
-    try {
-      const client = sb();
-      if (!client || !Array.isArray(park)) return fail('no-client', 'saveMachinePark');
-      const existingWs = await selectAll(client, 'atolyeler', 'id');
-      const keepWsIds = new Set();
-
-      for (const ws of park) {
-        if (!ws?.workshop) continue;
-        let atId = ws.dbId || null;
-        if (atId) {
-          const { error } = await client.from('atolyeler').update({ ad: ws.workshop }).eq('id', atId);
-          if (error) throw error;
-        } else {
-          const { data, error } = await client
-            .from('atolyeler')
-            .upsert({ ad: ws.workshop }, { onConflict: 'ad' })
-            .select('id')
-            .single();
-          if (error) throw error;
-          atId = data.id;
-          ws.dbId = atId;
-        }
-        keepWsIds.add(atId);
-
-        await client.from('atolye_firmalar').delete().eq('atolye_id', atId);
-        const links = (ws.companies || [])
-          .map((n) => firmaId(companies, n))
-          .filter(Boolean)
-          .map((fid) => ({ atolye_id: atId, firma_id: fid }));
-        if (links.length) {
-          const { error } = await client.from('atolye_firmalar').upsert(links);
-          if (error) throw error;
-        }
-
-        const { data: exM, error: exErr } = await client
-          .from('makineler')
-          .select('id')
-          .eq('atolye_id', atId);
-        if (exErr) throw exErr;
-        const keepM = new Set();
-        for (const m of (ws.machines || [])) {
-          if (!m?.name) continue;
-          const row = {
-            atolye_id: atId,
-            ad: m.name,
-            alt_bilgi: m.sub || null,
-            ikon: m.icon || 'mill',
-            aktif: true,
-            fonksiyonlar: Array.isArray(m.functions) ? m.functions : [],
-          };
-          const id = await upsertMachineRow(client, row, m.dbId || null);
-          m.dbId = id;
-          keepM.add(id);
-        }
-        const toDelM = (exM || []).map((r) => r.id).filter((id) => !keepM.has(id));
-        if (toDelM.length) {
-          const { error } = await client.from('makineler').delete().in('id', toDelM);
-          if (error) throw error;
-        }
-      }
-
-      const toDelWs = (existingWs || []).map((r) => r.id).filter((id) => !keepWsIds.has(id));
-      if (toDelWs.length) {
-        const { error } = await client.from('atolyeler').delete().in('id', toDelWs);
-        if (error) throw error;
-      }
-      return ok({ workshops: keepWsIds.size, deletedWorkshops: toDelWs.length });
-    } catch (e) {
-      return fail(e, 'saveMachinePark');
-    }
-  }
-
   // ─── Catalogs ──────────────────────────────────────────────────────────────
   async function hydrateCatalogs(ctx) {
     const client = sb();
@@ -2646,10 +2339,6 @@
     if (ctx.procMaterialCatalog) {
       const n = await countTable(client, 'malzemeler');
       if (!n) {
-        if (alreadySeeded()) {
-          // Canlı: boş bulut → yerel malzeme katalogunu silme
-          progress(ctx, 'Malzeme katalogu boş (yerel korunuyor)');
-        } else {
         progress(ctx, 'Malzeme katalogu seed…');
         const groups = await ensureMaterialGroups(client, Object.keys(ctx.procMaterialCatalog));
         const rows = [];
@@ -2666,7 +2355,6 @@
           });
         });
         if (rows.length) await client.from('malzemeler').upsert(rows, { onConflict: 'malzeme_grup_id,ad' });
-        }
       } else {
         progress(ctx, 'Malzeme katalogu hydrate…');
         await ensureMaterialGroups(client, []);
@@ -2702,11 +2390,10 @@
         const byKod = Object.fromEntries(ctx.productShapes.map((s) => [s.id, s]));
         const merged = rows.map((r) => {
           const prev = byKod[r.kod];
-          // Alan adları ve hacim formülü istemcide kaynak: eski DB alanlar[] uyumsuz kalırsa kg=0 olmasın
           return {
             id: r.kod,
-            name: prev?.name || r.ad,
-            fields: (prev?.fields && prev.fields.length) ? prev.fields : (r.alanlar || []),
+            name: r.ad,
+            fields: r.alanlar || [],
             dbId: r.id,
             volumeMm3: prev?.volumeMm3 || (() => 0),
           };
@@ -2715,37 +2402,21 @@
         ctx.productShapes.forEach((s) => {
           if (!merged.some((m) => m.id === s.id)) merged.push(s);
         });
-        hydrateInto(ctx.productShapes, merged);
+        replaceArray(ctx.productShapes, merged);
       }
     }
 
-    // Isıl / kaplama / fason imalat
-    // NOT: alreadySeeded + boş tablo → diziyi silme (yeni eklenen tablolarda veri kaybı yapıyordu).
-    // Boşsa mevcut yerel diziyi seed et; tablo yoksa yerel dizi korunur.
+    // Isıl / kaplama
     async function syncNamedCatalog(table, arr, mapTo, mapFrom) {
       if (!arr) return;
-      let n = 0;
-      try {
-        n = await countTable(client, table);
-      } catch (e) {
-        console.warn(`[BtdCloud] katalog okunamadı (${table}) — yerel dizi korunuyor:`, e?.message || e);
-        return;
-      }
-      if (!n) {
-        if (!arr.length) return;
+      const n = await countTable(client, table);
+      if (!n && arr.length) {
         const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
-        if (error) {
-          console.warn(`[BtdCloud] katalog seed başarısız (${table}):`, error.message || error);
-          return;
-        }
-        try {
-          const rows = await selectAll(client, table, '*');
-          if (rows.length) replaceArray(arr, rows.map(mapFrom));
-        } catch (_) { /* ids sonra save ile gelir */ }
-        return;
+        if (error) throw error;
+      } else if (n) {
+        const rows = await selectAll(client, table, '*');
+        replaceArray(arr, rows.map(mapFrom));
       }
-      const rows = await selectAll(client, table, '*');
-      replaceArray(arr, rows.map(mapFrom));
     }
     await syncNamedCatalog(
       'isil_islem_katalogu',
@@ -2758,12 +2429,6 @@
       ctx.coatingCatalog,
       (h) => ({ ad: h.name, fiyat_eur_kg: h.priceEurPerKg || 0, fiyat_eur_adet: h.priceEurPerPcs || 0 }),
       (r) => ({ dbId: r.id, name: r.ad, priceEurPerKg: Number(r.fiyat_eur_kg) || 0, priceEurPerPcs: Number(r.fiyat_eur_adet) || 0 })
-    );
-    await syncNamedCatalog(
-      'fason_imalat_katalogu',
-      ctx.fasonMfgCatalog,
-      (h) => ({ ad: h.name, fiyat_eur_saat: h.priceEurPerHour || 0, fiyat_eur_adet: h.priceEurPerPcs || 0 }),
-      (r) => ({ dbId: r.id, name: r.ad, priceEurPerHour: Number(r.fiyat_eur_saat) || 0, priceEurPerPcs: Number(r.fiyat_eur_adet) || 0 })
     );
 
     // Operasyon katalogu
@@ -2785,7 +2450,7 @@
       } else {
         progress(ctx, 'Operasyon katalogu hydrate…');
         const rows = await selectAll(client, 'operasyon_kategorileri', '*, operasyon_adimlari(*)');
-        hydrateInto(ctx.operationCatalog, rows
+        replaceArray(ctx.operationCatalog, rows
           .sort((a, b) => (a.sira || 0) - (b.sira || 0))
           .map((r) => ({
             dbId: r.id,
@@ -2820,7 +2485,6 @@
             ad: m.name,
             alt_bilgi: m.sub || null,
             ikon: m.icon || null,
-            fonksiyonlar: Array.isArray(m.functions) ? m.functions : [],
           }));
           if (machines.length) await client.from('makineler').insert(machines);
         }
@@ -2831,19 +2495,16 @@
           'atolyeler',
           '*, makineler(*), atolye_firmalar(firma_id, firmalar(ad))'
         );
-        hydrateInto(ctx.machinePark, rows.map((r) => ({
+        replaceArray(ctx.machinePark, rows.map((r) => ({
           dbId: r.id,
           workshop: r.ad,
           companies: (r.atolye_firmalar || []).map((af) => af.firmalar?.ad).filter(Boolean),
-          machines: (r.makineler || [])
-            .filter((m) => m.aktif !== false)
-            .map((m) => ({
-              dbId: m.id,
-              name: m.ad,
-              sub: m.alt_bilgi || '',
-              icon: m.ikon || 'mill',
-              functions: Array.isArray(m.fonksiyonlar) ? m.fonksiyonlar : [],
-            })),
+          machines: (r.makineler || []).map((m) => ({
+            dbId: m.id,
+            name: m.ad,
+            sub: m.alt_bilgi || '',
+            icon: m.ikon || 'mill',
+          })),
         })));
       }
     }
@@ -2864,14 +2525,11 @@
       } else {
         const r = fxRows[0];
         Object.assign(ctx.fxRates, {
-          date: r.manuel ? (`Manuel · ${r.tarih}`) : r.tarih,
+          date: r.tarih,
           EURTRY: Number(r.eur_try),
           USDTRY: Number(r.usd_try),
           EURUSD: Number(r.eur_usd) || (Number(r.eur_try) / Number(r.usd_try)),
         });
-        if (ctx.fxRatesManualRef && typeof ctx.fxRatesManualRef === 'object') {
-          ctx.fxRatesManualRef.value = !!r.manuel;
-        }
       }
     }
 
@@ -2897,23 +2555,7 @@
     }
   }
 
-  async function saveFxRates(fx, manual) {
-    try {
-      const client = sb();
-      if (!client || !fx) return fail('no-client', 'saveFxRates');
-      const d = new Date().toISOString().slice(0, 10);
-      const { error } = await client.from('doviz_kurlari').upsert({
-        tarih: d,
-        eur_try: Number(fx.EURTRY) || 0,
-        usd_try: Number(fx.USDTRY) || 0,
-        eur_usd: Number(fx.EURUSD) || null,
-        manuel: !!manual,
-      }, { onConflict: 'tarih' });
-      if (error) throw error;
-      return ok({ date: d });
-    } catch (e) { return fail(e, 'saveFxRates'); }
-  }
-
+  // ─── Boot ──────────────────────────────────────────────────────────────────
   async function boot(ctx) {
     const client = sb();
     if (!client) {
@@ -2929,10 +2571,15 @@
       return { ok: false, reason: 'no-firma-ids' };
     }
 
+    bootReadOnly = true;
+    try {
     progress(ctx, 'Bulut senkron başlıyor…');
+    if (global.BtdAuth?.canReadSensitive) setSensitiveAccess(global.BtdAuth.canReadSensitive(ctx.session));
     const steps = [
       ['kataloglar', () => hydrateCatalogs(ctx)],
       ['müşteriler', () => hydrateCustomers(ctx)],
+      ['ürünler', () => hydrateProducts(ctx)],
+      ['fasoncular', () => hydrateSubcontractors(ctx)],
       ['tedarikçiler', () => hydrateSuppliers(ctx)],
       ['öncelikler', () => hydrateSupplierGroupPriorities(ctx)],
       ['personel', () => hydratePersonnel(ctx)],
@@ -2942,6 +2589,7 @@
       ['teklifler', () => hydrateQuotes(ctx)],
       ['siparişler', () => hydrateOrders(ctx)],
       ['iş emirleri', () => hydrateWorkOrders(ctx)],
+      ['görevler', () => hydrateTasks(ctx)],
       ['tedarik', () => hydrateProcurement(ctx)],
       ['rfq', () => hydrateMaterialRfqs(ctx)],
       ['yeniden/beklenmeyen', () => hydrateReprocUnforeseen(ctx)],
@@ -2959,8 +2607,10 @@
       }
     }
     progress(ctx, 'Bulut senkron tamamlandı');
-    markSeeded();
     return ok({ results });
+    } finally {
+      bootReadOnly = false;
+    }
   }
 
   // ─── Export ────────────────────────────────────────────────────────────────
@@ -2968,46 +2618,36 @@
     currencyToDb,
     currencyToUi,
     firmaId,
-    resolveFirmaId,
     sb,
-    boot,
-    saveCustomer,
-    deleteCustomer,
-    saveSupplier,
-    deleteSupplier,
-    savePersonnel,
-    deletePersonnel,
-    saveUser,
-    deleteUser,
-    saveCostAnalysis,
-    deleteCostAnalysis,
-    saveQuote,
-    deleteQuote,
-    saveOrder,
-    deleteOrder,
-    saveWorkOrder,
-    deleteWorkOrder,
-    saveProcurementItem,
-    deleteProcurementItem,
-    saveMaterialRfq,
-    saveReproc,
-    saveUnforeseen,
-    saveFason,
-    deleteFason,
-    saveQc,
-    deleteQc,
-    saveShipment,
-    deleteShipment,
-    saveInvoice,
-    deleteInvoice,
-    saveStockItem,
-    saveStockMove,
-    saveSupplierGroupPriorities,
-    saveMaterialCatalog,
-    saveHeatTreatmentCatalog,
-    saveCoatingCatalog,
-    saveFasonMfgCatalog,
-    saveMachinePark,
-    saveFxRates,
+    setSensitiveAccess,
+    boot: (ctx) => withSession('boot', () => boot(ctx)),
+    saveCustomer: (...args) => withSession('saveCustomer', () => saveCustomer(...args)),
+    deleteCustomer: (...args) => withSession('deleteCustomer', () => deleteCustomer(...args)),
+    saveProduct: (...args) => withSession('saveProduct', () => saveProduct(...args)),
+    deleteProduct: (...args) => withSession('deleteProduct', () => deleteProduct(...args)),
+    saveSubcontractor: (...args) => withSession('saveSubcontractor', () => saveSubcontractor(...args)),
+    deleteSubcontractor: (...args) => withSession('deleteSubcontractor', () => deleteSubcontractor(...args)),
+    saveSupplier: (...args) => withSession('saveSupplier', () => saveSupplier(...args)),
+    deleteSupplier: (...args) => withSession('deleteSupplier', () => deleteSupplier(...args)),
+    savePersonnel: (...args) => withSession('savePersonnel', () => savePersonnel(...args)),
+    saveUser: (...args) => withSession('saveUser', () => saveUser(...args)),
+    saveCostAnalysis: (...args) => withSession('saveCostAnalysis', () => saveCostAnalysis(...args)),
+    saveQuote: (...args) => withSession('saveQuote', () => saveQuote(...args)),
+    deleteQuote: (...args) => withSession('deleteQuote', () => deleteQuote(...args)),
+    saveOrder: (...args) => withSession('saveOrder', () => saveOrder(...args)),
+    saveWorkOrder: (...args) => withSession('saveWorkOrder', () => saveWorkOrder(...args)),
+    saveTask: (...args) => withSession('saveTask', () => saveTask(...args)),
+    deleteTask: (...args) => withSession('deleteTask', () => deleteTask(...args)),
+    saveProcurementItem: (...args) => withSession('saveProcurementItem', () => saveProcurementItem(...args)),
+    saveMaterialRfq: (...args) => withSession('saveMaterialRfq', () => saveMaterialRfq(...args)),
+    saveReproc: (...args) => withSession('saveReproc', () => saveReproc(...args)),
+    saveUnforeseen: (...args) => withSession('saveUnforeseen', () => saveUnforeseen(...args)),
+    saveFason: (...args) => withSession('saveFason', () => saveFason(...args)),
+    saveQc: (...args) => withSession('saveQc', () => saveQc(...args)),
+    saveShipment: (...args) => withSession('saveShipment', () => saveShipment(...args)),
+    saveInvoice: (...args) => withSession('saveInvoice', () => saveInvoice(...args)),
+    saveStockItem: (...args) => withSession('saveStockItem', () => saveStockItem(...args)),
+    saveStockMove: (...args) => withSession('saveStockMove', () => saveStockMove(...args)),
+    saveSupplierGroupPriorities: (...args) => withSession('saveSupplierGroupPriorities', () => saveSupplierGroupPriorities(...args)),
   };
 })(typeof window !== 'undefined' ? window : globalThis);

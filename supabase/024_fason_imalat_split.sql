@@ -1,5 +1,6 @@
 -- Fason imalat katalogu + tedarikçi hizmet tipi (dış hizmet vs imalatçı)
--- Supabase SQL Editor'de çalıştırın.
+-- 009–019 güvenlik dosyalarının yerine geçmez.
+-- demo_all_access yazılmaz. anon rolüne GRANT verilmez.
 
 CREATE TABLE IF NOT EXISTS public.fason_imalat_katalogu (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -16,3 +17,7 @@ ALTER TABLE public.tedarikci_fason_hizmetleri
 
 COMMENT ON COLUMN public.tedarikci_fason_hizmetleri.hizmet_tipi IS 'dis = Fason Dış Hizmet (ısıl/kaplama); imalat = Fason İmalatçı prosesleri';
 COMMENT ON TABLE public.fason_imalat_katalogu IS 'Tornalama, Frezeleme vb. · fiyat: €/saat ve €/adet';
+
+ALTER TABLE public.fason_imalat_katalogu ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS demo_all_access ON public.fason_imalat_katalogu;
+REVOKE ALL ON TABLE public.fason_imalat_katalogu FROM PUBLIC, anon;

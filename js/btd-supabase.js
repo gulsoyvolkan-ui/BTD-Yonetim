@@ -21,8 +21,14 @@
       lastError = 'Supabase istemcisi yüklenemedi';
       return null;
     }
+    const storage = global.sessionStorage;
     client = global.supabase.createClient(cfg.url, cfg.anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: {
+        persistSession: !!storage,
+        autoRefreshToken: !!storage,
+        detectSessionInUrl: false,
+        storage: storage,
+      },
     });
     ready = true;
     return client;
@@ -32,28 +38,68 @@
     return CURRENCY_UI[code] || code || '₺';
   }
 
+  function safeError(err) {
+    return String(err?.message || err || '')
+      .replace(/sifre_hash|tc_no|password|bearer\s+\S+/gi, '[gizli]')
+      .slice(0, 200);
+  }
+
   function mapCollar(yaka) {
     if (yaka === 'blue' || yaka === 'mavi') return 'blue';
     if (yaka === 'manager' || yaka === 'yonetici' || yaka === 'yönetici') return 'manager';
     return 'white';
   }
 
-  function mapCurrencyToDb(sym) {
-    const s = String(sym || '').trim();
-    if (s === '₺' || s.toUpperCase() === 'TRY') return 'TRY';
-    if (s === '€' || s.toUpperCase() === 'EUR') return 'EUR';
-    if (s === '$' || s.toUpperCase() === 'USD') return 'USD';
-    if (s === '£' || s.toUpperCase() === 'GBP') return 'GBP';
-    return s.toUpperCase() || 'TRY';
+  /** 64 karakterlik SHA-256 hex özeti. Büyük/küçük harf fark etmez. */
+  function isPasswordHash(value) {
+    return /^[0-9a-f]{64}$/i.test(String(value || '').trim());
+  }
+
+  /**
+   * Giriş karşılaştırması: kırpılmış düz metnin UTF-8 SHA-256 özeti (küçük harf hex).
+   * Girdi zaten özet gibi görünse bile yeniden özetlenir; özeti yapıştırmak giriş sayılmaz.
+   */
+  async function digestPassword(plain) {
+    const text = String(plain ?? '').trim();
+    if (!text) return '';
+    if (!global.crypto?.subtle?.digest) {
+      throw new Error('Web Crypto SHA-256 kullanılamıyor');
+    }
+    const data = new TextEncoder().encode(text);
+    const buf = await global.crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+    return hex;
+  }
+
+  /** Kayıt: özet ise olduğu gibi (küçük harf), değilse digestPassword. Çift özet yazılmaz. */
+  async function passwordForStorage(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    if (isPasswordHash(text)) return text.toLowerCase();
+    return digestPassword(text);
+  }
+
+  async function hasUserSession() {
+    const sb = getClient();
+    if (!sb?.auth?.getSession) return false;
+    try {
+      const session = await sb.auth.getSession();
+      return !!(session && session.data && session.data.session && session.data.session.access_token);
+    } catch (err) {
+      return false;
+    }
   }
 
   /**
    * firmalar + banka hesaplarını mevcut `companies` nesnesine merge eder.
-   * UI chrome (badgeBg vb.) yerel varsayılanlarla korunur.
+   * Oturum yoksa anon anahtarla firma satırı okunmaz. Yerel kart kalır.
    */
   async function hydrateCompanies(companies) {
     const sb = getClient();
     if (!sb || !companies) return { ok: false, reason: lastError || 'no-client' };
+    if (!(await hasUserSession())) return { ok: false, reason: 'no-auth-session' };
 
     try {
       const { data: firmalar, error: fErr } = await sb
@@ -95,181 +141,47 @@
           ...chrome,
           dbId: f.id,
           kod: f.kod,
-          // Yerel/ayarlar cache doluysa bulut demosu üzerine yazmasın
-          logo: prev.logo || f.logo_url || '',
-          legal: prev.legal || f.unvan || name,
-          address: prev.address || f.adres || '',
-          taxOffice: prev.taxOffice || f.vergi_dairesi || '',
-          taxNo: prev.taxNo || f.vergi_no || '',
-          phone: prev.phone || f.telefon || '',
-          website: prev.website || f.website || '',
-          email: prev.email || f.eposta || '',
-          signatory: prev.signatory || f.imza_yetkilisi || '',
-          deliveryPlace: prev.deliveryPlace || f.teslim_yeri || '',
-          warranty: prev.warranty || f.garanti_metni || '',
-          defaultPaymentType: prev.defaultPaymentType || f.varsayilan_odeme || '',
+          logo: f.logo_url || prev.logo || '',
+          legal: f.unvan || prev.legal || name,
+          address: f.adres || prev.address || '',
+          taxOffice: f.vergi_dairesi || prev.taxOffice || '',
+          taxNo: f.vergi_no || prev.taxNo || '',
+          phone: f.telefon || prev.phone || '',
+          website: f.website || prev.website || '',
+          email: f.eposta || prev.email || '',
+          signatory: f.imza_yetkilisi || prev.signatory || '',
+          deliveryPlace: f.teslim_yeri || prev.deliveryPlace || '',
+          warranty: f.garanti_metni || prev.warranty || '',
+          defaultPaymentType: f.varsayilan_odeme || prev.defaultPaymentType || '',
           quoteBankMode: prev.quoteBankMode || 'auto',
-          quoteBankSelected: (Array.isArray(prev.quoteBankSelected) && prev.quoteBankSelected.length)
-            ? prev.quoteBankSelected
-            : (selectedIds.length ? selectedIds : []),
-          bankAccounts: (Array.isArray(prev.bankAccounts) && prev.bankAccounts.length)
-            ? prev.bankAccounts
-            : (bankAccounts.length ? bankAccounts : []),
+          quoteBankSelected: selectedIds.length ? selectedIds : (prev.quoteBankSelected || []),
+          bankAccounts: bankAccounts.length ? bankAccounts : (prev.bankAccounts || []),
         };
       });
 
       console.info('[BTD] Firmalar Supabase\'den yüklendi:', firmalar.map((x) => x.ad).join(', '));
       return { ok: true, count: firmalar.length };
     } catch (err) {
-      lastError = err?.message || String(err);
+      lastError = safeError(err);
       console.warn('[BTD] Firma hydrate başarısız, yerel veri kullanılıyor:', lastError);
       return { ok: false, reason: lastError };
     }
   }
 
-  /** Ayarlar → Firma / ödeme / banka kaydı */
-  async function saveCompany(info, companyName) {
-    const sb = getClient();
-    if (!sb || !info) return { ok: false, reason: lastError || 'no-client' };
-    try {
-      let firmaId = info.dbId;
-      if (!firmaId && companyName) {
-        const { data: hit } = await sb.from('firmalar').select('id').eq('ad', companyName).maybeSingle();
-        firmaId = hit?.id || null;
-        if (firmaId) info.dbId = firmaId;
-      }
-      if (!firmaId) return { ok: false, reason: 'firma_id yok' };
-
-      const row = {
-        unvan: info.legal || companyName || '',
-        adres: info.address || null,
-        vergi_dairesi: info.taxOffice || null,
-        vergi_no: info.taxNo || null,
-        telefon: info.phone || null,
-        website: info.website || null,
-        eposta: info.email || null,
-        imza_yetkilisi: info.signatory || null,
-        teslim_yeri: info.deliveryPlace || null,
-        garanti_metni: info.warranty || null,
-        varsayilan_odeme: info.defaultPaymentType || null,
-      };
-      if (info.logo) row.logo_url = info.logo;
-
-      const { error: uErr } = await sb.from('firmalar').update(row).eq('id', firmaId);
-      if (uErr) throw uErr;
-
-      const { error: dErr } = await sb.from('firma_banka_hesaplari').delete().eq('firma_id', firmaId);
-      if (dErr) throw dErr;
-
-      const banks = Array.isArray(info.bankAccounts) ? info.bankAccounts : [];
-      if (banks.length) {
-        const bankRows = banks.map((a, i) => ({
-          firma_id: firmaId,
-          hesap_kodu: a.id || `acc-${i}`,
-          para_birimi: mapCurrencyToDb(a.currency),
-          etiket: a.label || null,
-          banka_adi: a.bankName || null,
-          sube: a.bankBranch || null,
-          iban: a.iban || null,
-          sira: i,
-          aktif: true,
-        }));
-        const { error: iErr } = await sb.from('firma_banka_hesaplari').insert(bankRows);
-        if (iErr) throw iErr;
-      }
-      return { ok: true, dbId: firmaId };
-    } catch (err) {
-      lastError = err?.message || String(err);
-      console.warn('[BTD] saveCompany', lastError);
-      return { ok: false, reason: lastError };
-    }
-  }
-
-  /**
-   * DB kullanıcısını yerel `users` satır şekline çevirir.
-   * permsFactory: (role) => perms object
-   */
-  async function fetchUserForLogin(username, password) {
-    const sb = getClient();
-    if (!sb) return null;
-
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    if (!u || !p) return null;
-
-    try {
-      let row = null;
-      let error = null;
-      ({ data: row, error } = await sb
-        .from('kullanicilar')
-        .select(`
-          id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-          erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
-          kullanici_firmalar ( firma_id, firmalar ( ad ) )
-        `)
-        .ilike('kullanici_adi', u)
-        .eq('aktif', true)
-        .maybeSingle());
-      if (error) throw error;
-
-      // Ad soyad ile de dene (ör. "Volkan")
-      if (!row) {
-        const alt = await sb
-          .from('kullanicilar')
-          .select(`
-            id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-            erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
-            kullanici_firmalar ( firma_id, firmalar ( ad ) )
-          `)
-          .ilike('ad_soyad', u)
-          .eq('aktif', true)
-          .limit(1)
-          .maybeSingle();
-        if (alt.error) throw alt.error;
-        row = alt.data;
-      }
-
-      if (!row) return null;
-      if ((row.sifre_hash || '') !== p) return null;
-
-      const firmNames = (row.kullanici_firmalar || [])
-        .map((kf) => kf.firmalar?.ad)
-        .filter(Boolean);
-
-      return {
-        id: row.id,
-        username: row.kullanici_adi,
-        name: row.ad_soyad,
-        password: row.sifre_hash,
-        role: row.rol || 'Operatör',
-        scope: (row.tum_grup || row.kapsam === 'Tüm Grup')
-          ? 'Tüm Grup'
-          : (row.kapsam || firmNames[0] || 'Firma'),
-        companies: firmNames,
-        isGod: !!(row.is_god || row.tum_grup),
-        accessCritical: !!row.erisim_kritik,
-        collar: mapCollar(row.yaka),
-        email: row.eposta || '',
-        phone: row.telefon || '',
-        tcNo: row.tc_no || '',
-        address: row.adres || '',
-        dept: '',
-        personnelId: null,
-        source: 'supabase',
-      };
-    } catch (err) {
-      lastError = err?.message || String(err);
-      console.warn('[BTD] Login sorgusu başarısız:', lastError);
-      return null;
-    }
+  /** Eski istemci parola karşılaştırması kapatıldı. Kimlik Supabase Auth'tadır. */
+  async function fetchUserForLogin() {
+    return null;
   }
 
   global.BtdSupabase = {
     getClient,
     isReady: () => ready && !!getClient(),
     getLastError: () => lastError,
+    hasUserSession,
     hydrateCompanies,
-    saveCompany,
     fetchUserForLogin,
+    isPasswordHash,
+    digestPassword,
+    passwordForStorage,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
