@@ -26,6 +26,7 @@ _patch_*.py
 *.log
 .cache/
 scripts/
+tmp-parasut*
 
 # Ağır demo asset’leri (uygulamada kullanılmıyor)
 assets/shape-frames/
