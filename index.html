@@ -6029,6 +6029,7 @@ ${vadeLine}`;
 
   /** Siparişi sil → teklif Onaylandı kalır, yeniden dönüştürülebilir */
   function revertOrderFromQuote(quoteOrOrderId, { confirmMsg } = {}) {
+    if (blockModuleDelete('Siparişler')) return false;
     const order = orders.find(o =>
       o.id === quoteOrOrderId || o.quoteId === quoteOrOrderId
     );
@@ -7333,6 +7334,22 @@ ${vadeLine}`;
   const NAV_REGION2_CRITICAL = ['customers', 'suppliers', 'hr', 'settings'];
   const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'tasks', 'fason', 'quality', 'shipping', 'machinepark', 'andon'];
   const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders', 'products'];
+  // Sayfa kimliği → mevcut permModules satırı. Matriste olmayan sayfalar burada yok.
+  const PAGE_PERM_MODULE = {
+    costing: 'Maliyet',
+    quotes: 'Teklifler',
+    orders: 'Siparişler',
+    workorders: 'İş Emirleri',
+    procurement: 'Tedarik',
+    manufacturing: 'İmalat',
+    fason: 'Fason Takip',
+    quality: 'Kalite Kontrol',
+    shipping: 'Sevkiyat',
+    invoicing: 'Faturalandırma',
+    customers: 'Müşteriler',
+    suppliers: 'Tedarikçiler',
+    stock: 'Stok',
+  };
 
   function isGroupAdmin(user) {
     if (!user || user.role !== 'Yönetici') return false;
@@ -7379,18 +7396,41 @@ ${vadeLine}`;
     if (isBlueCollar(user)) return false;
     return !!user.accessCritical;
   }
+  function permModuleRow(user, moduleName) {
+    if (!user || !moduleName || !user.perms) return null;
+    const row = user.perms[moduleName];
+    if (!row || typeof row !== 'object') return null;
+    return row;
+  }
+  function moduleViewAllowed(user, page) {
+    const row = permModuleRow(user, PAGE_PERM_MODULE[page]);
+    if (!row) return true;
+    return row.view !== false;
+  }
+  function userCanDeleteModule(user, moduleName) {
+    const row = permModuleRow(user, moduleName);
+    if (!row) return true;
+    return row.delete !== false;
+  }
+  function blockModuleDelete(moduleName) {
+    if (userCanDeleteModule(currentUser, moduleName)) return false;
+    showToast('Bu modülde silme yetkiniz yok.', 'error');
+    return true;
+  }
   function userCanAccessPage(user, page) {
     if (!user || !page) return true;
     // Mavi yaka: yaka kuralı yönetici rolünden önce uygulanır
     if (isBlueCollar(user)) {
       if (NAV_PRICE_PAGES.includes(page)) return false;
-      return NAV_BLUE_ALLOWED.includes(page);
+      if (!NAV_BLUE_ALLOWED.includes(page)) return false;
+      return moduleViewAllowed(user, page);
     }
+    // Yönetici sayfa kontrolünü geçer; view bayrağı onu kesmez
     if (user.isGod || user.role === 'Yönetici') return true;
     const allowed = roleNavAccess[user.role];
     if (allowed && !allowed.includes(page)) return false;
     if (NAV_REGION2_CRITICAL.includes(page) && !userHasCriticalAccess(user)) return false;
-    return true;
+    return moduleViewAllowed(user, page);
   }
   function applyPriceVisibility() {
     document.body.classList.toggle('collar-blue', !!(currentUser && isBlueCollar(currentUser)));
@@ -10277,6 +10317,7 @@ ${vadeLine}`;
 
     tbody.querySelectorAll('[data-del-customer]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Müşteriler')) return;
         const target = list[Number(btn.dataset.delCustomer)];
         customers = customers.filter(c => c !== target);
         renderCustomersPage();
@@ -10374,6 +10415,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-supplier]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Tedarikçiler')) return;
         const target = list[Number(btn.dataset.delSupplier)];
         if (!target) return;
         suppliers = suppliers.filter(s => s !== target);
@@ -11648,6 +11690,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-quote]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Teklifler')) return;
         const id = btn.dataset.delQuote;
         if (findOrderForQuote(id)) {
           showToast('Önce bağlı siparişi iptal edin.', 'error');
@@ -13447,6 +13490,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-proc]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Tedarik')) return;
         procurementItems = procurementItems.filter(p => p.id !== btn.dataset.delProc);
         renderProcurementPage();
       });
@@ -13924,7 +13968,11 @@ ${vadeLine}`;
       </tr>
     `).join('');
     tbody.querySelectorAll('[data-del-qc]').forEach(btn => {
-      btn.addEventListener('click', () => { qcRecords = qcRecords.filter(r => r.id !== btn.dataset.delQc); renderQualityPage(); });
+      btn.addEventListener('click', () => {
+        if (blockModuleDelete('Kalite Kontrol')) return;
+        qcRecords = qcRecords.filter(r => r.id !== btn.dataset.delQc);
+        renderQualityPage();
+      });
     });
   }
 
@@ -14137,6 +14185,7 @@ ${vadeLine}`;
     tbody.querySelectorAll('[data-fason-del]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (blockModuleDelete('Fason Takip')) return;
         fasonJobs = fasonJobs.filter(x => x.id !== btn.dataset.fasonDel);
         renderFasonPage();
         if (typeof renderDashboard === 'function') renderDashboard();
@@ -14304,7 +14353,11 @@ ${vadeLine}`;
         btn.addEventListener('click', () => openShipSignModal(btn.dataset.shipDeliver));
       });
       root.querySelectorAll('[data-del-ship]').forEach(btn => {
-        btn.addEventListener('click', () => { shipments = shipments.filter(s => s.id !== btn.dataset.delShip); renderShippingPage(); });
+        btn.addEventListener('click', () => {
+          if (blockModuleDelete('Sevkiyat')) return;
+          shipments = shipments.filter(s => s.id !== btn.dataset.delShip);
+          renderShippingPage();
+        });
       });
     };
     wireShip(tbody);
@@ -14411,7 +14464,11 @@ ${vadeLine}`;
       });
     });
     tbody.querySelectorAll('[data-del-inv]').forEach(btn => {
-      btn.addEventListener('click', () => { invoices = invoices.filter(i => i.id !== btn.dataset.delInv); renderInvoicingPage(); });
+      btn.addEventListener('click', () => {
+        if (blockModuleDelete('Faturalandırma')) return;
+        invoices = invoices.filter(i => i.id !== btn.dataset.delInv);
+        renderInvoicingPage();
+      });
     });
   }
 
@@ -16590,6 +16647,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-cost]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Maliyet')) return;
         costAnalyses = costAnalyses.filter(x => x.id !== btn.dataset.delCost);
         renderCostingPage();
       });
