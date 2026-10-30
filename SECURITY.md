@@ -23,6 +23,8 @@
 - CI: `.github/workflows/secret-scan.yml` (açık token / service_role / private key taraması)
 - Deploy: secret boşsa fail; credential persist kapalı
 
+Ayrıntı: `docs/security/BTD_SECURITY_BASELINE.md`, `docs/security/PRODUCTION_MIGRATION_RUNBOOK.md`, `docs/integrations/SHADOW_BTD_READ_V1.md`.
+
 ## Bilinen demo riskleri (bilinçli)
 
 - Supabase `003_demo_rls_policies.sql` anon’a geniş izin verir — **bitirme/demo içindir**. Gerçek müşteri verisi öncesi firma bazlı RLS + güvenli auth gerekir.

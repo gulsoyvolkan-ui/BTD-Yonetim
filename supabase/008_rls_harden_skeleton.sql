@@ -1,6 +1,7 @@
--- Üretim öncesi: demo RLS'i kaldırıp sıkı politikalara geçiş iskeleti.
--- ŞU AN ÇALIŞTIRMA — uygulama hâlâ anon key ile yazıyor; sıkı RLS uygulamayı kırar.
--- Gerçek müşteri verisi öncesi: Supabase Auth + firma bazlı politikalar gerekir.
+-- Eski iskelet. Çalıştırmayın.
+-- Güncel sıra: 013_auth_membership.sql, 014_tenant_rls.sql, 015_revoke_anon_demo.sql.
+-- Geri dönüş: 016_rollback_demo_access.sql ve docs/security/PRODUCTION_MIGRATION_RUNBOOK.md.
+-- 014 ve 015 üretimde bu dalda çalıştırılmadı.
 
 -- 1) Demo politikalarını düşürmek için (yalnızca Auth hazır olduğunda):
 -- DO $$

@@ -21,8 +21,14 @@
       lastError = 'Supabase istemcisi yüklenemedi';
       return null;
     }
+    const storage = global.sessionStorage;
     client = global.supabase.createClient(cfg.url, cfg.anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: {
+        persistSession: !!storage,
+        autoRefreshToken: !!storage,
+        detectSessionInUrl: false,
+        storage: storage,
+      },
     });
     ready = true;
     return client;
@@ -30,6 +36,12 @@
 
   function mapCurrency(code) {
     return CURRENCY_UI[code] || code || '₺';
+  }
+
+  function safeError(err) {
+    return String(err?.message || err || '')
+      .replace(/sifre_hash|tc_no|password|bearer\s+\S+/gi, '[gizli]')
+      .slice(0, 200);
   }
 
   function mapCollar(yaka) {
@@ -138,7 +150,7 @@
       console.info('[BTD] Firmalar Supabase\'den yüklendi:', firmalar.map((x) => x.ad).join(', '));
       return { ok: true, count: firmalar.length };
     } catch (err) {
-      lastError = err?.message || String(err);
+      lastError = safeError(err);
       console.warn('[BTD] Firma hydrate başarısız, yerel veri kullanılıyor:', lastError);
       return { ok: false, reason: lastError };
     }
@@ -163,7 +175,7 @@
         .from('kullanicilar')
         .select(`
           id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-          erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
+          erisim_kritik, yaka, eposta, telefon, adres, aktif,
           kullanici_firmalar ( firma_id, firmalar ( ad ) )
         `)
         .ilike('kullanici_adi', u)
@@ -177,7 +189,7 @@
           .from('kullanicilar')
           .select(`
             id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-            erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
+            erisim_kritik, yaka, eposta, telefon, adres, aktif,
             kullanici_firmalar ( firma_id, firmalar ( ad ) )
           `)
           .ilike('ad_soyad', u)
@@ -201,25 +213,23 @@
         id: row.id,
         username: row.kullanici_adi,
         name: row.ad_soyad,
-        password: stored.toLowerCase(),
         role: row.rol || 'Operatör',
         scope: (row.tum_grup || row.kapsam === 'Tüm Grup')
           ? 'Tüm Grup'
           : (row.kapsam || firmNames[0] || 'Firma'),
         companies: firmNames,
-        isGod: !!(row.is_god || row.tum_grup),
+        isGod: false,
         accessCritical: !!row.erisim_kritik,
         collar: mapCollar(row.yaka),
         email: row.eposta || '',
         phone: row.telefon || '',
-        tcNo: row.tc_no || '',
         address: row.adres || '',
         dept: '',
         personnelId: null,
         source: 'supabase',
       };
     } catch (err) {
-      lastError = err?.message || String(err);
+      lastError = safeError(err);
       console.warn('[BTD] Login sorgusu başarısız:', lastError);
       return null;
     }
