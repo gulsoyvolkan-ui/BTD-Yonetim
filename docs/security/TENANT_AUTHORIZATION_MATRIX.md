@@ -26,7 +26,7 @@ Masaüstü `portal` sorgusu yokken 2 saat hareketsizlik durur. Kiosk 5 dakikadı
 | `kullanicilar` | authenticated yalnız kendi satırını veya grup yöneticisi olarak okur. `sifre_hash` ve `tc_no` kolon yetkisi yok. Uygulama rol güncellemez |
 | `denetim_olaylari` | Kendi olayı veya kendi firması. Güncelleme ve silme yok |
 
-`014` demo politikasını silmez. Postgres izinleri OR birleşir. Asıl kapanış `015` dosyasındadır. `016` demo açıklığını geri açar; iş satırını silmez.
+`014` demo politikasını silmez. Postgres izinleri OR birleşir. Personel ve firma için acil kapanış `017` dosyasındadır. Kalan anon `015` dosyasındadır. `016` anon okumayı geri açmaz ve çalıştırılmaz.
 
 ## API
 

@@ -127,6 +127,10 @@ function main() {
   const sql014 = read('supabase/014_tenant_rls.sql');
   const sql015 = read('supabase/015_revoke_anon_demo.sql');
   const sql016 = read('supabase/016_rollback_demo_access.sql');
+  const sql017 = read('supabase/017_emergency_anon_containment.sql');
+  const sql018 = read('supabase/018_sensitive_columns.sql');
+  const sql002 = read('supabase/002_demo_users_grants.sql');
+  const sql003 = read('supabase/003_demo_rls_policies.sql');
   ok(!/UPDATE\s+public\.kullanicilar/i.test(sql013), 'no bulk account update');
   ok(sql013.includes('auth.uid()') && sql013.includes('btd_oturum_baglami'), 'membership from auth uid');
   ok(!sql013.includes('sifre_hash') || sql013.indexOf('sifre_hash') === -1, 'context function omits hash');
@@ -136,14 +140,34 @@ function main() {
   ok(sql015.includes('demo_all_access') && sql015.includes('REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon'), '015 revokes anon');
   ok(sql015.includes('btd.allow_anon_revoke'), '015 is gated');
   ok(!/GRANT SELECT \(\s*id[\s\S]*sifre_hash/.test(sql015), 'column grant omits hash');
-  ok(sql016.includes('btd.allow_demo_restore') && sql016.includes('demo_all_access'), 'rollback file exists');
+  ok(sql016.includes('anon geniş yetki geri açılmaz'), 'rollback refuses anon restore');
+  ok(!/CREATE POLICY demo_all_access/i.test(sql016), 'rollback does not create demo policy');
+  ok(!/GRANT[\s\S]*TO anon/i.test(sql016), 'rollback does not grant anon');
+  const policyAt = sql017.indexOf('CREATE POLICY btd_tenant_all');
+  const dropAt = sql017.indexOf('DROP POLICY IF EXISTS demo_all_access');
+  ok(policyAt !== -1 && dropAt !== -1 && policyAt < dropAt, 'authenticated policy before demo drop');
+  ok(!/GRANT[\s\S]{0,80}TO anon/i.test(sql017), '017 does not grant anon');
+  ok(sql017.includes('personel') && sql017.includes('tc_no'), '017 covers personnel identity column');
+  ok(!/UPDATE\s+public\.kullanicilar/i.test(sql017), '017 does not bulk-link accounts');
+  ok(sql018.includes('btd_personel_hassas_liste') && sql018.includes('NOT IN (\'tc_no\', \'maas\')'), '018 hides sensitive columns');
+  ok(sql002.includes('Durdu') && !/GRANT[\s\S]*TO anon/i.test(sql002), '002 cannot reopen anon');
+  ok(sql003.includes('Durdu') && !/CREATE POLICY demo_all_access/i.test(sql003), '003 cannot recreate demo policy');
+  ok(auth.acceptStoredSession({ v: 2, authSource: 'supabase-auth', username: 'a' }), 'v2 auth session accepted');
+  ok(!auth.acceptStoredSession({ v: 1, authSource: 'local', username: 'volkan', isGod: true }), 'legacy session rejected');
+  ok(!auth.acceptStoredSession({ v: 2, authSource: 'supabase-auth', tc_no: tc }), 'session with tc rejected');
+  ok(!auth.PERSONNEL_COLUMNS.includes('tc_no') && !auth.PERSONNEL_COLUMNS.includes('maas'), 'personnel select omits sensitive columns');
+  ok(auth.canReadSensitive({ role: 'Operatör', kiosk: true, accessCritical: true }) === false, 'kiosk cannot read sensitive');
+  ok(auth.canReadSensitive({ role: 'Yönetici', authSource: 'supabase-auth' }) === true, 'manager can read sensitive');
 
   const html = read('index.html');
   ok(!html.includes('şifre 123456'), 'login hint has no demo password');
+  ok(!html.includes('8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'), 'client has no demo password hash');
   ok(/function applyDemoLoginOverrides\(user\) \{\s*return user \|\| null;\s*\}/.test(html), 'demo override does not elevate');
   const authFn = html.slice(html.indexOf('async function authenticateLoginAsync'), html.indexOf('loginForm.addEventListener'));
-  ok(authFn.indexOf('signInWithSupabase') < authFn.indexOf('digestPassword'), 'auth path precedes legacy hash');
+  ok(authFn.includes('signInWithSupabase') && !authFn.includes('digestPassword') && !authFn.includes('fetchUserForLogin'), 'login is supabase auth only');
   ok(!read('js/btd-cloud.js').includes('row.isGod = true'), 'hydrate does not force god');
+  ok(!read('js/btd-cloud.js').includes('PROTECTED_USERS'), 'no privileged username list');
+  ok(!read('js/btd-supabase.js').includes("from('kullanicilar')"), 'client login does not read password column');
 
   const crud = read('api/_lib/crud.js');
   const shadowSrc = read('api/shadow-read.js');
@@ -209,8 +233,56 @@ async function shadowHttp() {
   ok(!okRes.body.identity.token, 'raw token is not returned');
 }
 
+async function cloudGate() {
+  const vm = require('vm');
+  const context = vm.createContext({ console });
+  vm.runInContext(read('js/btd-auth.js'), context);
+  vm.runInContext(read('js/btd-cloud.js'), context);
+  const ops = [];
+  context.BtdSupabase = {
+    hasUserSession: async () => false,
+    getClient() {
+      ops.push('client');
+      return { from() { ops.push('from'); throw new Error('anon query'); } };
+    },
+  };
+  const blocked = await context.BtdCloud.boot({ companies: { A: { dbId: 'x' } } });
+  ok(blocked.ok === false && blocked.reason === 'no-auth-session', 'boot without session does not read');
+  ok(ops.length === 0, 'boot without session does not open a client');
+
+  context.BtdSupabase.hasUserSession = async () => true;
+  const writes = [];
+  context.BtdSupabase.getClient = () => ({
+    from(table) {
+      const query = {
+        select() { return query; },
+        order() { return query; },
+        eq() { return query; },
+        insert() { writes.push(table); return query; },
+        upsert() { writes.push(table); return query; },
+        update() { writes.push(table); return query; },
+        delete() { writes.push(table); return query; },
+        single() { return Promise.resolve({ data: [], error: null, count: 1 }); },
+        then(resolve, reject) { return Promise.resolve({ data: [], error: null, count: 1 }).then(resolve, reject); },
+      };
+      return query;
+    },
+    rpc() { return Promise.resolve({ data: [], error: null }); },
+  });
+  const session = { role: 'Operatör', authSource: 'supabase-auth', accessCritical: false };
+  const booted = await context.BtdCloud.boot({
+    session,
+    companies: { Technomac: { dbId: '11111111-1111-4111-8111-111111111111' } },
+    customers: [{ name: 'yerel' }],
+    personnel: [{ name: 'yerel', tcNo: tc }],
+    users: [{ username: 'volkan', password: marker, isGod: true }],
+  });
+  ok(booted.ok === true, 'authenticated boot runs');
+  ok(writes.length === 0, 'boot does not write local rows');
+}
+
 main();
-shadowHttp().then(() => {
+shadowHttp().then(() => cloudGate()).then(() => {
   console.log('shadow http checks passed');
 }).catch((err) => {
   console.error(err);

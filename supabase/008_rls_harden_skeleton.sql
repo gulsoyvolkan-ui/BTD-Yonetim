@@ -1,7 +1,8 @@
 -- Eski iskelet. Çalıştırmayın.
--- Güncel sıra: 013_auth_membership.sql, 014_tenant_rls.sql, 015_revoke_anon_demo.sql.
--- Geri dönüş: 016_rollback_demo_access.sql ve docs/security/PRODUCTION_MIGRATION_RUNBOOK.md.
--- 014 ve 015 üretimde bu dalda çalıştırılmadı.
+-- Güncel sıra: 013, tek tek hesap, 017 acil kapatma, 018 kolon, 019 denetim, 014, 015.
+-- 016 anon yetkisini geri açmaz ve çalıştırılmaz.
+-- Ayrıntı: docs/security/GUVENLIK_TOPARLAMA.md
+-- Bu dosyalar üretimde bu PR sırasında çalıştırılmadı.
 
 -- 1) Demo politikalarını düşürmek için (yalnızca Auth hazır olduğunda):
 -- DO $$

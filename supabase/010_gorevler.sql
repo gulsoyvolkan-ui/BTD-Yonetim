@@ -32,8 +32,5 @@ FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 ALTER TABLE public.gorevler ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS demo_all_access ON public.gorevler;
-CREATE POLICY demo_all_access ON public.gorevler
-  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.gorevler TO anon, authenticated;
+-- demo_all_access ve anon GRANT bu dosyadan çıkarıldı.
+-- Yeniden çalıştırmak anon okumayı açmaz. Politika 017/015 ile düşer.

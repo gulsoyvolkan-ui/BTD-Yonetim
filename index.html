@@ -323,10 +323,10 @@
           </select>
         </div>
         <div>
-          <label class="text-[11px] font-semibold text-white/50 uppercase tracking-wide">Kullanıcı Adı</label>
+          <label class="text-[11px] font-semibold text-white/50 uppercase tracking-wide">İş e-postası</label>
           <div class="login-field mt-1.5 flex items-center gap-2.5 bg-white/[0.06] border border-white/15 rounded-xl px-3.5 py-3 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            <input id="loginUsername" type="text" autocomplete="username" placeholder="kullanici.adi veya e-posta" class="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none min-w-0" />
+            <input id="loginUsername" type="email" autocomplete="username" placeholder="ad.soyad@firma.com" class="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none min-w-0" />
           </div>
         </div>
         <div>
@@ -7115,7 +7115,7 @@ ${vadeLine}`;
 
   // ---------- Login / Authentication (Firma izolasyonu + grup yöneticisi) ----------
   var currentUser = null;
-  const AUTH_SESSION_KEY = 'btd_auth_session_v1';
+  const AUTH_SESSION_KEY = (window.BtdAuth && window.BtdAuth.SESSION_KEY) || 'btd_auth_session_v2';
   const AUTH_IDLE_MS = 2 * 60 * 60 * 1000; // masaüstü: 2 saat
   function btdPortal() {
     try { return window.BtdKiosk?.detectPortal(location.search) || 'desktop'; }
@@ -7148,7 +7148,20 @@ ${vadeLine}`;
   let authActivityTimer = null;
 
   function readAuthSessionRaw() {
-    try { return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); } catch (_) { return null; }
+    const legacy = (window.BtdAuth && window.BtdAuth.LEGACY_SESSION_KEYS) || ['btd_auth_session_v1'];
+    legacy.forEach((key) => { try { localStorage.removeItem(key); } catch (_) { /* ignore */ } });
+    let payload = null;
+    try { payload = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); } catch (_) { payload = null; }
+    if (!payload) return null;
+    const accept = window.BtdAuth?.acceptStoredSession
+      ? window.BtdAuth.acceptStoredSession(payload)
+      : payload.v === 2 && payload.authSource === 'supabase-auth';
+    if (!accept) {
+      clearAuthSession();
+      try { window.BtdSupabase?.getClient?.()?.auth?.signOut?.(); } catch (_) { /* oturum yok */ }
+      return null;
+    }
+    return payload;
   }
   function writeAuthSessionRaw(payload) {
     try {
@@ -7172,6 +7185,7 @@ ${vadeLine}`;
       return;
     }
     const payload = {
+      v: 2,
       username: (user.username || '').toLowerCase(),
       name: user.name || '',
       role: user.role || '',
@@ -7271,16 +7285,8 @@ ${vadeLine}`;
     if (remember) remember.checked = true;
   }
 
-  function findLocalUserForLogin(username, passwordHash) {
-    const u = (username || '').trim().toLowerCase();
-    const hash = String(passwordHash || '').toLowerCase();
-    if (!u || !hash) return null;
-    const list = (typeof users !== 'undefined') ? users : [];
-    return list.find((row) => {
-      const uname = (row.username || '').trim().toLowerCase();
-      const name = (row.name || '').trim().toLowerCase();
-      return (uname === u || name === u) && String(row.password || '').toLowerCase() === hash;
-    }) || null;
+  function findLocalUserForLogin() {
+    return null;
   }
 
   function applyDemoLoginOverrides(user) {
@@ -7335,21 +7341,9 @@ ${vadeLine}`;
       showToast(`Hoş geldiniz, ${session.name}`, 'success');
       return true;
     }
-    const list = (typeof users !== 'undefined') ? users : [];
-    const found = list.find(u => (u.username || '').toLowerCase() === String(raw.username).toLowerCase());
-    if (!found) {
-      clearAuthSession();
-      return false;
-    }
-    const session = sessionForUser(found, raw.company, raw.authSource || 'local');
-    if (!session) {
-      clearAuthSession();
-      return false;
-    }
-    enterAppAsUser(session, session.company, { restore: true });
-    touchAuthSession();
-    showToast(`Hoş geldiniz, ${session.name}`, 'success');
-    return true;
+    clearAuthSession();
+    try { window.BtdSupabase?.getClient?.()?.auth?.signOut?.(); } catch (_) { /* oturum yok */ }
+    return false;
   }
 
   document.getElementById('loginTogglePw').addEventListener('click', () => {
@@ -8032,59 +8026,25 @@ ${vadeLine}`;
     if (ov && !ov.classList.contains('hidden')) closePartInfoPanel();
   });
 
-  function sessionFromFoundUser(found, company) {
-    if (!found) return null;
-    if (company === 'BTD Yönetim') {
-      if (!isGroupAdmin(found)) return null;
-      return authSessionFromUser(found, 'Bluemac', 'BTD Yönetim');
-    }
-    if (isGroupAdmin(found)) return authSessionFromUser(found, company, company);
-    if (normalizeUserCompanies(found).includes(company)) return authSessionFromUser(found, company, company);
+  function sessionFromFoundUser() {
     return null;
   }
 
-  function authenticateLogin(username, passwordHash, company) {
-    const found = findLocalUserForLogin(username, passwordHash);
-    if (!found) return null;
-    return sessionForUser(found, company, 'local');
+  function authenticateLogin() {
+    return null;
   }
 
   async function authenticateLoginAsync(username, password, company) {
-    if (window.BtdAuth?.signInWithSupabase) {
-      const authTry = await window.BtdAuth.signInWithSupabase(username, password);
-      if (authTry?.ok) {
-        const session = sessionForUser(authTry.membership, company, 'supabase-auth');
-        return session || { error: 'firma' };
-      }
-      if (authTry?.code === 'unlinked') return { error: 'unlinked' };
-      if (authTry?.code === 'rejected') return null;
-      if (String(username || '').includes('@')) return null;
+    const id = String(username || '').trim();
+    if (!id.includes('@')) return { error: 'email-required' };
+    if (!window.BtdAuth?.signInWithSupabase) return { error: 'unavailable' };
+    const authTry = await window.BtdAuth.signInWithSupabase(id, password);
+    if (authTry?.ok) {
+      const session = sessionForUser(authTry.membership, company, 'supabase-auth');
+      return session || { error: 'firma' };
     }
-
-    let passwordHash = '';
-    try {
-      passwordHash = await window.BtdSupabase.digestPassword(password);
-    } catch (err) {
-      console.warn('[BTD] Şifre özeti hesaplanamadı');
-      return null;
-    }
-    if (!passwordHash) return null;
-
-    const localFirst = authenticateLogin(username, passwordHash, company);
-    if (localFirst) return localFirst;
-
-    if (window.BtdSupabase?.fetchUserForLogin) {
-      try {
-        const remote = await window.BtdSupabase.fetchUserForLogin(username, password);
-        if (remote) {
-          const session = sessionForUser(remote, company, 'legacy-hash');
-          if (session) return session;
-        }
-      } catch (err) {
-        console.warn('[BTD] Uzak giriş denemesi başarısız');
-      }
-    }
-
+    if (authTry?.code === 'unlinked') return { error: 'unlinked' };
+    if (authTry?.code === 'unavailable') return { error: 'unavailable' };
     return null;
   }
 
@@ -8095,7 +8055,7 @@ ${vadeLine}`;
     const company = document.getElementById('loginCompany')?.value || 'Bluemac';
 
     if (!username || !password) {
-      loginError.textContent = 'Kullanıcı adı ve şifre zorunludur.';
+      loginError.textContent = 'İş e-postası ve parola zorunludur.';
       loginError.classList.remove('hidden');
       loginForm.classList.remove('login-shake');
       requestAnimationFrame(() => loginForm.classList.add('login-shake'));
@@ -8110,9 +8070,13 @@ ${vadeLine}`;
     try {
       const auth = await authenticateLoginAsync(username, password, company);
       if (!auth || auth.error) {
-        loginError.textContent = auth?.error === 'unlinked'
-          ? 'Bu e-posta henüz BTD hesabına bağlı değil. Bağlantı tek tek yapılır.'
-          : 'Giriş başarısız. Bilgiler veya firma üyeliği eşleşmiyor.';
+        const loginMessages = {
+          unlinked: 'Bu e-posta henüz BTD hesabına bağlı değil. Bağlantı tek tek yapılır.',
+          'email-required': 'Giriş yalnız iş e-postası ile yapılır. Kullanıcı adı yolu kapatıldı.',
+          unavailable: 'Kimlik servisine ulaşılamadı. Eski parola yolu açılmaz.',
+          firma: 'Bu hesap için firma üyeliği yok.',
+        };
+        loginError.textContent = loginMessages[auth && auth.error] || 'Giriş başarısız. Bilgiler veya firma üyeliği eşleşmiyor.';
         loginError.classList.remove('hidden');
         loginForm.classList.remove('login-shake');
         requestAnimationFrame(() => loginForm.classList.add('login-shake'));
@@ -8120,6 +8084,7 @@ ${vadeLine}`;
       }
 
       const targetCompany = enterAppAsUser(auth, auth.company || company);
+      if (typeof startCloudSync === 'function') startCloudSync();
       const srcHint = auth.authSource === 'supabase-auth' ? ' · hesap' : '';
       if (typeof showToast === 'function') {
         showToast(auth.isGod ? `Hoş geldiniz, ${auth.name} · grup yöneticisi${srcHint}` : `Hoş geldiniz, ${auth.name} · ${targetCompany}${srcHint}`, 'success');
@@ -15245,14 +15210,14 @@ ${vadeLine}`;
 
   let users = [
     {
-      username: 'volkan', name: 'Volkan', password: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', dept: 'Yönetim',
+      username: 'volkan', name: 'Volkan', password: '', dept: 'Yönetim',
       scope: 'Tüm Grup', companies: ['Technomac', 'Bluemac', 'Devorias'],
       role: 'Yönetici', perms: adminPerms(), isGod: true,
       tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
       collar: 'white', accessCritical: true,
     },
     {
-      username: 'ahmet', name: 'Ahmet Yıldız', password: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', dept: 'CNC',
+      username: 'ahmet', name: 'Ahmet Yıldız', password: '', dept: 'CNC',
       scope: 'Technomac', companies: ['Technomac'],
       role: 'Operatör', perms: defaultPerms(), isGod: false,
       tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
@@ -15260,7 +15225,7 @@ ${vadeLine}`;
       collar: 'blue', accessCritical: false,
     },
   ];
-  // Demo şifreler kodda düz metin değil; password alanı SHA-256 hex özettir.
+  // Yerel dizin giriş değildir. Parola burada tutulmaz. Kimlik Supabase Auth'tadır.
 
   function formatUserCompaniesLabel(u) {
     if (!u) return '—';
@@ -15676,16 +15641,8 @@ ${vadeLine}`;
     const username = (document.getElementById('newUserUsername')?.value || '').trim().toLowerCase();
     const plainPassword = document.getElementById('newUserPassword').value;
     if (!username) { showToast('Giriş kullanıcı adı zorunludur.', 'error'); return; }
-    if (!plainPassword) { showToast('Şifre zorunludur.', 'error'); return; }
-    let password;
-    try {
-      password = await window.BtdSupabase.passwordForStorage(plainPassword);
-    } catch (err) {
-      console.warn('[BTD] Şifre özeti hesaplanamadı:', err);
-      showToast('Şifre kaydedilemedi.', 'error');
-      return;
-    }
-    if (!password) { showToast('Şifre zorunludur.', 'error'); return; }
+    if (plainPassword) showToast('Parola bu ekranda tutulmaz. Hesap Supabase Auth ile tek tek açılır.', 'info');
+    const password = '';
     if (users.some(u => (u.username || '').toLowerCase() === username)) {
       showToast('Bu kullanıcı adı zaten kullanılıyor.', 'error'); return;
     }
@@ -15840,14 +15797,10 @@ ${vadeLine}`;
     editUserTarget.username = username;
     const typedPassword = document.getElementById('editUserPassword').value.trim();
     if (typedPassword) {
-      try {
-        editUserTarget.password = await window.BtdSupabase.passwordForStorage(typedPassword);
-      } catch (err) {
-        console.warn('[BTD] Şifre özeti hesaplanamadı:', err);
-        showToast('Şifre kaydedilemedi.', 'error');
-        return;
-      }
+      showToast('Parola bu ekranda değişmez. Supabase Auth panelinden verilir.', 'info');
+      document.getElementById('editUserPassword').value = '';
     }
+    editUserTarget.password = '';
     editUserTarget.dept = document.getElementById('editUserDept').value;
     editUserTarget.role = document.getElementById('editUserRole').value;
     editUserTarget.companies = access.companies.slice();
@@ -19536,80 +19489,70 @@ ${vadeLine}`;
 
   setActiveCompany('Bluemac');
 
-  // Sayfa yenilemede oturumu geri yükle (çıkış yapılmadıysa)
-  try {
-    if (typeof tryRestoreAuthSession === 'function') tryRestoreAuthSession();
-  } catch (e) {
-    console.warn('[BTD] Oturum geri yükleme atlandı', e);
+  async function startCloudSync() {
+    if (window.BtdCloud?.setSensitiveAccess && window.BtdAuth?.canReadSensitive) {
+      window.BtdCloud.setSensitiveAccess(window.BtdAuth.canReadSensitive(currentUser));
+    }
+    if (window.BtdSupabase?.hydrateCompanies) {
+      const hr = await window.BtdSupabase.hydrateCompanies(companies);
+      if (hr?.ok && typeof refreshCompanyChromeClasses === 'function') refreshCompanyChromeClasses();
+    }
+    if (!window.BtdCloud?.boot) return;
+    const bootRes = await window.BtdCloud.boot({
+      session: currentUser,
+      companies,
+      customers,
+      suppliers,
+      products,
+      subcontractors,
+      supplierGroupPriorities,
+      personnel,
+      attendanceLogs,
+      leaveRequests,
+      users,
+      costAnalyses,
+      quotes,
+      orders,
+      orderRevisionLog,
+      workOrders,
+      tasks,
+      procurementItems,
+      materialRfqs,
+      reprocRequests,
+      unforeseenCosts,
+      fasonJobs,
+      qcRecords,
+      shipments,
+      invoices,
+      stockItems,
+      stockMoves,
+      machinePark,
+      procMaterialCatalog,
+      heatTreatmentCatalog,
+      coatingCatalog,
+      productShapes,
+      operationCatalog,
+      fxRates,
+      turkishHolidays2026,
+    });
+    console.info('[BTD] Cloud boot', bootRes && bootRes.ok, bootRes && bootRes.reason ? bootRes.reason : '');
+    window.__btdBootDone = true;
+    if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
   }
 
   (async function btdCloudBoot() {
     try {
       if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
-      // Öncelik şemalarını firmalar için hazırla (boşsa varsayılan)
       ['Technomac', 'Bluemac', 'Devorias'].forEach((c) => {
         if (typeof ensureSupplierGroupPriorities === 'function') ensureSupplierGroupPriorities(c);
       });
-      if (window.BtdSupabase?.hydrateCompanies) {
-        const hr = await window.BtdSupabase.hydrateCompanies(companies);
-        if (hr?.ok && typeof refreshCompanyChromeClasses === 'function') refreshCompanyChromeClasses();
+      if (typeof tryRestoreAuthSession === 'function') {
+        try { await tryRestoreAuthSession(); } catch (e) { console.warn('[BTD] Oturum geri yükleme atlandı'); }
       }
-      if (!window.BtdCloud?.boot) return;
-      const bootRes = await window.BtdCloud.boot({
-        companies,
-        customers,
-        suppliers,
-        products,
-        subcontractors,
-        supplierGroupPriorities,
-        personnel,
-        attendanceLogs,
-        leaveRequests,
-        users,
-        costAnalyses,
-        quotes,
-        orders,
-        orderRevisionLog,
-        workOrders,
-        tasks,
-        procurementItems,
-        materialRfqs,
-        reprocRequests,
-        unforeseenCosts,
-        fasonJobs,
-        qcRecords,
-        shipments,
-        invoices,
-        stockItems,
-        stockMoves,
-        machinePark,
-        procMaterialCatalog,
-        heatTreatmentCatalog,
-        coatingCatalog,
-        productShapes,
-        operationCatalog,
-        fxRates,
-        turkishHolidays2026,
-      });
-      console.info('[BTD] Cloud boot', bootRes);
-      window.__btdBootDone = true;
-      if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
-      // Hydrate sonrası kullanıcı bayraklarını düzelterek oturumu taze tut
-      if (currentUser && typeof applyDemoLoginOverrides === 'function') {
-        const live = (users || []).find(u => (u.username || '').toLowerCase() === (currentUser.username || '').toLowerCase());
-        if (live) applyDemoLoginOverrides(live);
-        applyDemoLoginOverrides(currentUser);
-        if (typeof applyCurrentUser === 'function') applyCurrentUser();
-        if (typeof touchAuthSession === 'function') touchAuthSession();
-      } else if (!currentUser && typeof tryRestoreAuthSession === 'function') {
-        tryRestoreAuthSession();
-      }
+      await startCloudSync();
     } catch (err) {
-      console.warn('[BTD] Cloud boot failed — yerel veri ile devam', err);
+      console.warn('[BTD] Cloud boot failed — yerel veri ile devam');
       window.__btdBootDone = true;
-      if (!currentUser && typeof tryRestoreAuthSession === 'function') {
-        try { tryRestoreAuthSession(); } catch (_) { /* ignore */ }
-      }
     }
   })();
 </script>

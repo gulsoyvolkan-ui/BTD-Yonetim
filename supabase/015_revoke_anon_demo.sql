@@ -43,3 +43,29 @@ GRANT SELECT (
 ) ON public.kullanicilar TO authenticated;
 
 REVOKE UPDATE, DELETE ON TABLE public.denetim_olaylari FROM authenticated;
+
+-- Yukarıdaki "GRANT ... ON ALL TABLES" personel.tc_no ve maas kolonlarını da açar.
+-- 018 ile aynı daraltma. 015, 018'den sonra çalışsa bile bu kolonlar tablodan seçilemez.
+DO $narrow_personel$
+DECLARE
+  cols text;
+BEGIN
+  IF to_regclass('public.personel') IS NULL THEN
+    RETURN;
+  END IF;
+  SELECT string_agg(quote_ident(column_name), ', ' ORDER BY ordinal_position)
+  INTO cols
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'personel'
+    AND column_name NOT IN ('tc_no', 'maas');
+  IF cols IS NULL OR cols = '' THEN
+    RAISE EXCEPTION 'Durdu: personel kolon listesi boş.';
+  END IF;
+  EXECUTE 'REVOKE ALL ON TABLE public.personel FROM PUBLIC, anon, authenticated';
+  EXECUTE format('GRANT SELECT (%s) ON TABLE public.personel TO authenticated', cols);
+  EXECUTE format('GRANT INSERT (%s) ON TABLE public.personel TO authenticated', cols);
+  EXECUTE format('GRANT UPDATE (%s) ON TABLE public.personel TO authenticated', cols);
+  EXECUTE 'GRANT DELETE ON TABLE public.personel TO authenticated';
+END
+$narrow_personel$;

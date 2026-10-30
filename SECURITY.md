@@ -27,9 +27,10 @@ Ayrıntı: `docs/security/BTD_SECURITY_BASELINE.md`, `docs/security/PRODUCTION_M
 
 ## Bilinen demo riskleri (bilinçli)
 
-- Supabase `003_demo_rls_policies.sql` anon’a geniş izin verir — **bitirme/demo içindir**. Gerçek müşteri verisi öncesi firma bazlı RLS + güvenli auth gerekir.
-- Kullanıcı şifreleri `sifre_hash` alanında SHA-256 özeti olarak durur. Eski düz metin satırlar `supabase/012_password_hashes.sql` dosyası Supabase SQL Editor’a yapıştırılarak çevrilir.
-- Demo giriş production’da değiştirilmeli / kapatılmalı. Başarısız giriş yönetici hesabı üretmez.
+- `003` ve `002` yeniden çalıştırılmaz. Eski halleri anon’a geniş izin veriyordu. Güncel dosyalar durur ve izin yazmaz.
+- Acil kapatma `supabase/017_emergency_anon_containment.sql`. Üretimde bu PR sırasında çalıştırılmadı. Sıra ve NO-GO: `docs/security/GUVENLIK_TOPARLAMA.md`.
+- `016` anon okumayı geri açmaz.
+- Giriş iş e-postası ve Supabase Auth’tır. İstemci parola özeti ile giriş yapmaz. Başarısız giriş yönetici hesabı üretmez.
 
 ## Sızıntı olursa
 

@@ -128,6 +128,35 @@
     return out;
   }
 
+  const SESSION_KEY = 'btd_auth_session_v2';
+  const LEGACY_SESSION_KEYS = ['btd_auth_session_v1'];
+  const PERSONNEL_COLUMNS_BASE = [
+    'id', 'firma_id', 'personel_kodu', 'ad_soyad', 'departman', 'yaka',
+    'ise_baslama', 'durum', 'telefon', 'eposta', 'adres',
+  ].join(',');
+  const PERSONNEL_COLUMNS = [
+    'id', 'firma_id', 'personel_kodu', 'ad_soyad', 'departman', 'yaka',
+    'ise_baslama', 'durum', 'telefon', 'whatsapp', 'eposta', 'adres',
+    'yillik_izin_hakedis', 'yillik_planlanan_izin', 'foto',
+  ].join(',');
+  const USER_WRITE_DENIED = [
+    'sifre_hash', 'password', 'tc_no', 'tcNo', 'rol', 'role', 'is_god', 'isGod', 'tum_grup',
+  ];
+
+  function acceptStoredSession(raw) {
+    if (!raw || typeof raw !== 'object') return false;
+    if (raw.v !== 2 || raw.authSource !== 'supabase-auth') return false;
+    if (raw.password || raw.sifre_hash || raw.tc_no || raw.tcNo) return false;
+    return true;
+  }
+
+  function canReadSensitive(session) {
+    if (!session || session.kiosk) return false;
+    if (session.authSource && session.authSource !== 'supabase-auth') return false;
+    if (session.role === 'Yönetici') return true;
+    return session.accessCritical === true || session.erisim_kritik === true;
+  }
+
   function membershipHasSecrets(membership) {
     if (!membership || typeof membership !== 'object') return false;
     return ['sifre_hash', 'password', 'tc_no', 'tcNo', 'access_token', 'refresh_token']
@@ -192,6 +221,13 @@
 
   return {
     SESSION_KEYS,
+    SESSION_KEY,
+    LEGACY_SESSION_KEYS,
+    PERSONNEL_COLUMNS,
+    PERSONNEL_COLUMNS_BASE,
+    USER_WRITE_DENIED,
+    acceptStoredSession,
+    canReadSensitive,
     buildSession,
     sanitizeSession,
     signInWithSupabase,

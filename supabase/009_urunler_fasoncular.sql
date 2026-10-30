@@ -59,13 +59,6 @@ CREATE INDEX IF NOT EXISTS idx_siparis_kalem_urun ON public.siparis_kalemleri(ur
 ALTER TABLE public.urunler ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fasoncular ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS demo_all_access ON public.urunler;
-CREATE POLICY demo_all_access ON public.urunler
-  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS demo_all_access ON public.fasoncular;
-CREATE POLICY demo_all_access ON public.fasoncular
-  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.urunler TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.fasoncular TO anon, authenticated;
+-- demo_all_access ve anon GRANT bu dosyadan çıkarıldı.
+-- Yeniden çalıştırmak anon okumayı açmaz. Politika 017/015 ile düşer.
+-- authenticated yetkisi 014/015 ile gelir.
