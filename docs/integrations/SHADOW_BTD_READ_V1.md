@@ -62,4 +62,4 @@ Bugünkü okuma örneği:
 }
 ```
 
-Uç: `GET /api/shadow-read?firma_id=<üyelik uuid>`. `x-api-key` ve `Authorization: Bearer` birlikte gerekir. İkisi de yoksa 401. Firma üyelikte yoksa 403 ve `PERMISSION_DENIED`.
+Uç: `GET /api/shadow-read?firma_id=<üyelik uuid>`. `x-api-key` kimlik değildir; `Authorization: Bearer` kullanıcı jetonu da gerekir. İkisi birden yoksa 401. Firma üyelikte yoksa 403 ve `PERMISSION_DENIED`. Bu uç personel, firma satırı veya `tc_no` okumaz. SHADOW tarafına iş verisi yetkisi eklenmez.

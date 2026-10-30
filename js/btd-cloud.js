@@ -8,7 +8,8 @@
 
   const CURRENCY_TO_DB = { '₺': 'TRY', '€': 'EUR', '$': 'USD', '£': 'GBP', TRY: 'TRY', EUR: 'EUR', USD: 'USD', GBP: 'GBP' };
   const CURRENCY_TO_UI = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', '₺': '₺', '€': '€', '$': '$', '£': '£' };
-  const PROTECTED_USERS = new Set(['volkan', 'ahmet']);
+  let bootReadOnly = false;
+  let sensitiveReads = false;
 
   // ─── Helpers ───────────────────────────────────────────────────────────────
   function currencyToDb(sym) {
@@ -23,13 +24,54 @@
     if (!companies || !name) return null;
     return companies[name]?.dbId || null;
   }
+  function freezeWrites(query) {
+    const blocked = { message: 'boot-write-blocked' };
+    const response = {
+      data: null,
+      error: blocked,
+      select() { return response; },
+      eq() { return response; },
+      single() { return Promise.resolve({ data: null, error: blocked }); },
+      then(resolve, reject) { return Promise.resolve({ data: null, error: blocked }).then(resolve, reject); },
+    };
+    ['insert', 'upsert', 'update', 'delete'].forEach((name) => {
+      query[name] = () => response;
+    });
+    return query;
+  }
+  function wrapReadOnly(client) {
+    return {
+      from(table) {
+        return freezeWrites(client.from(table));
+      },
+      rpc(...args) {
+        return client.rpc(...args);
+      },
+      auth: client.auth,
+    };
+  }
   function sb() {
     try {
-      return global.BtdSupabase?.getClient?.() || null;
+      const client = global.BtdSupabase?.getClient?.() || null;
+      if (!client || !bootReadOnly) return client;
+      return wrapReadOnly(client);
     } catch (e) {
       console.warn('[BtdCloud] sb()', e);
       return null;
     }
+  }
+  async function withSession(label, fn) {
+    let allowed = false;
+    try {
+      allowed = !!(global.BtdSupabase && await global.BtdSupabase.hasUserSession());
+    } catch (e) {
+      allowed = false;
+    }
+    if (!allowed) return fail('no-auth-session', label);
+    return fn();
+  }
+  function setSensitiveAccess(flag) {
+    sensitiveReads = !!flag;
   }
   function progress(ctx, msg) {
     try { ctx?.onProgress?.(msg); } catch (_) { /* ignore */ }
@@ -615,9 +657,7 @@
         departman: p.dept || null,
         yaka: collarToDb(p.collar),
         ise_baslama: p.startDate || null,
-        maas: p.salary != null ? Number(p.salary) : null,
         durum: p.status || 'Aktif',
-        tc_no: p.tcNo || null,
         telefon: p.phone || p.whatsapp || null,
         whatsapp: p.whatsapp || p.phone || null,
         eposta: p.email || null,
@@ -629,27 +669,47 @@
       if (p.dbId) {
         const { error } = await client.from('personel').update(row).eq('id', p.dbId);
         if (error) throw error;
+        await writeSensitivePersonnel(client, p);
         return ok({ dbId: p.dbId });
       }
       const { data, error } = await client.from('personel').insert(row).select('id').single();
       if (error) throw error;
       p.dbId = data.id;
+      await writeSensitivePersonnel(client, p);
       return ok({ dbId: data.id });
     } catch (e) { return fail(e, 'savePersonnel'); }
+  }
+  async function writeSensitivePersonnel(client, p) {
+    if (!sensitiveReads || !p?.dbId || !client?.rpc) return;
+    try {
+      const res = await client.rpc('btd_personel_hassas_yaz', {
+        p_id: p.dbId,
+        p_tc: p.tcNo || null,
+        p_maas: p.salary != null ? Number(p.salary) : null,
+      });
+      if (res && res.error) console.warn('[BtdCloud] hassas personel yazılamadı');
+    } catch (e) {
+      console.warn('[BtdCloud] hassas personel yazılamadı');
+    }
   }
   async function hydratePersonnel(ctx) {
     const client = sb();
     if (!client || !ctx.personnel) return;
     const n = await countTable(client, 'personel');
     if (!n) {
-      if (ctx.personnel.length) {
-        progress(ctx, `Personel seed (${ctx.personnel.length})…`);
-        for (const p of ctx.personnel) await savePersonnel(p, ctx.companies);
-      }
+      progress(ctx, 'Personel tablosu boş — yerel tohum yazılmaz');
       return;
     }
     progress(ctx, 'Personel hydrate…');
-    const rows = await selectAll(client, 'personel', '*');
+    const full = global.BtdAuth?.PERSONNEL_COLUMNS;
+    const base = global.BtdAuth?.PERSONNEL_COLUMNS_BASE;
+    let rows;
+    try {
+      rows = await selectAll(client, 'personel', full || base);
+    } catch (e) {
+      if (!base || full === base) throw e;
+      rows = await selectAll(client, 'personel', base);
+    }
     replaceArray(ctx.personnel, rows.map((r) => {
       const mobile = r.whatsapp || r.telefon || '';
       return {
@@ -660,9 +720,9 @@
         dept: r.departman || '',
         collar: collarToUi(r.yaka),
         startDate: r.ise_baslama || '',
-        salary: Number(r.maas) || 0,
+        salary: 0,
         status: r.durum || 'Aktif',
-        tcNo: r.tc_no || '',
+        tcNo: '',
         phone: mobile,
         whatsapp: mobile,
         email: r.eposta || '',
@@ -673,6 +733,21 @@
         userId: null,
       };
     }));
+    if (sensitiveReads && client.rpc) {
+      try {
+        const extra = await client.rpc('btd_personel_hassas_liste');
+        const list = extra && !extra.error && Array.isArray(extra.data) ? extra.data : [];
+        const byId = Object.fromEntries(list.map((item) => [item.id, item]));
+        ctx.personnel.forEach((person) => {
+          const row = byId[person.dbId];
+          if (!row) return;
+          person.tcNo = row.tc_no || '';
+          person.salary = row.maas != null ? Number(row.maas) || 0 : 0;
+        });
+      } catch (e) {
+        console.warn('[BtdCloud] hassas personel listesi yok');
+      }
+    }
   }
   async function hydrateAttendanceLeave(ctx) {
     const client = sb();
@@ -757,63 +832,25 @@
     }
   }
 
-  async function passwordForStorage(value) {
-    const fn = global.BtdSupabase?.passwordForStorage;
-    if (typeof fn !== 'function') throw new Error('sifre-hash-unavailable');
-    return fn(value);
-  }
-
-  async function saveUser(u, companies) {
+  async function saveUser(u) {
     try {
       if (!u) return fail('no-user', 'saveUser');
-      const sifreHash = await passwordForStorage(u.password);
-      u.password = sifreHash;
+      if (u.password) delete u.password;
       const client = sb();
       if (!client) return fail('no-client', 'saveUser');
+      if (!u.dbId) return fail('auth-account-required', 'saveUser');
       const uname = (u.username || '').toLowerCase();
       const row = {
         kullanici_adi: uname,
         ad_soyad: u.name || uname,
-        sifre_hash: sifreHash,
-        rol: u.role || 'Operatör',
-        kapsam: u.scope || 'Firma',
-        tum_grup: !!(u.isGod || u.scope === 'Tüm Grup'),
-        is_god: !!u.isGod,
-        erisim_kritik: !!u.accessCritical,
-        yaka: collarToDb(u.collar),
-        tc_no: u.tcNo || null,
         telefon: u.phone || null,
         eposta: u.email || null,
         adres: u.address || null,
-        aktif: true,
+        yaka: collarToDb(u.collar),
       };
-      let dbId = u.dbId;
-      if (dbId) {
-        const { error } = await client.from('kullanicilar').update(row).eq('id', dbId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await client
-          .from('kullanicilar')
-          .upsert(row, { onConflict: 'kullanici_adi' })
-          .select('id')
-          .single();
-        if (error) throw error;
-        dbId = data.id;
-        u.dbId = dbId;
-      }
-      await client.from('kullanici_firmalar').delete().eq('kullanici_id', dbId);
-      const firmNames = u.isGod || u.scope === 'Tüm Grup'
-        ? Object.keys(companies || {})
-        : (u.companies || []);
-      const links = firmNames
-        .map((n) => firmaId(companies, n))
-        .filter(Boolean)
-        .map((fid) => ({ kullanici_id: dbId, firma_id: fid }));
-      if (links.length) {
-        const { error } = await client.from('kullanici_firmalar').insert(links);
-        if (error) throw error;
-      }
-      return ok({ dbId });
+      const { error } = await client.from('kullanicilar').update(row).eq('id', u.dbId);
+      if (error) throw error;
+      return ok({ dbId: u.dbId });
     } catch (e) { return fail(e, 'saveUser'); }
   }
   async function hydrateUsers(ctx) {
@@ -821,57 +858,41 @@
     if (!client || !ctx.users) return;
     const n = await countTable(client, 'kullanicilar');
     if (!n) {
-      if (ctx.users.length) {
-        progress(ctx, `Kullanıcılar seed (${ctx.users.length})…`);
-        for (const u of ctx.users) await saveUser(u, ctx.companies);
-      }
+      progress(ctx, 'Kullanıcı tablosu boş — yerel tohum yazılmaz');
       return;
     }
     progress(ctx, 'Kullanıcılar hydrate…');
     const rows = await selectAll(
       client,
       'kullanicilar',
-      '*, kullanici_firmalar(firma_id, firmalar(ad))'
+      'id, kullanici_adi, ad_soyad, rol, kapsam, tum_grup, erisim_kritik, yaka, eposta, telefon, adres, aktif, auth_user_id, kullanici_firmalar(firma_id, firmalar(ad))'
     );
     const localByUser = Object.fromEntries((ctx.users || []).map((u) => [(u.username || '').toLowerCase(), u]));
     const mapped = rows.map((r) => {
       const uname = (r.kullanici_adi || '').toLowerCase();
       const prev = localByUser[uname];
       const firmNames = (r.kullanici_firmalar || []).map((kf) => kf.firmalar?.ad).filter(Boolean);
+      const group = r.rol === 'Yönetici' && !!r.tum_grup;
       return {
         dbId: r.id,
         username: r.kullanici_adi,
         name: r.ad_soyad,
-        password: r.sifre_hash || (prev?.password || ''),
+        password: '',
         role: r.rol || 'Operatör',
-        scope: (r.tum_grup || r.kapsam === 'Tüm Grup') ? 'Tüm Grup' : (r.kapsam || firmNames[0] || 'Firma'),
+        scope: group ? 'Tüm Grup' : (r.kapsam || firmNames[0] || 'Firma'),
         companies: firmNames,
-        isGod: !!(r.is_god || r.tum_grup),
+        isGod: group,
         accessCritical: !!r.erisim_kritik,
         collar: collarToUi(r.yaka),
         email: r.eposta || '',
         phone: r.telefon || '',
-        tcNo: r.tc_no || '',
+        tcNo: '',
         address: r.adres || '',
         dept: prev?.dept || '',
         personnelId: prev?.personnelId || null,
         perms: prev?.perms,
+        authUserId: r.auth_user_id || null,
       };
-    });
-    // Korunan demo kullanıcıları: kaybolmasın + şifre/yetki bozulmasın
-    PROTECTED_USERS.forEach((uname) => {
-      const local = localByUser[uname];
-      if (!local) return;
-      const idx = mapped.findIndex((u) => (u.username || '').toLowerCase() === uname);
-      if (idx < 0) {
-        mapped.push({ ...local });
-        return;
-      }
-      const row = mapped[idx];
-      // Sunucu satırı rol ve firma listesini belirler. Yerel tohum yükseltmez.
-      if (local.personnelId && !row.personnelId) row.personnelId = local.personnelId;
-      if (!row.perms && local.perms) row.perms = local.perms;
-      if (!row.collar && local.collar) row.collar = local.collar;
     });
     replaceArray(ctx.users, mapped);
   }
@@ -2550,7 +2571,10 @@
       return { ok: false, reason: 'no-firma-ids' };
     }
 
+    bootReadOnly = true;
+    try {
     progress(ctx, 'Bulut senkron başlıyor…');
+    if (global.BtdAuth?.canReadSensitive) setSensitiveAccess(global.BtdAuth.canReadSensitive(ctx.session));
     const steps = [
       ['kataloglar', () => hydrateCatalogs(ctx)],
       ['müşteriler', () => hydrateCustomers(ctx)],
@@ -2584,6 +2608,9 @@
     }
     progress(ctx, 'Bulut senkron tamamlandı');
     return ok({ results });
+    } finally {
+      bootReadOnly = false;
+    }
   }
 
   // ─── Export ────────────────────────────────────────────────────────────────
@@ -2592,34 +2619,35 @@
     currencyToUi,
     firmaId,
     sb,
-    boot,
-    saveCustomer,
-    deleteCustomer,
-    saveProduct,
-    deleteProduct,
-    saveSubcontractor,
-    deleteSubcontractor,
-    saveSupplier,
-    deleteSupplier,
-    savePersonnel,
-    saveUser,
-    saveCostAnalysis,
-    saveQuote,
-    deleteQuote,
-    saveOrder,
-    saveWorkOrder,
-    saveTask,
-    deleteTask,
-    saveProcurementItem,
-    saveMaterialRfq,
-    saveReproc,
-    saveUnforeseen,
-    saveFason,
-    saveQc,
-    saveShipment,
-    saveInvoice,
-    saveStockItem,
-    saveStockMove,
-    saveSupplierGroupPriorities,
+    setSensitiveAccess,
+    boot: (ctx) => withSession('boot', () => boot(ctx)),
+    saveCustomer: (...args) => withSession('saveCustomer', () => saveCustomer(...args)),
+    deleteCustomer: (...args) => withSession('deleteCustomer', () => deleteCustomer(...args)),
+    saveProduct: (...args) => withSession('saveProduct', () => saveProduct(...args)),
+    deleteProduct: (...args) => withSession('deleteProduct', () => deleteProduct(...args)),
+    saveSubcontractor: (...args) => withSession('saveSubcontractor', () => saveSubcontractor(...args)),
+    deleteSubcontractor: (...args) => withSession('deleteSubcontractor', () => deleteSubcontractor(...args)),
+    saveSupplier: (...args) => withSession('saveSupplier', () => saveSupplier(...args)),
+    deleteSupplier: (...args) => withSession('deleteSupplier', () => deleteSupplier(...args)),
+    savePersonnel: (...args) => withSession('savePersonnel', () => savePersonnel(...args)),
+    saveUser: (...args) => withSession('saveUser', () => saveUser(...args)),
+    saveCostAnalysis: (...args) => withSession('saveCostAnalysis', () => saveCostAnalysis(...args)),
+    saveQuote: (...args) => withSession('saveQuote', () => saveQuote(...args)),
+    deleteQuote: (...args) => withSession('deleteQuote', () => deleteQuote(...args)),
+    saveOrder: (...args) => withSession('saveOrder', () => saveOrder(...args)),
+    saveWorkOrder: (...args) => withSession('saveWorkOrder', () => saveWorkOrder(...args)),
+    saveTask: (...args) => withSession('saveTask', () => saveTask(...args)),
+    deleteTask: (...args) => withSession('deleteTask', () => deleteTask(...args)),
+    saveProcurementItem: (...args) => withSession('saveProcurementItem', () => saveProcurementItem(...args)),
+    saveMaterialRfq: (...args) => withSession('saveMaterialRfq', () => saveMaterialRfq(...args)),
+    saveReproc: (...args) => withSession('saveReproc', () => saveReproc(...args)),
+    saveUnforeseen: (...args) => withSession('saveUnforeseen', () => saveUnforeseen(...args)),
+    saveFason: (...args) => withSession('saveFason', () => saveFason(...args)),
+    saveQc: (...args) => withSession('saveQc', () => saveQc(...args)),
+    saveShipment: (...args) => withSession('saveShipment', () => saveShipment(...args)),
+    saveInvoice: (...args) => withSession('saveInvoice', () => saveInvoice(...args)),
+    saveStockItem: (...args) => withSession('saveStockItem', () => saveStockItem(...args)),
+    saveStockMove: (...args) => withSession('saveStockMove', () => saveStockMove(...args)),
+    saveSupplierGroupPriorities: (...args) => withSession('saveSupplierGroupPriorities', () => saveSupplierGroupPriorities(...args)),
   };
 })(typeof window !== 'undefined' ? window : globalThis);

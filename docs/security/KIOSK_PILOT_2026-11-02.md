@@ -19,6 +19,6 @@ Tasarım ve `?portal=kiosk` kapısı. Masaüstü ve mobil, sorgu yokken aynı 2 
 4. Yönetici hesabıyla kioskta girin. Ayarlarda kullanıcı yönetimi açılmasın. Masaüstünde, sorgusuz, aynı hesap yönetici kalsın.
 5. 5 dakika dokunmayın. Oturum kapansın. Parola tarayıcı deposunda BTD oturum anahtarında olmasın.
 6. SHADOW ucunu boş bırakın. Kiosk yine BTD ekranına gelsin. SHADOW yanıtı, çağrılırsa `UNAVAILABLE` olsun, sipariş ekranı onun için durmasın.
-7. Pilot bitince sekmeyi kapatın. `016` veya hesap çözme gerekmez; bu kapı yalnız sorgu parametresidir.
+7. Pilot bitince sekmeyi kapatın. `016` çalıştırılmaz. Bu kapı sorgu parametresidir. Anon okuma geri açılmaz.
 
 Üretim GO değildir.

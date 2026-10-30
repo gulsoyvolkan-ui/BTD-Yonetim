@@ -81,13 +81,25 @@
     return digestPassword(text);
   }
 
+  async function hasUserSession() {
+    const sb = getClient();
+    if (!sb?.auth?.getSession) return false;
+    try {
+      const session = await sb.auth.getSession();
+      return !!(session && session.data && session.data.session && session.data.session.access_token);
+    } catch (err) {
+      return false;
+    }
+  }
+
   /**
    * firmalar + banka hesaplarını mevcut `companies` nesnesine merge eder.
-   * UI chrome (badgeBg vb.) yerel varsayılanlarla korunur.
+   * Oturum yoksa anon anahtarla firma satırı okunmaz. Yerel kart kalır.
    */
   async function hydrateCompanies(companies) {
     const sb = getClient();
     if (!sb || !companies) return { ok: false, reason: lastError || 'no-client' };
+    if (!(await hasUserSession())) return { ok: false, reason: 'no-auth-session' };
 
     try {
       const { data: firmalar, error: fErr } = await sb
@@ -156,89 +168,16 @@
     }
   }
 
-  /**
-   * DB kullanıcısını yerel `users` satır şekline çevirir.
-   * permsFactory: (role) => perms object
-   */
-  async function fetchUserForLogin(username, password) {
-    const sb = getClient();
-    if (!sb) return null;
-
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    if (!u || !p) return null;
-
-    try {
-      let row = null;
-      let error = null;
-      ({ data: row, error } = await sb
-        .from('kullanicilar')
-        .select(`
-          id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-          erisim_kritik, yaka, eposta, telefon, adres, aktif,
-          kullanici_firmalar ( firma_id, firmalar ( ad ) )
-        `)
-        .ilike('kullanici_adi', u)
-        .eq('aktif', true)
-        .maybeSingle());
-      if (error) throw error;
-
-      // Ad soyad ile de dene (ör. "Volkan")
-      if (!row) {
-        const alt = await sb
-          .from('kullanicilar')
-          .select(`
-            id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-            erisim_kritik, yaka, eposta, telefon, adres, aktif,
-            kullanici_firmalar ( firma_id, firmalar ( ad ) )
-          `)
-          .ilike('ad_soyad', u)
-          .eq('aktif', true)
-          .limit(1)
-          .maybeSingle();
-        if (alt.error) throw alt.error;
-        row = alt.data;
-      }
-
-      if (!row) return null;
-      const stored = String(row.sifre_hash || '');
-      const digest = await digestPassword(p);
-      if (!digest || stored.toLowerCase() !== digest) return null;
-
-      const firmNames = (row.kullanici_firmalar || [])
-        .map((kf) => kf.firmalar?.ad)
-        .filter(Boolean);
-
-      return {
-        id: row.id,
-        username: row.kullanici_adi,
-        name: row.ad_soyad,
-        role: row.rol || 'Operatör',
-        scope: (row.tum_grup || row.kapsam === 'Tüm Grup')
-          ? 'Tüm Grup'
-          : (row.kapsam || firmNames[0] || 'Firma'),
-        companies: firmNames,
-        isGod: false,
-        accessCritical: !!row.erisim_kritik,
-        collar: mapCollar(row.yaka),
-        email: row.eposta || '',
-        phone: row.telefon || '',
-        address: row.adres || '',
-        dept: '',
-        personnelId: null,
-        source: 'supabase',
-      };
-    } catch (err) {
-      lastError = safeError(err);
-      console.warn('[BTD] Login sorgusu başarısız:', lastError);
-      return null;
-    }
+  /** Eski istemci parola karşılaştırması kapatıldı. Kimlik Supabase Auth'tadır. */
+  async function fetchUserForLogin() {
+    return null;
   }
 
   global.BtdSupabase = {
     getClient,
     isReady: () => ready && !!getClient(),
     getLastError: () => lastError,
+    hasUserSession,
     hydrateCompanies,
     fetchUserForLogin,
     isPasswordHash,

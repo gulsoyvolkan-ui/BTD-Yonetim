@@ -1,6 +1,8 @@
 # BTD güvenlik tabanı
 
-Denetlenen uç: `f65b3e3905bf87ee132f68df38dd2de046860c86` (`f65b3e3`, main, 30 Ekim 2026, “Yetki matrisini sayfa açılışına ve kayıt silmeye bağla”). `e81c374` bu uç değildir; yerel kopya gerideydi, `origin/main` çekildi.
+30 Ekim 2026 akşamı `origin/main` ucu `2aa351fa759b6196a5141e00b0f80a3ff866d087` (PR #12 birleşmiş). Aşağıdaki `f65b3e3` anlatımı o günden önceki denetimdir. Güncel toparlama `docs/security/GUVENLIK_TOPARLAMA.md` dosyasındadır. Karar NO-GO.
+
+Denetlenen önceki uç: `f65b3e3905bf87ee132f68df38dd2de046860c86` (`f65b3e3`, “Yetki matrisini sayfa açılışına ve kayıt silmeye bağla”). `e81c374` bu uç değildir.
 
 Canlı Supabase’e bağlanılmadı. SQL çalıştırılmadı. `kullanicilar.auth_user_id` dolu varsayılmadı. Bu belge üretim RLS’inin açık olduğunu söylemez.
 

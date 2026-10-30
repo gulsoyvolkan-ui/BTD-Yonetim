@@ -1,20 +1,10 @@
--- Demo RLS: anon/authenticated için tüm public tablolarda izin
--- Uygulandı (MCP): demo_rls_allow_all_policies
--- Üretimde firma bazlı politikalarla değiştirilecek.
+-- Demo RLS kapatıldı.
+-- Eski sürüm her public tabloda demo_all_access (USING true / WITH CHECK true) yazıyordu.
+-- O politika bu dosyada yeniden oluşturulmaz. Git geçmişindeki kopya yeniden çalıştırılmaz.
+-- Kapatma dosyaları: 017 (personel ve firma), ardından 015 (kalan anon).
 
-DO $$
-DECLARE r RECORD;
+DO $guard$
 BEGIN
-  FOR r IN
-    SELECT c.relname AS tablename
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = 'public' AND c.relkind = 'r'
-  LOOP
-    EXECUTE format('DROP POLICY IF EXISTS demo_all_access ON public.%I', r.tablename);
-    EXECUTE format(
-      'CREATE POLICY demo_all_access ON public.%I FOR ALL TO anon, authenticated USING (true) WITH CHECK (true)',
-      r.tablename
-    );
-  END LOOP;
-END $$;
+  RAISE EXCEPTION 'Durdu: 003 demo_all_access kapalı. Anon politika yazılmadı. Değişiklik yok.';
+END
+$guard$;
