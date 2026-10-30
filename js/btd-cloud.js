@@ -757,15 +757,24 @@
     }
   }
 
+  async function passwordForStorage(value) {
+    const fn = global.BtdSupabase?.passwordForStorage;
+    if (typeof fn !== 'function') throw new Error('sifre-hash-unavailable');
+    return fn(value);
+  }
+
   async function saveUser(u, companies) {
     try {
+      if (!u) return fail('no-user', 'saveUser');
+      const sifreHash = await passwordForStorage(u.password);
+      u.password = sifreHash;
       const client = sb();
-      if (!client || !u) return fail('no-client', 'saveUser');
+      if (!client) return fail('no-client', 'saveUser');
       const uname = (u.username || '').toLowerCase();
       const row = {
         kullanici_adi: uname,
         ad_soyad: u.name || uname,
-        sifre_hash: u.password || null,
+        sifre_hash: sifreHash,
         rol: u.role || 'Operatör',
         kapsam: u.scope || 'Firma',
         tum_grup: !!(u.isGod || u.scope === 'Tüm Grup'),

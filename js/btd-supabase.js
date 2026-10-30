@@ -38,6 +38,37 @@
     return 'white';
   }
 
+  /** 64 karakterlik SHA-256 hex özeti. Büyük/küçük harf fark etmez. */
+  function isPasswordHash(value) {
+    return /^[0-9a-f]{64}$/i.test(String(value || '').trim());
+  }
+
+  /**
+   * Giriş karşılaştırması: kırpılmış düz metnin UTF-8 SHA-256 özeti (küçük harf hex).
+   * Girdi zaten özet gibi görünse bile yeniden özetlenir; özeti yapıştırmak giriş sayılmaz.
+   */
+  async function digestPassword(plain) {
+    const text = String(plain ?? '').trim();
+    if (!text) return '';
+    if (!global.crypto?.subtle?.digest) {
+      throw new Error('Web Crypto SHA-256 kullanılamıyor');
+    }
+    const data = new TextEncoder().encode(text);
+    const buf = await global.crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+    return hex;
+  }
+
+  /** Kayıt: özet ise olduğu gibi (küçük harf), değilse digestPassword. Çift özet yazılmaz. */
+  async function passwordForStorage(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    if (isPasswordHash(text)) return text.toLowerCase();
+    return digestPassword(text);
+  }
+
   /**
    * firmalar + banka hesaplarını mevcut `companies` nesnesine merge eder.
    * UI chrome (badgeBg vb.) yerel varsayılanlarla korunur.
@@ -158,7 +189,9 @@
       }
 
       if (!row) return null;
-      if ((row.sifre_hash || '') !== p) return null;
+      const stored = String(row.sifre_hash || '');
+      const digest = await digestPassword(p);
+      if (!digest || stored.toLowerCase() !== digest) return null;
 
       const firmNames = (row.kullanici_firmalar || [])
         .map((kf) => kf.firmalar?.ad)
@@ -168,7 +201,7 @@
         id: row.id,
         username: row.kullanici_adi,
         name: row.ad_soyad,
-        password: row.sifre_hash,
+        password: stored.toLowerCase(),
         role: row.rol || 'Operatör',
         scope: (row.tum_grup || row.kapsam === 'Tüm Grup')
           ? 'Tüm Grup'
@@ -198,5 +231,8 @@
     getLastError: () => lastError,
     hydrateCompanies,
     fetchUserForLogin,
+    isPasswordHash,
+    digestPassword,
+    passwordForStorage,
   };
 })(typeof window !== 'undefined' ? window : globalThis);
