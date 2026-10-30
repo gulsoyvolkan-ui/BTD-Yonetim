@@ -4355,7 +4355,7 @@
         <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Şifre</label>
           <div class="mt-1 flex items-center gap-1.5 rounded-xl border border-steel-200 px-1.5 focus-within:ring-2 focus-within:ring-navy/30 focus-within:border-navy">
-            <input id="editUserPassword" type="password" placeholder="Şifre" class="flex-1 min-w-0 border-none px-2 py-2.5 text-sm text-steel-800 focus:outline-none" />
+            <input id="editUserPassword" type="password" placeholder="Değiştirmek için yeni şifre" class="flex-1 min-w-0 border-none px-2 py-2.5 text-sm text-steel-800 focus:outline-none" />
             <button type="button" id="editUserPasswordToggle" class="text-steel-400 hover:text-steel-600 p-1.5 shrink-0" title="Şifreyi göster/gizle">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s3-8 11-8 11 8 11 8-3 8-11 8-11-8-11-8Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
@@ -7235,14 +7235,15 @@ ${vadeLine}`;
     if (remember) remember.checked = true;
   }
 
-  function findLocalUserForLogin(username, password) {
+  function findLocalUserForLogin(username, passwordHash) {
     const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
+    const hash = String(passwordHash || '').toLowerCase();
+    if (!u || !hash) return null;
     const list = (typeof users !== 'undefined') ? users : [];
     return list.find((row) => {
       const uname = (row.username || '').trim().toLowerCase();
       const name = (row.name || '').trim().toLowerCase();
-      return (uname === u || name === u) && String(row.password || '') === p;
+      return (uname === u || name === u) && String(row.password || '').toLowerCase() === hash;
     }) || null;
   }
 
@@ -7264,27 +7265,9 @@ ${vadeLine}`;
     return user;
   }
 
+  // Kapalı: başarısız giriş yönetici hesabı üretemez.
   function buildEmergencyAdminUser() {
-    return {
-      username: 'volkan',
-      name: 'Volkan',
-      password: '123456',
-      dept: 'Yönetim',
-      scope: 'Tüm Grup',
-      companies: ['Technomac', 'Bluemac', 'Devorias'],
-      role: 'Yönetici',
-      perms: (typeof adminPerms === 'function') ? adminPerms() : {},
-      isGod: true,
-      collar: 'white',
-      accessCritical: true,
-      tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
-    };
-  }
-
-  function isDemoAdminCredentials(username, password) {
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    return (u === 'volkan' || u === 'admin' || u === 'btd') && p === '123456';
+    return null;
   }
 
   function tryRestoreAuthSession() {
@@ -7981,11 +7964,8 @@ ${vadeLine}`;
     return null;
   }
 
-  function authenticateLogin(username, password, company) {
-    let found = findLocalUserForLogin(username, password);
-    if (!found && isDemoAdminCredentials(username, password)) {
-      found = buildEmergencyAdminUser();
-    }
+  function authenticateLogin(username, passwordHash, company) {
+    const found = findLocalUserForLogin(username, passwordHash);
     if (!found) return null;
     applyDemoLoginOverrides(found);
     return sessionFromFoundUser(found, company)
@@ -7993,8 +7973,16 @@ ${vadeLine}`;
   }
 
   async function authenticateLoginAsync(username, password, company) {
-    // Demo yönetici: önce yerel / acil kapı (bulut hatası giriş engellemesin)
-    const localFirst = authenticateLogin(username, password, company);
+    let passwordHash = '';
+    try {
+      passwordHash = await window.BtdSupabase.digestPassword(password);
+    } catch (err) {
+      console.warn('[BTD] Şifre özeti hesaplanamadı:', err);
+      return null;
+    }
+    if (!passwordHash) return null;
+
+    const localFirst = authenticateLogin(username, passwordHash, company);
     if (localFirst) {
       localFirst.authSource = 'local';
       return localFirst;
@@ -8020,15 +8008,6 @@ ${vadeLine}`;
       }
     }
 
-    // Son çare: sabit yönetici kimlik bilgileri
-    if (isDemoAdminCredentials(username, password)) {
-      const found = buildEmergencyAdminUser();
-      const session = authSessionFromUser(found, 'Bluemac', company || 'BTD Yönetim');
-      if (session) {
-        session.authSource = 'emergency';
-        return session;
-      }
-    }
     return null;
   }
 
@@ -8068,20 +8047,8 @@ ${vadeLine}`;
       }
     } catch (err) {
       console.error('Login error:', err);
-      loginError.textContent = `Giriş hatası: ${err && err.message ? err.message : 'bilinmeyen'}. Tekrar deneyin: volkan / 123456`;
+      loginError.textContent = 'Giriş hatası. Bilgileri kontrol edip tekrar deneyin.';
       loginError.classList.remove('hidden');
-      // Acil kaçış: sabit kimlik yine de içeri alsın
-      if (isDemoAdminCredentials(username, password)) {
-        try {
-          const found = buildEmergencyAdminUser();
-          const session = authSessionFromUser(found, 'Bluemac', 'BTD Yönetim');
-          enterAppAsUser(session, company);
-          if (typeof showToast === 'function') showToast('Acil giriş ile içeri alındınız.', 'success');
-          loginError.classList.add('hidden');
-        } catch (e2) {
-          console.error('Emergency login failed', e2);
-        }
-      }
     } finally {
       loginSubmitBtn.disabled = false;
       loginSubmitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
@@ -15182,14 +15149,14 @@ ${vadeLine}`;
 
   let users = [
     {
-      username: 'volkan', name: 'Volkan', password: '123456', dept: 'Yönetim',
+      username: 'volkan', name: 'Volkan', password: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', dept: 'Yönetim',
       scope: 'Tüm Grup', companies: ['Technomac', 'Bluemac', 'Devorias'],
       role: 'Yönetici', perms: adminPerms(), isGod: true,
       tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
       collar: 'white', accessCritical: true,
     },
     {
-      username: 'ahmet', name: 'Ahmet Yıldız', password: '123456', dept: 'CNC',
+      username: 'ahmet', name: 'Ahmet Yıldız', password: '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', dept: 'CNC',
       scope: 'Technomac', companies: ['Technomac'],
       role: 'Operatör', perms: defaultPerms(), isGod: false,
       tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
@@ -15197,7 +15164,7 @@ ${vadeLine}`;
       collar: 'blue', accessCritical: false,
     },
   ];
-  // Yönetici: Volkan / 123456 · Mavi yaka demo: ahmet / 123456 (Technomac)
+  // Demo şifreler kodda düz metin değil; password alanı SHA-256 hex özettir.
 
   function formatUserCompaniesLabel(u) {
     if (!u) return '—';
@@ -15498,7 +15465,7 @@ ${vadeLine}`;
           </td>
           <td class="px-4 py-3.5">
             <div class="flex items-center gap-1.5">
-              <span class="mono text-steel-600">${revealed ? (u.password || '—') : '••••••••'}</span>
+              <span class="mono text-steel-600">${revealed ? 'özet kayıtlı' : '••••••••'}</span>
               <button data-toggle-pw="${idx}" class="text-steel-300 hover:text-steel-600 transition-colors p-1 rounded-lg hover:bg-steel-100 shrink-0" title="${revealed ? 'Şifreyi gizle' : 'Şifreyi göster'}">
                 ${revealed
                   ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.4 18.4 0 0 1 4.22-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>'
@@ -15608,11 +15575,20 @@ ${vadeLine}`;
     syncCriticalAccessUiFromCollar('editUserCollar', 'editUserAccessCritical');
   });
 
-  document.getElementById('addUserBtn').addEventListener('click', () => {
+  document.getElementById('addUserBtn').addEventListener('click', async () => {
     const mode = newUserSourceMode();
     const username = (document.getElementById('newUserUsername')?.value || '').trim().toLowerCase();
-    const password = document.getElementById('newUserPassword').value;
+    const plainPassword = document.getElementById('newUserPassword').value;
     if (!username) { showToast('Giriş kullanıcı adı zorunludur.', 'error'); return; }
+    if (!plainPassword) { showToast('Şifre zorunludur.', 'error'); return; }
+    let password;
+    try {
+      password = await window.BtdSupabase.passwordForStorage(plainPassword);
+    } catch (err) {
+      console.warn('[BTD] Şifre özeti hesaplanamadı:', err);
+      showToast('Şifre kaydedilemedi.', 'error');
+      return;
+    }
     if (!password) { showToast('Şifre zorunludur.', 'error'); return; }
     if (users.some(u => (u.username || '').toLowerCase() === username)) {
       showToast('Bu kullanıcı adı zaten kullanılıyor.', 'error'); return;
@@ -15692,7 +15668,7 @@ ${vadeLine}`;
     document.getElementById('editUserName').value = user.name;
     const unEl = document.getElementById('editUserUsername');
     if (unEl) unEl.value = user.username || '';
-    document.getElementById('editUserPassword').value = user.password || '';
+    document.getElementById('editUserPassword').value = '';
     document.getElementById('editUserDept').value = user.dept;
     document.getElementById('editUserRole').value = user.role;
     if (document.getElementById('editUserCollar')) {
@@ -15741,7 +15717,7 @@ ${vadeLine}`;
     if (e.key === 'Escape' && !editUserModalOverlay.classList.contains('hidden')) closeEditUserModal();
   });
 
-  document.getElementById('editUserSaveBtn').addEventListener('click', () => {
+  document.getElementById('editUserSaveBtn').addEventListener('click', async () => {
     if (!editUserTarget) return;
     const name = document.getElementById('editUserName').value.trim();
     const username = (document.getElementById('editUserUsername')?.value || '').trim().toLowerCase();
@@ -15766,7 +15742,16 @@ ${vadeLine}`;
     const linkedP = getPersonnelForUser(editUserTarget);
     editUserTarget.name = name;
     editUserTarget.username = username;
-    editUserTarget.password = document.getElementById('editUserPassword').value.trim() || editUserTarget.password;
+    const typedPassword = document.getElementById('editUserPassword').value.trim();
+    if (typedPassword) {
+      try {
+        editUserTarget.password = await window.BtdSupabase.passwordForStorage(typedPassword);
+      } catch (err) {
+        console.warn('[BTD] Şifre özeti hesaplanamadı:', err);
+        showToast('Şifre kaydedilemedi.', 'error');
+        return;
+      }
+    }
     editUserTarget.dept = document.getElementById('editUserDept').value;
     editUserTarget.role = document.getElementById('editUserRole').value;
     editUserTarget.companies = access.companies.slice();

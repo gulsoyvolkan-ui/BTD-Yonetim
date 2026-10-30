@@ -26,8 +26,8 @@
 ## Bilinen demo riskleri (bilinçli)
 
 - Supabase `003_demo_rls_policies.sql` anon’a geniş izin verir — **bitirme/demo içindir**. Gerçek müşteri verisi öncesi firma bazlı RLS + güvenli auth gerekir.
-- Kullanıcı şifreleri demo’da düz metin (`sifre_hash` alanı); üretimde hash + Supabase Auth tercih edilmeli.
-- Giriş demosu: `volkan` / `123456` — production’da değiştir / kapat.
+- Kullanıcı şifreleri `sifre_hash` alanında SHA-256 özeti olarak durur. Eski düz metin satırlar `supabase/012_password_hashes.sql` dosyası Supabase SQL Editor’a yapıştırılarak çevrilir.
+- Demo giriş production’da değiştirilmeli / kapatılmalı. Başarısız giriş yönetici hesabı üretmez.
 
 ## Sızıntı olursa
 

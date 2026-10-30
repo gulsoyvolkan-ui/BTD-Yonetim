@@ -7,10 +7,11 @@ GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated;
 
+-- sifre_hash: SHA-256 hex özeti (UTF-8). Düz metin yazılmamalı.
 INSERT INTO public.kullanicilar (kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god, erisim_kritik, yaka, eposta)
 VALUES
-  ('volkan', 'Volkan', '123456', 'Yönetici', 'Tüm Grup', TRUE, TRUE, TRUE, 'white', 'volkan@btd.com.tr'),
-  ('ahmet', 'Ahmet Yıldız', '123456', 'Operatör', 'Firma', FALSE, FALSE, FALSE, 'blue', 'ahmet.yildiz@technomac.com.tr')
+  ('volkan', 'Volkan', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Yönetici', 'Tüm Grup', TRUE, TRUE, TRUE, 'white', 'volkan@btd.com.tr'),
+  ('ahmet', 'Ahmet Yıldız', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92', 'Operatör', 'Firma', FALSE, FALSE, FALSE, 'blue', 'ahmet.yildiz@technomac.com.tr')
 ON CONFLICT (kullanici_adi) DO UPDATE SET
   ad_soyad = EXCLUDED.ad_soyad,
   sifre_hash = EXCLUDED.sifre_hash,
