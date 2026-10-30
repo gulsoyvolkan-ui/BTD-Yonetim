@@ -272,6 +272,29 @@ async function main() {
     ok(routed.statusCode === 200 && new URL(tableCall().url).pathname === `/rest/v1/${name}`, `${name} route`);
   }
 
+  seen.length = 0;
+  global.fetch = async (url) => {
+    const href = String(url);
+    seen.push({ url: href });
+    if (href.includes('/auth/v1/user')) {
+      return { ok: true, status: 200, async text() { return JSON.stringify({ id: ACTOR }); } };
+    }
+    if (href.includes('/rpc/btd_oturum_baglami')) {
+      return { ok: true, status: 200, async text() { return JSON.stringify(memberBody()); } };
+    }
+    if (href.includes('/denetim_olaylari')) {
+      return { ok: false, status: 500, async text() { return JSON.stringify({ message: 'audit down' }); } };
+    }
+    return { ok: true, status: 201, async text() { return JSON.stringify([{ id: ID, firma_id: FIRMA, unvan: 'ACME' }]); } };
+  };
+  res = await call('musteriler', 'POST', { query: { firma_id: FIRMA }, body: { unvan: 'ACME' } });
+  ok(res.statusCode === 503 && res.body.error === 'denetim yazılamadı', 'audit failure blocks write');
+  ok(tableCall() === null, 'audit failure does not write the table');
+  seen.length = 0;
+  res = await call('musteriler', 'GET', { query: { firma_id: FIRMA } });
+  ok(res.statusCode === 200 && Array.isArray(res.body.data), 'read survives audit failure');
+  installFetch();
+
   resetGuards();
   seen.length = 0;
   const limitedHeaders = { 'x-api-key': 'gate', authorization: `Bearer ${TOKEN}`, 'x-forwarded-for': '203.0.113.9' };

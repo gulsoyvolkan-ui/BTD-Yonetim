@@ -5,10 +5,13 @@ const { resolveMembership, firmaAllowed } = require('./_lib/membership');
 const {
   AUDIENCE,
   FIELDS,
+  ORDER_COLUMNS,
+  WORK_ORDER_COLUMNS,
+  TASK_COLUMNS,
   classifyFreshness,
-  signIdentity,
   verifyIdentity,
   assertReadOnly,
+  summarizeOperational,
 } = require('./_lib/shadow');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,6 +32,51 @@ function readConfig() {
   if (!apiKey) missing.push('BTD_API_KEY');
   if (!signingKey) missing.push('BTD_SHADOW_SIGNING_KEY');
   return { url, anonKey, apiKey, signingKey, missing };
+}
+
+function contentRangeTotal(value, rowCount) {
+  const match = String(value || '').match(/\/(\d+|\*)$/);
+  if (!match) return { ok: rowCount < 1000, total: rowCount };
+  if (match[1] === '*') return { ok: true, total: rowCount };
+  const total = Number(match[1]);
+  return { ok: Number.isFinite(total) && total === rowCount, total };
+}
+
+async function readScoped(config, accessToken, table, select, firmaId) {
+  const endpoint = new URL(`${config.url}/rest/v1/${table}`);
+  endpoint.searchParams.set('select', select);
+  endpoint.searchParams.set('firma_id', `eq.${firmaId}`);
+  const response = await fetch(endpoint, {
+    method: 'GET',
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      Prefer: 'count=exact',
+      Range: '0-999',
+    },
+  });
+  const text = await response.text();
+  let payload = null;
+  if (text) {
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      payload = null;
+    }
+  }
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, denied: true };
+  }
+  if (!response.ok || !Array.isArray(payload)) {
+    return { ok: false, denied: false };
+  }
+  const rangeHeader = response.headers && typeof response.headers.get === 'function'
+    ? response.headers.get('content-range')
+    : '';
+  const ranged = contentRangeTotal(rangeHeader, payload.length);
+  if (!ranged.ok) return { ok: false, denied: false };
+  return { ok: true, rows: payload };
 }
 
 function queryValue(req, name) {
@@ -63,10 +111,26 @@ async function handle(req, res) {
 
   const accessToken = bearerToken(req);
   if (!accessToken) return send(res, 401, { error: 'yetkisiz', writes: false });
+  const serviceToken = header(req, 'x-btd-service-identity');
+  if (!serviceToken || serviceToken === accessToken) {
+    return send(res, 401, { error: 'yetkisiz', writes: false });
+  }
 
   const firma = queryValue(req, 'firma_id');
   if (firma.error || !UUID.test(firma.value)) {
     return send(res, 400, { error: 'firma_id uuid olmalı', writes: false });
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const verified = verifyIdentity(serviceToken, config.signingKey, nowSec, firma.value);
+  if (!verified || !verified.ok) {
+    const denied = verified && verified.reason === 'firma';
+    return send(res, denied ? 403 : 401, {
+      contract: AUDIENCE,
+      writes: false,
+      freshness: denied ? 'PERMISSION_DENIED' : undefined,
+      error: denied ? 'erişim yok' : 'kimlik doğrulanamadı',
+    });
   }
 
   const membership = await resolveMembership(config, accessToken);
@@ -82,24 +146,73 @@ async function handle(req, res) {
     });
   }
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  const signed = signIdentity({
-    sub: membership.actor,
-    firmaId: firma.value,
-    secret: config.signingKey,
-    nowSec,
-    ttlSec: 120,
-  });
-  const verified = signed && verifyIdentity(signed.token, config.signingKey, nowSec, firma.value);
-  if (!verified || !verified.ok) {
-    return send(res, 401, { error: 'kimlik doğrulanamadı', writes: false });
+  const identity = {
+    iss: verified.claims.iss,
+    aud: verified.claims.aud,
+    perm: verified.claims.perm,
+    firma_id: verified.claims.firma_id,
+    exp: verified.claims.exp,
+  };
+  let orders;
+  let workOrders;
+  let tasks;
+  try {
+    orders = await readScoped(config, accessToken, 'siparisler', ORDER_COLUMNS.join(','), firma.value);
+    workOrders = await readScoped(config, accessToken, 'is_emirleri', WORK_ORDER_COLUMNS.join(','), firma.value);
+    tasks = await readScoped(config, accessToken, 'gorevler', TASK_COLUMNS.join(','), firma.value);
+  } catch {
+    orders = { ok: false, denied: false };
   }
-
+  const denied = [orders, workOrders, tasks].some((item) => item && item.denied);
+  if (denied || !orders || !orders.ok || !workOrders || !workOrders.ok || !tasks || !tasks.ok) {
+    const status = denied ? 403 : 200;
+    audit({
+      event: denied ? 'shadow_denied' : 'shadow_unavailable',
+      table: 'shadow',
+      method,
+      firmaId: firma.value,
+      actor: membership.actor,
+      status,
+    });
+    return send(res, status, {
+      contract: AUDIENCE,
+      writes: false,
+      freshness: denied ? 'PERMISSION_DENIED' : 'UNAVAILABLE',
+      fields: FIELDS,
+      data: null,
+      identity,
+    });
+  }
+  const summary = summarizeOperational({
+    orders: orders.rows,
+    workOrders: workOrders.rows,
+    tasks: tasks.rows,
+    today: new Date().toISOString().slice(0, 10),
+  });
+  if (!summary.ok) {
+    audit({
+      event: 'shadow_unavailable',
+      table: 'shadow',
+      method,
+      firmaId: firma.value,
+      actor: membership.actor,
+      status: 200,
+    });
+    return send(res, 200, {
+      contract: AUDIENCE,
+      writes: false,
+      freshness: 'UNAVAILABLE',
+      fields: FIELDS,
+      data: null,
+      identity,
+    });
+  }
+  const observedAt = Date.now();
   const freshness = classifyFreshness({
     permission: true,
-    upstream: 'unconfigured',
-    observedAt: null,
-    now: Date.now(),
+    upstream: 'up',
+    observedAt,
+    now: observedAt,
     clockTrusted: true,
   });
   audit({
@@ -115,12 +228,8 @@ async function handle(req, res) {
     writes: false,
     freshness,
     fields: FIELDS,
-    data: null,
-    identity: {
-      aud: verified.claims.aud,
-      firma_id: verified.claims.firma_id,
-      exp: verified.claims.exp,
-    },
+    data: summary.data,
+    identity,
   });
 }
 

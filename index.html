@@ -7317,6 +7317,12 @@ ${vadeLine}`;
   async function tryRestoreAuthSession() {
     if (btdPortal() === 'kiosk') {
       clearAuthSession();
+      const client = window.BtdSupabase?.getClient?.();
+      if (window.BtdKiosk?.endSupabaseSession) {
+        await window.BtdKiosk.endSupabaseSession(client && client.auth);
+      } else {
+        try { await client?.auth?.signOut?.(); } catch (_) { /* oturum kapanamadı */ }
+      }
       return false;
     }
     const raw = readAuthSessionRaw();
@@ -7459,8 +7465,6 @@ ${vadeLine}`;
       if (!NAV_BLUE_ALLOWED.includes(page)) return false;
       return moduleViewAllowed(user, page);
     }
-    // Yönetici sayfa kontrolünü geçer; view bayrağı onu kesmez
-    if (user.isGod || user.role === 'Yönetici') return true;
     const allowed = roleNavAccess[user.role];
     if (allowed && !allowed.includes(page)) return false;
     if (NAV_REGION2_CRITICAL.includes(page) && !userHasCriticalAccess(user)) return false;
@@ -19490,6 +19494,7 @@ ${vadeLine}`;
   setActiveCompany('Bluemac');
 
   async function startCloudSync() {
+    if (btdPortal() === 'kiosk' && !currentUser) return;
     if (window.BtdCloud?.setSensitiveAccess && window.BtdAuth?.canReadSensitive) {
       window.BtdCloud.setSensitiveAccess(window.BtdAuth.canReadSensitive(currentUser));
     }

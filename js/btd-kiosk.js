@@ -28,6 +28,21 @@
     return false;
   }
 
+  async function endSupabaseSession(auth) {
+    if (!auth || typeof auth.signOut !== 'function') return false;
+    try {
+      await auth.signOut();
+      return true;
+    } catch (err) {
+      try {
+        await auth.signOut({ scope: 'local' });
+        return true;
+      } catch (err2) {
+        return false;
+      }
+    }
+  }
+
   return {
     DESKTOP_IDLE_MS,
     KIOSK_IDLE_MS,
@@ -35,5 +50,6 @@
     idleMs,
     allowsRemember,
     allowsSavedPassword,
+    endSupabaseSession,
   };
 });

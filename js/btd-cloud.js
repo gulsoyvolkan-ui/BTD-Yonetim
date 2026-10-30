@@ -117,6 +117,63 @@
     if (error) throw error;
     return count || 0;
   }
+  const packagedKeys = new Set();
+  const packagedObjects = new WeakSet();
+  const heldTables = new Set();
+  function packagedKey(row) {
+    if (!row || typeof row !== 'object') return '';
+    const company = String(row.company || '');
+    let id = '';
+    if (row.id != null && String(row.id) !== '') id = String(row.id);
+    else if (row.code != null && String(row.code) !== '') id = String(row.code);
+    else if (row.sku != null && String(row.sku) !== '') id = String(row.sku);
+    else if (row.name != null && String(row.name) !== '') id = String(row.name);
+    else if (row.username != null && String(row.username) !== '') id = String(row.username);
+    if (!id) return '';
+    return company + '|' + id;
+  }
+  function holdPackaged(rows, table, ctx, clear) {
+    heldTables.add(table);
+    if (Array.isArray(rows)) {
+      rows.forEach((row) => {
+        if (!row || typeof row !== 'object') return;
+        packagedObjects.add(row);
+        const key = packagedKey(row);
+        if (key) packagedKeys.add(table + '|' + key);
+        try {
+          Object.defineProperty(row, 'packagedDemo', { value: true, enumerable: false });
+        } catch (e) {
+          row.packagedDemo = true;
+        }
+      });
+      if (clear) replaceArray(rows, []);
+    }
+    progress(ctx, table + ' boş — paketlenmiş dizin yazılmaz');
+  }
+  function refusePackaged(row, table, label) {
+    if (!row || typeof row !== 'object') return null;
+    if (row.dbId) return null;
+    if (packagedObjects.has(row) || row.packagedDemo === true) return fail('packaged-demo-blocked', label);
+    const key = packagedKey(row);
+    if (key && packagedKeys.has(table + '|' + key)) return fail('packaged-demo-blocked', label);
+    if (heldTables.has(table) && row.packagedDemo === true) return fail('packaged-demo-blocked', label);
+    return null;
+  }
+  async function cloudCount(client, table) {
+    try {
+      const n = await countTable(client, table);
+      return { ok: true, n: n || 0 };
+    } catch (e) {
+      return { ok: false, n: null };
+    }
+  }
+  async function blockIfEmpty(client, table, rows, ctx, clear) {
+    const counted = await cloudCount(client, table);
+    if (counted.ok && counted.n) return false;
+    const doClear = clear !== false && counted.ok && !counted.n && Array.isArray(rows);
+    holdPackaged(rows, table, ctx, doClear);
+    return true;
+  }
   // supabase/011_marka.sql uygulanmadan marka kolonu yoktur; belge markasız yine kaydolur.
   async function retryWithoutMarka(run, row) {
     const res = await run(row);
@@ -135,6 +192,10 @@
   // ─── Material group cache ──────────────────────────────────────────────────
   let _groupCache = null; // { name → id }
   async function ensureMaterialGroups(client, names) {
+    if (heldTables.has('malzemeler') || heldTables.has('malzeme_gruplari')) {
+      if (!_groupCache) _groupCache = {};
+      return _groupCache;
+    }
     if (!_groupCache) {
       const rows = await selectAll(client, 'malzeme_gruplari', 'id, ad');
       _groupCache = {};
@@ -203,6 +264,8 @@
   }
   async function saveCustomer(c, companies) {
     try {
+      const blocked = refusePackaged(c, 'musteriler', 'saveCustomer');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !c) return fail('no-client', 'saveCustomer');
       const fid = firmaId(companies, c.company);
@@ -256,14 +319,7 @@
   async function hydrateCustomers(ctx) {
     const client = sb();
     if (!client || !ctx.customers) return;
-    const n = await countTable(client, 'musteriler');
-    if (!n) {
-      if (ctx.customers.length) {
-        progress(ctx, `Müşteriler seed (${ctx.customers.length})…`);
-        for (const c of ctx.customers) await saveCustomer(c, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'musteriler', ctx.customers, ctx)) return;
     progress(ctx, 'Müşteriler hydrate…');
     const rows = await selectAll(client, 'musteriler', '*, musteri_kisiler(*)');
     replaceArray(ctx.customers, rows.map((r) => customerFromRow(r, ctx.companies)));
@@ -298,6 +354,8 @@
   }
   async function saveProduct(p, companies) {
     try {
+      const blocked = refusePackaged(p, 'urunler', 'saveProduct');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !p) return fail('no-client', 'saveProduct');
       const fid = firmaId(companies, p.company);
@@ -332,14 +390,7 @@
   async function hydrateProducts(ctx) {
     const client = sb();
     if (!client || !ctx.products) return;
-    const n = await countTable(client, 'urunler');
-    if (!n) {
-      if (ctx.products.length) {
-        progress(ctx, `Ürünler seed (${ctx.products.length})…`);
-        for (const p of ctx.products) await saveProduct(p, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'urunler', ctx.products, ctx)) return;
     progress(ctx, 'Ürünler hydrate…');
     const rows = await selectAll(client, 'urunler', '*', 'kod');
     const mapped = rows.map((r) => productFromRow(r, ctx.companies));
@@ -380,6 +431,8 @@
   }
   async function saveSubcontractor(s, companies) {
     try {
+      const blocked = refusePackaged(s, 'fasoncular', 'saveSubcontractor');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !s) return fail('no-client', 'saveSubcontractor');
       const fid = firmaId(companies, s.company);
@@ -414,14 +467,7 @@
   async function hydrateSubcontractors(ctx) {
     const client = sb();
     if (!client || !ctx.subcontractors) return;
-    const n = await countTable(client, 'fasoncular');
-    if (!n) {
-      if (ctx.subcontractors.length) {
-        progress(ctx, `Fasoncular seed (${ctx.subcontractors.length})…`);
-        for (const s of ctx.subcontractors) await saveSubcontractor(s, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'fasoncular', ctx.subcontractors, ctx)) return;
     progress(ctx, 'Fasoncular hydrate…');
     const rows = await selectAll(client, 'fasoncular', '*', 'unvan');
     const mapped = rows.map((r) => subconFromRow(r, ctx.companies));
@@ -479,6 +525,8 @@
   }
   async function saveSupplier(s, companies) {
     try {
+      const blocked = refusePackaged(s, 'tedarikciler', 'saveSupplier');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !s) return fail('no-client', 'saveSupplier');
       const fid = firmaId(companies, s.company);
@@ -550,14 +598,7 @@
     const client = sb();
     if (!client || !ctx.suppliers) return;
     await ensureMaterialGroups(client, []);
-    const n = await countTable(client, 'tedarikciler');
-    if (!n) {
-      if (ctx.suppliers.length) {
-        progress(ctx, `Tedarikçiler seed (${ctx.suppliers.length})…`);
-        for (const s of ctx.suppliers) await saveSupplier(s, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'tedarikciler', ctx.suppliers, ctx)) return;
     progress(ctx, 'Tedarikçiler hydrate…');
     const rows = await selectAll(
       client,
@@ -569,6 +610,7 @@
 
   async function saveSupplierGroupPriorities(company, prioritiesObj, companies, suppliers) {
     try {
+      if (heldTables.has('tedarikci_grup_oncelikleri')) return fail('packaged-demo-blocked', 'saveSupplierGroupPriorities');
       const client = sb();
       if (!client) return fail('no-client', 'saveSupplierGroupPriorities');
       const fid = firmaId(companies, company);
@@ -606,21 +648,7 @@
   async function hydrateSupplierGroupPriorities(ctx) {
     const client = sb();
     if (!client || !ctx.supplierGroupPriorities) return;
-    const { count, error: cErr } = await client
-      .from('tedarikci_grup_oncelikleri')
-      .select('id', { count: 'exact', head: true });
-    if (cErr) throw cErr;
-    if (!count) {
-      for (const company of Object.keys(ctx.supplierGroupPriorities)) {
-        await saveSupplierGroupPriorities(
-          company,
-          ctx.supplierGroupPriorities[company],
-          ctx.companies,
-          ctx.suppliers
-        );
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'tedarikci_grup_oncelikleri', null, ctx, false)) return;
     progress(ctx, 'Tedarikçi öncelikleri hydrate…');
     await ensureMaterialGroups(client, []);
     const rows = await selectAll(
@@ -646,6 +674,8 @@
   // ─── Personnel / Users ─────────────────────────────────────────────────────
   async function savePersonnel(p, companies) {
     try {
+      const blocked = refusePackaged(p, 'personel', 'savePersonnel');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !p) return fail('no-client', 'savePersonnel');
       const fid = firmaId(companies, p.company);
@@ -695,11 +725,7 @@
   async function hydratePersonnel(ctx) {
     const client = sb();
     if (!client || !ctx.personnel) return;
-    const n = await countTable(client, 'personel');
-    if (!n) {
-      progress(ctx, 'Personel tablosu boş — yerel tohum yazılmaz');
-      return;
-    }
+    if (await blockIfEmpty(client, 'personel', ctx.personnel, ctx)) return;
     progress(ctx, 'Personel hydrate…');
     const full = global.BtdAuth?.PERSONNEL_COLUMNS;
     const base = global.BtdAuth?.PERSONNEL_COLUMNS_BASE;
@@ -753,30 +779,7 @@
     const client = sb();
     if (!client) return;
     if (ctx.attendanceLogs) {
-      const { count } = await client.from('personel_devam').select('id', { count: 'exact', head: true });
-      if (!count && ctx.attendanceLogs.length) {
-        progress(ctx, 'Devam seed…');
-        const byCode = Object.fromEntries((ctx.personnel || []).map((p) => [p.id, p.dbId]));
-        const rows = ctx.attendanceLogs
-          .map((a) => {
-            const pid = byCode[a.personnelId] || a.dbPersonnelId;
-            const fid = firmaId(ctx.companies, a.company);
-            if (!pid || !fid) return null;
-            return {
-              firma_id: fid,
-              personel_id: pid,
-              tarih: a.date,
-              giris: a.checkIn || null,
-              cikis: a.checkOut || null,
-              calisma_saat: a.workedHours ?? null,
-              mesai_tipi: a.overtimeType || 'none',
-              mesai_saat: a.overtimeHours || 0,
-              zamaninda: a.onTime !== false,
-            };
-          })
-          .filter(Boolean);
-        if (rows.length) await client.from('personel_devam').upsert(rows, { onConflict: 'personel_id,tarih' });
-      } else if (count) {
+      if (!(await blockIfEmpty(client, 'personel_devam', ctx.attendanceLogs, ctx))) {
         const rows = await selectAll(client, 'personel_devam', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
         replaceArray(ctx.attendanceLogs, rows.map((r) => ({
@@ -795,27 +798,7 @@
       }
     }
     if (ctx.leaveRequests) {
-      const { count } = await client.from('personel_izin').select('id', { count: 'exact', head: true });
-      if (!count && ctx.leaveRequests.length) {
-        progress(ctx, 'İzin seed…');
-        const byCode = Object.fromEntries((ctx.personnel || []).map((p) => [p.id, p.dbId]));
-        const rows = ctx.leaveRequests
-          .map((l) => {
-            const pid = byCode[l.personnelId];
-            const fid = firmaId(ctx.companies, l.company);
-            if (!pid || !fid) return null;
-            return {
-              firma_id: fid,
-              personel_id: pid,
-              tip: l.type,
-              gun: l.days || 1,
-              ay: l.month,
-              durum: l.status || 'Bekliyor',
-            };
-          })
-          .filter(Boolean);
-        if (rows.length) await client.from('personel_izin').insert(rows);
-      } else if (count) {
+      if (!(await blockIfEmpty(client, 'personel_izin', ctx.leaveRequests, ctx))) {
         const rows = await selectAll(client, 'personel_izin', '*');
         const byDb = Object.fromEntries((ctx.personnel || []).map((p) => [p.dbId, p]));
         replaceArray(ctx.leaveRequests, rows.map((r) => ({
@@ -834,6 +817,8 @@
 
   async function saveUser(u) {
     try {
+      const blocked = refusePackaged(u, 'kullanicilar', 'saveUser');
+      if (blocked) return blocked;
       if (!u) return fail('no-user', 'saveUser');
       if (u.password) delete u.password;
       const client = sb();
@@ -856,11 +841,7 @@
   async function hydrateUsers(ctx) {
     const client = sb();
     if (!client || !ctx.users) return;
-    const n = await countTable(client, 'kullanicilar');
-    if (!n) {
-      progress(ctx, 'Kullanıcı tablosu boş — yerel tohum yazılmaz');
-      return;
-    }
+    if (await blockIfEmpty(client, 'kullanicilar', ctx.users, ctx)) return;
     progress(ctx, 'Kullanıcılar hydrate…');
     const rows = await selectAll(
       client,
@@ -986,6 +967,8 @@
   }
   async function saveCostAnalysis(a, companies) {
     try {
+      const blocked = refusePackaged(a, 'maliyet_analizleri', 'saveCostAnalysis');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !a) return fail('no-client', 'saveCostAnalysis');
       const fid = firmaId(companies, a.company);
@@ -1028,14 +1011,7 @@
   async function hydrateCostAnalyses(ctx) {
     const client = sb();
     if (!client || !ctx.costAnalyses) return;
-    const n = await countTable(client, 'maliyet_analizleri');
-    if (!n) {
-      if (ctx.costAnalyses.length) {
-        progress(ctx, `Maliyet seed (${ctx.costAnalyses.length})…`);
-        for (const a of ctx.costAnalyses) await saveCostAnalysis(a, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'maliyet_analizleri', ctx.costAnalyses, ctx)) return;
     progress(ctx, 'Maliyet hydrate…');
     const rows = await selectAll(client, 'maliyet_analizleri', '*, maliyet_kalemleri(*)');
     replaceArray(ctx.costAnalyses, rows.map((r) => ({
@@ -1070,6 +1046,8 @@
   }
   async function saveQuote(q, companies) {
     try {
+      const blocked = refusePackaged(q, 'teklifler', 'saveQuote');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !q) return fail('no-client', 'saveQuote');
       const fid = firmaId(companies, q.company);
@@ -1146,14 +1124,7 @@
   async function hydrateQuotes(ctx) {
     const client = sb();
     if (!client || !ctx.quotes) return;
-    const n = await countTable(client, 'teklifler');
-    if (!n) {
-      if (ctx.quotes.length) {
-        progress(ctx, `Teklifler seed (${ctx.quotes.length})…`);
-        for (const q of ctx.quotes) await saveQuote(q, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'teklifler', ctx.quotes, ctx)) return;
     progress(ctx, 'Teklifler hydrate…');
     const rows = await selectAll(client, 'teklifler', '*, teklif_kalemleri(*)');
     // maliyet belge_no: maliyet_id üzerinden ayrı (teklif↔maliyet çift FK belirsizliği)
@@ -1232,6 +1203,8 @@
   }
   async function saveOrder(o, companies) {
     try {
+      const blocked = refusePackaged(o, 'siparisler', 'saveOrder');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !o) return fail('no-client', 'saveOrder');
       const fid = firmaId(companies, o.company);
@@ -1316,14 +1289,7 @@
   async function hydrateOrders(ctx) {
     const client = sb();
     if (!client || !ctx.orders) return;
-    const n = await countTable(client, 'siparisler');
-    if (!n) {
-      if (ctx.orders.length) {
-        progress(ctx, `Siparişler seed (${ctx.orders.length})…`);
-        for (const o of ctx.orders) await saveOrder(o, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'siparisler', ctx.orders, ctx)) return;
     progress(ctx, 'Siparişler hydrate…');
     const rows = await selectAll(
       client,
@@ -1383,6 +1349,8 @@
   // ─── Work orders ───────────────────────────────────────────────────────────
   async function saveWorkOrder(wo, companies) {
     try {
+      const blocked = refusePackaged(wo, 'is_emirleri', 'saveWorkOrder');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !wo) return fail('no-client', 'saveWorkOrder');
       const fid = firmaId(companies, wo.company);
@@ -1471,14 +1439,7 @@
   async function hydrateWorkOrders(ctx) {
     const client = sb();
     if (!client || !ctx.workOrders) return;
-    const n = await countTable(client, 'is_emirleri');
-    if (!n) {
-      if (ctx.workOrders.length) {
-        progress(ctx, `İş emirleri seed (${ctx.workOrders.length})…`);
-        for (const wo of ctx.workOrders) await saveWorkOrder(wo, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'is_emirleri', ctx.workOrders, ctx)) return;
     progress(ctx, 'İş emirleri hydrate…');
     const rows = await selectAll(
       client,
@@ -1544,6 +1505,8 @@
 
   async function saveTask(task, companies) {
     try {
+      const blocked = refusePackaged(task, 'gorevler', 'saveTask');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !task) return fail('no-client', 'saveTask');
       const fid = firmaId(companies, task.company);
@@ -1587,14 +1550,7 @@
   async function hydrateTasks(ctx) {
     const client = sb();
     if (!client || !ctx.tasks) return;
-    const n = await countTable(client, 'gorevler');
-    if (!n) {
-      if (ctx.tasks.length) {
-        progress(ctx, `Görev seed (${ctx.tasks.length})…`);
-        for (const task of ctx.tasks) await saveTask(task, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'gorevler', ctx.tasks, ctx)) return;
     progress(ctx, 'Görevler hydrate…');
     const rows = await selectAll(client, 'gorevler', '*');
     replaceArray(ctx.tasks, rows.map((r) => ({
@@ -1612,6 +1568,8 @@
   // ─── Procurement / RFQ / Reproc / Unforeseen ────────────────────────────────
   async function saveProcurementItem(item, companies) {
     try {
+      const blocked = refusePackaged(item, 'tedarik_kalemleri', 'saveProcurementItem');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !item) return fail('no-client', 'saveProcurementItem');
       const fid = firmaId(companies, item.company);
@@ -1659,14 +1617,7 @@
   async function hydrateProcurement(ctx) {
     const client = sb();
     if (!client || !ctx.procurementItems) return;
-    const n = await countTable(client, 'tedarik_kalemleri');
-    if (!n) {
-      if (ctx.procurementItems.length) {
-        progress(ctx, `Tedarik seed (${ctx.procurementItems.length})…`);
-        for (const it of ctx.procurementItems) await saveProcurementItem(it, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'tedarik_kalemleri', ctx.procurementItems, ctx)) return;
     progress(ctx, 'Tedarik hydrate…');
     const rows = await selectAll(client, 'tedarik_kalemleri', '*, is_emirleri(belge_no)');
     replaceArray(ctx.procurementItems, rows.map((r) => ({
@@ -1696,6 +1647,8 @@
 
   async function saveMaterialRfq(rfq, companies) {
     try {
+      const blocked = refusePackaged(rfq, 'rfq_paketleri', 'saveMaterialRfq');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !rfq) return fail('no-client', 'saveMaterialRfq');
       const fid = firmaId(companies, rfq.company);
@@ -1781,14 +1734,7 @@
   async function hydrateMaterialRfqs(ctx) {
     const client = sb();
     if (!client || !ctx.materialRfqs) return;
-    const n = await countTable(client, 'rfq_paketleri');
-    if (!n) {
-      if (ctx.materialRfqs.length) {
-        progress(ctx, `RFQ seed (${ctx.materialRfqs.length})…`);
-        for (const r of ctx.materialRfqs) await saveMaterialRfq(r, ctx.companies);
-      }
-      return;
-    }
+    if (await blockIfEmpty(client, 'rfq_paketleri', ctx.materialRfqs, ctx)) return;
     progress(ctx, 'RFQ hydrate…');
     const rows = await selectAll(
       client,
@@ -1841,6 +1787,8 @@
 
   async function saveReproc(r, companies) {
     try {
+      const blocked = refusePackaged(r, 'yeniden_tedarik_talepleri', 'saveReproc');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !r) return fail('no-client', 'saveReproc');
       const fid = firmaId(companies, r.company);
@@ -1876,6 +1824,8 @@
   }
   async function saveUnforeseen(u, companies) {
     try {
+      const blocked = refusePackaged(u, 'beklenmeyen_giderler', 'saveUnforeseen');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !u) return fail('no-client', 'saveUnforeseen');
       const fid = firmaId(companies, u.company);
@@ -1909,10 +1859,7 @@
     const client = sb();
     if (!client) return;
     if (ctx.reprocRequests) {
-      const n = await countTable(client, 'yeniden_tedarik_talepleri');
-      if (!n && ctx.reprocRequests.length) {
-        for (const r of ctx.reprocRequests) await saveReproc(r, ctx.companies);
-      } else if (n) {
+      if (!(await blockIfEmpty(client, 'yeniden_tedarik_talepleri', ctx.reprocRequests, ctx))) {
         const rows = await selectAll(client, 'yeniden_tedarik_talepleri', '*');
         replaceArray(ctx.reprocRequests, rows.map((r) => ({
           dbId: r.id,
@@ -1932,10 +1879,7 @@
       }
     }
     if (ctx.unforeseenCosts) {
-      const n = await countTable(client, 'beklenmeyen_giderler');
-      if (!n && ctx.unforeseenCosts.length) {
-        for (const u of ctx.unforeseenCosts) await saveUnforeseen(u, ctx.companies);
-      } else if (n) {
+      if (!(await blockIfEmpty(client, 'beklenmeyen_giderler', ctx.unforeseenCosts, ctx))) {
         const rows = await selectAll(client, 'beklenmeyen_giderler', '*');
         replaceArray(ctx.unforeseenCosts, rows.map((r) => ({
           dbId: r.id,
@@ -1955,6 +1899,8 @@
   // ─── Fason / QC / Ship / Invoice / Stock ───────────────────────────────────
   async function saveFason(f, companies) {
     try {
+      const blocked = refusePackaged(f, 'fason_isler', 'saveFason');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !f) return fail('no-client', 'saveFason');
       const fid = firmaId(companies, f.company);
@@ -2004,6 +1950,8 @@
   }
   async function saveQc(r, companies) {
     try {
+      const blocked = refusePackaged(r, 'kalite_kayitlari', 'saveQc');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !r) return fail('no-client', 'saveQc');
       const fid = firmaId(companies, r.company);
@@ -2034,6 +1982,8 @@
   }
   async function saveShipment(s, companies) {
     try {
+      const blocked = refusePackaged(s, 'sevkiyatlar', 'saveShipment');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !s) return fail('no-client', 'saveShipment');
       const fid = firmaId(companies, s.company);
@@ -2067,6 +2017,8 @@
   }
   async function saveInvoice(inv, companies) {
     try {
+      const blocked = refusePackaged(inv, 'faturalar', 'saveInvoice');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !inv) return fail('no-client', 'saveInvoice');
       const fid = firmaId(companies, inv.company);
@@ -2116,6 +2068,8 @@
   }
   async function saveStockItem(item, companies) {
     try {
+      const blocked = refusePackaged(item, 'stok_kartlari', 'saveStockItem');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !item) return fail('no-client', 'saveStockItem');
       const fid = firmaId(companies, item.company);
@@ -2149,6 +2103,8 @@
   }
   async function saveStockMove(m, companies) {
     try {
+      const blocked = refusePackaged(m, 'stok_hareketleri', 'saveStockMove');
+      if (blocked) return blocked;
       const client = sb();
       if (!client || !m) return fail('no-client', 'saveStockMove');
       const fid = firmaId(companies, m.company);
@@ -2180,11 +2136,7 @@
     if (!client) return;
 
     if (ctx.fasonJobs) {
-      const n = await countTable(client, 'fason_isler');
-      if (!n && ctx.fasonJobs.length) {
-        progress(ctx, `Fason seed (${ctx.fasonJobs.length})…`);
-        for (const f of ctx.fasonJobs) await saveFason(f, ctx.companies);
-      } else if (n) {
+      if (!(await blockIfEmpty(client, 'fason_isler', ctx.fasonJobs, ctx))) {
         progress(ctx, 'Fason hydrate…');
         const rows = await selectAll(client, 'fason_isler', '*, fason_log(*)');
         replaceArray(ctx.fasonJobs, rows.map((r) => ({
@@ -2211,10 +2163,7 @@
     }
 
     if (ctx.qcRecords) {
-      const n = await countTable(client, 'kalite_kayitlari');
-      if (!n && ctx.qcRecords.length) {
-        for (const r of ctx.qcRecords) await saveQc(r, ctx.companies);
-      } else if (n) {
+      if (!(await blockIfEmpty(client, 'kalite_kayitlari', ctx.qcRecords, ctx))) {
         const rows = await selectAll(client, 'kalite_kayitlari', '*');
         replaceArray(ctx.qcRecords, rows.map((r) => ({
           dbId: r.id,
@@ -2230,10 +2179,7 @@
     }
 
     if (ctx.shipments) {
-      const { count } = await client.from('sevkiyatlar').select('id', { count: 'exact', head: true });
-      if (!count && ctx.shipments.length) {
-        for (const s of ctx.shipments) await saveShipment(s, ctx.companies);
-      } else if (count) {
+      if (!(await blockIfEmpty(client, 'sevkiyatlar', ctx.shipments, ctx))) {
         const rows = await selectAll(client, 'sevkiyatlar', '*, siparisler(belge_no)');
         replaceArray(ctx.shipments, rows.map((r) => ({
           dbId: r.id,
@@ -2253,10 +2199,7 @@
     }
 
     if (ctx.invoices) {
-      const n = await countTable(client, 'faturalar');
-      if (!n && ctx.invoices.length) {
-        for (const inv of ctx.invoices) await saveInvoice(inv, ctx.companies);
-      } else if (n) {
+      if (!(await blockIfEmpty(client, 'faturalar', ctx.invoices, ctx))) {
         const rows = await selectAll(client, 'faturalar', '*, siparisler(belge_no), maliyet_analizleri(belge_no)');
         replaceArray(ctx.invoices, rows.map((r) => ({
           dbId: r.id,
@@ -2281,11 +2224,7 @@
     }
 
     if (ctx.stockItems) {
-      const n = await countTable(client, 'stok_kartlari');
-      if (!n && ctx.stockItems.length) {
-        progress(ctx, `Stok seed (${ctx.stockItems.length})…`);
-        for (const it of ctx.stockItems) await saveStockItem(it, ctx.companies);
-      } else if (n) {
+      if (!(await blockIfEmpty(client, 'stok_kartlari', ctx.stockItems, ctx))) {
         progress(ctx, 'Stok hydrate…');
         const rows = await selectAll(client, 'stok_kartlari', '*');
         replaceArray(ctx.stockItems, rows.map((r) => ({
@@ -2309,10 +2248,7 @@
     }
 
     if (ctx.stockMoves) {
-      const { count } = await client.from('stok_hareketleri').select('id', { count: 'exact', head: true });
-      if (!count && ctx.stockMoves.length) {
-        for (const m of ctx.stockMoves) await saveStockMove(m, ctx.companies);
-      } else if (count) {
+      if (!(await blockIfEmpty(client, 'stok_hareketleri', ctx.stockMoves, ctx))) {
         const rows = await selectAll(client, 'stok_hareketleri', '*');
         replaceArray(ctx.stockMoves, rows.map((r) => ({
           dbId: r.id,
@@ -2337,25 +2273,7 @@
 
     // Malzeme katalogu
     if (ctx.procMaterialCatalog) {
-      const n = await countTable(client, 'malzemeler');
-      if (!n) {
-        progress(ctx, 'Malzeme katalogu seed…');
-        const groups = await ensureMaterialGroups(client, Object.keys(ctx.procMaterialCatalog));
-        const rows = [];
-        Object.entries(ctx.procMaterialCatalog).forEach(([gName, alloys]) => {
-          const gid = groups[gName];
-          if (!gid) return;
-          (alloys || []).forEach((a) => {
-            rows.push({
-              malzeme_grup_id: gid,
-              ad: a.name,
-              ozkutle: a.density ?? 0,
-              fiyat_eur_kg: a.priceEurPerKg ?? 0,
-            });
-          });
-        });
-        if (rows.length) await client.from('malzemeler').upsert(rows, { onConflict: 'malzeme_grup_id,ad' });
-      } else {
+      if (!(await blockIfEmpty(client, 'malzemeler', null, ctx, false))) {
         progress(ctx, 'Malzeme katalogu hydrate…');
         await ensureMaterialGroups(client, []);
         const rows = await selectAll(client, 'malzemeler', '*, malzeme_gruplari(ad)');
@@ -2375,16 +2293,7 @@
 
     // Ürün şekilleri (volume fn yerel kalır — sadece meta sync)
     if (ctx.productShapes && Array.isArray(ctx.productShapes)) {
-      const n = await countTable(client, 'urun_sekilleri');
-      if (!n) {
-        progress(ctx, 'Ürün şekilleri seed…');
-        const rows = ctx.productShapes.map((s) => ({
-          kod: s.id,
-          ad: s.name,
-          alanlar: s.fields || [],
-        }));
-        if (rows.length) await client.from('urun_sekilleri').upsert(rows, { onConflict: 'kod' });
-      } else {
+      if (!(await blockIfEmpty(client, 'urun_sekilleri', ctx.productShapes, ctx, false))) {
         progress(ctx, 'Ürün şekilleri hydrate…');
         const rows = await selectAll(client, 'urun_sekilleri', '*');
         const byKod = Object.fromEntries(ctx.productShapes.map((s) => [s.id, s]));
@@ -2409,14 +2318,9 @@
     // Isıl / kaplama
     async function syncNamedCatalog(table, arr, mapTo, mapFrom) {
       if (!arr) return;
-      const n = await countTable(client, table);
-      if (!n && arr.length) {
-        const { error } = await client.from(table).upsert(arr.map(mapTo), { onConflict: 'ad' });
-        if (error) throw error;
-      } else if (n) {
-        const rows = await selectAll(client, table, '*');
-        replaceArray(arr, rows.map(mapFrom));
-      }
+      if (await blockIfEmpty(client, table, arr, ctx, false)) return;
+      const rows = await selectAll(client, table, '*');
+      replaceArray(arr, rows.map(mapFrom));
     }
     await syncNamedCatalog(
       'isil_islem_katalogu',
@@ -2433,21 +2337,7 @@
 
     // Operasyon katalogu
     if (ctx.operationCatalog && Array.isArray(ctx.operationCatalog)) {
-      const n = await countTable(client, 'operasyon_kategorileri');
-      if (!n) {
-        progress(ctx, 'Operasyon katalogu seed…');
-        for (let i = 0; i < ctx.operationCatalog.length; i++) {
-          const cat = ctx.operationCatalog[i];
-          const { data, error } = await client
-            .from('operasyon_kategorileri')
-            .upsert({ ad: cat.name, renk: cat.color || null, sira: i }, { onConflict: 'ad' })
-            .select('id')
-            .single();
-          if (error) throw error;
-          const steps = (cat.steps || []).map((ad, si) => ({ kategori_id: data.id, ad, sira: si }));
-          if (steps.length) await client.from('operasyon_adimlari').upsert(steps, { onConflict: 'kategori_id,ad' });
-        }
-      } else {
+      if (!(await blockIfEmpty(client, 'operasyon_kategorileri', ctx.operationCatalog, ctx, false))) {
         progress(ctx, 'Operasyon katalogu hydrate…');
         const rows = await selectAll(client, 'operasyon_kategorileri', '*, operasyon_adimlari(*)');
         replaceArray(ctx.operationCatalog, rows
@@ -2465,30 +2355,7 @@
 
     // Makine parkı
     if (ctx.machinePark && Array.isArray(ctx.machinePark)) {
-      const n = await countTable(client, 'atolyeler');
-      if (!n) {
-        progress(ctx, 'Makine parkı seed…');
-        for (const ws of ctx.machinePark) {
-          const { data: at, error } = await client
-            .from('atolyeler')
-            .upsert({ ad: ws.workshop }, { onConflict: 'ad' })
-            .select('id')
-            .single();
-          if (error) throw error;
-          const links = (ws.companies || [])
-            .map((n) => firmaId(ctx.companies, n))
-            .filter(Boolean)
-            .map((fid) => ({ atolye_id: at.id, firma_id: fid }));
-          if (links.length) await client.from('atolye_firmalar').upsert(links);
-          const machines = (ws.machines || []).map((m) => ({
-            atolye_id: at.id,
-            ad: m.name,
-            alt_bilgi: m.sub || null,
-            ikon: m.icon || null,
-          }));
-          if (machines.length) await client.from('makineler').insert(machines);
-        }
-      } else {
+      if (!(await blockIfEmpty(client, 'atolyeler', ctx.machinePark, ctx, false))) {
         progress(ctx, 'Makine parkı hydrate…');
         const rows = await selectAll(
           client,
@@ -2513,15 +2380,8 @@
     if (ctx.fxRates) {
       const { data: fxRows } = await client.from('doviz_kurlari').select('*').order('tarih', { ascending: false }).limit(1);
       if (!fxRows?.length) {
-        const d = (ctx.fxRates.date || '').replace(/[^\d-]/g, '').slice(0, 10)
-          || new Date().toISOString().slice(0, 10);
-        await client.from('doviz_kurlari').upsert({
-          tarih: d,
-          eur_try: ctx.fxRates.EURTRY || 0,
-          usd_try: ctx.fxRates.USDTRY || 0,
-          eur_usd: ctx.fxRates.EURUSD || null,
-          manuel: !!(String(ctx.fxRates.date || '').includes('Manuel')),
-        }, { onConflict: 'tarih' });
+        heldTables.add('doviz_kurlari');
+        progress(ctx, 'doviz_kurlari boş — paketlenmiş dizin yazılmaz');
       } else {
         const r = fxRows[0];
         Object.assign(ctx.fxRates, {
@@ -2535,16 +2395,7 @@
 
     // Resmi tatiller
     if (ctx.turkishHolidays2026 && (ctx.turkishHolidays2026 instanceof Set || Array.isArray(ctx.turkishHolidays2026))) {
-      const { count } = await client.from('resmi_tatiller').select('tarih', { count: 'exact', head: true });
-      const localDates = ctx.turkishHolidays2026 instanceof Set
-        ? [...ctx.turkishHolidays2026]
-        : [...ctx.turkishHolidays2026];
-      if (!count && localDates.length) {
-        await client.from('resmi_tatiller').upsert(
-          localDates.map((d) => ({ tarih: d, aciklama: null })),
-          { onConflict: 'tarih' }
-        );
-      } else if (count) {
+      if (!(await blockIfEmpty(client, 'resmi_tatiller', null, ctx, false))) {
         const rows = await selectAll(client, 'resmi_tatiller', 'tarih');
         const set = new Set(rows.map((r) => r.tarih));
         if (ctx.turkishHolidays2026 instanceof Set) {
