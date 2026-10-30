@@ -22,7 +22,7 @@
       return null;
     }
     client = global.supabase.createClient(cfg.url, cfg.anonKey, {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'btd_supabase_auth' },
     });
     ready = true;
     return client;
@@ -113,83 +113,79 @@
     }
   }
 
-  /**
-   * DB kullanıcısını yerel `users` satır şekline çevirir.
-   * permsFactory: (role) => perms object
-   */
-  async function fetchUserForLogin(username, password) {
+  const USER_COLS = 'id, kullanici_adi, ad_soyad, rol, yaka, eposta, telefon, adres, aktif, kullanici_firmalar(firma_id, firmalar(ad))';
+
+  function profileFromRow(row) {
+    const firmNames = (row.kullanici_firmalar || []).map((kf) => kf.firmalar?.ad).filter(Boolean);
+    return {
+      id: row.id,
+      dbId: row.id,
+      username: row.kullanici_adi,
+      name: row.ad_soyad,
+      role: row.rol || 'Operatör',
+      companies: firmNames,
+      scope: firmNames.length === 1 ? firmNames[0] : (firmNames.join(', ') || 'Firma'),
+      isGod: false,
+      accessCritical: false,
+      collar: mapCollar(row.yaka),
+      email: row.eposta || '',
+      phone: row.telefon || '',
+      address: row.adres || '',
+      personnelId: null,
+      source: 'supabase',
+    };
+  }
+
+  async function loadProfile() {
     const sb = getClient();
     if (!sb) return null;
+    const { data: sessionData, error } = await sb.auth.getSession();
+    if (error || !sessionData?.session?.user) return null;
+    const { data: row, error: qErr } = await sb
+      .from('kullanicilar')
+      .select(USER_COLS)
+      .eq('auth_user_id', sessionData.session.user.id)
+      .eq('aktif', true)
+      .maybeSingle();
+    if (qErr || !row) return null;
+    return profileFromRow(row);
+  }
 
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    if (!u || !p) return null;
-
-    try {
-      let row = null;
-      let error = null;
-      ({ data: row, error } = await sb
-        .from('kullanicilar')
-        .select(`
-          id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-          erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
-          kullanici_firmalar ( firma_id, firmalar ( ad ) )
-        `)
-        .ilike('kullanici_adi', u)
-        .eq('aktif', true)
-        .maybeSingle());
-      if (error) throw error;
-
-      // Ad soyad ile de dene (ör. "Volkan")
-      if (!row) {
-        const alt = await sb
-          .from('kullanicilar')
-          .select(`
-            id, kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god,
-            erisim_kritik, yaka, eposta, telefon, tc_no, adres, aktif,
-            kullanici_firmalar ( firma_id, firmalar ( ad ) )
-          `)
-          .ilike('ad_soyad', u)
-          .eq('aktif', true)
-          .limit(1)
-          .maybeSingle();
-        if (alt.error) throw alt.error;
-        row = alt.data;
-      }
-
-      if (!row) return null;
-      if ((row.sifre_hash || '') !== p) return null;
-
-      const firmNames = (row.kullanici_firmalar || [])
-        .map((kf) => kf.firmalar?.ad)
-        .filter(Boolean);
-
-      return {
-        id: row.id,
-        username: row.kullanici_adi,
-        name: row.ad_soyad,
-        password: row.sifre_hash,
-        role: row.rol || 'Operatör',
-        scope: (row.tum_grup || row.kapsam === 'Tüm Grup')
-          ? 'Tüm Grup'
-          : (row.kapsam || firmNames[0] || 'Firma'),
-        companies: firmNames,
-        isGod: !!(row.is_god || row.tum_grup),
-        accessCritical: !!row.erisim_kritik,
-        collar: mapCollar(row.yaka),
-        email: row.eposta || '',
-        phone: row.telefon || '',
-        tcNo: row.tc_no || '',
-        address: row.adres || '',
-        dept: '',
-        personnelId: null,
-        source: 'supabase',
-      };
-    } catch (err) {
-      lastError = err?.message || String(err);
-      console.warn('[BTD] Login sorgusu başarısız:', lastError);
+  async function signInWithProfile(email, password) {
+    const sb = getClient();
+    if (!sb) return null;
+    const address = String(email || '').trim();
+    if (!address.includes('@') || !password) return null;
+    const { data, error } = await sb.auth.signInWithPassword({ email: address, password });
+    if (error || !data?.user) {
+      lastError = error?.message || 'giriş yok';
       return null;
     }
+    let profile = await loadProfile();
+    if (!profile) {
+      const linked = await sb.rpc('link_my_auth');
+      if (!linked.error) profile = await loadProfile();
+    }
+    if (!profile) {
+      await sb.auth.signOut();
+      lastError = 'hesap eşleşmedi';
+      return null;
+    }
+    return profile;
+  }
+
+  async function signOut() {
+    const sb = getClient();
+    if (sb) await sb.auth.signOut();
+  }
+
+  async function sendPasswordReset(email) {
+    const sb = getClient();
+    if (!sb) return { ok: false };
+    const address = String(email || '').trim();
+    if (!address.includes('@')) return { ok: false };
+    await sb.auth.resetPasswordForEmail(address, { redirectTo: global.location?.origin });
+    return { ok: true };
   }
 
   global.BtdSupabase = {
@@ -197,6 +193,9 @@
     isReady: () => ready && !!getClient(),
     getLastError: () => lastError,
     hydrateCompanies,
-    fetchUserForLogin,
+    loadProfile,
+    signInWithProfile,
+    signOut,
+    sendPasswordReset,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

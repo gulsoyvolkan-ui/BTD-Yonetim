@@ -1,5 +1,13 @@
 -- Demo: anon/authenticated erişim + volkan/ahmet kullanıcı seed
 -- Uygulandı (MCP): demo_users_and_anon_grants
+-- 012_auth_rls.sql uygulandıktan sonra bu dosyayı yeniden çalıştırmayın.
+
+DO $$
+BEGIN
+  IF to_regprocedure('public.can_firma(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION '002 retired after 012_auth_rls.sql';
+  END IF;
+END $$;
 
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;

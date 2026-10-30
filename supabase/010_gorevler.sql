@@ -31,9 +31,4 @@ BEFORE UPDATE ON public.gorevler
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 ALTER TABLE public.gorevler ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS demo_all_access ON public.gorevler;
-CREATE POLICY demo_all_access ON public.gorevler
-  FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.gorevler TO anon, authenticated;
+-- Firma politikası 012_auth_rls.sql içindedir. demo_all_access yeniden yazılmaz.

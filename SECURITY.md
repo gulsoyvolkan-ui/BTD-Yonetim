@@ -23,11 +23,12 @@
 - CI: `.github/workflows/secret-scan.yml` (açık token / service_role / private key taraması)
 - Deploy: secret boşsa fail; credential persist kapalı
 
-## Bilinen demo riskleri (bilinçli)
+## Auth ve RLS
 
-- Supabase `003_demo_rls_policies.sql` anon’a geniş izin verir — **bitirme/demo içindir**. Gerçek müşteri verisi öncesi firma bazlı RLS + güvenli auth gerekir.
-- Kullanıcı şifreleri demo’da düz metin (`sifre_hash` alanı); üretimde hash + Supabase Auth tercih edilmeli.
-- Giriş demosu: `volkan` / `123456` — production’da değiştir / kapat.
+- `supabase/012_auth_rls.sql` demo politikasını ve anon GRANT’ı kapatır. Üyelik `kullanici_firmalar` satırındandır. Kullanıcı adı yetki vermez.
+- Dosya üretimde kendi kendine çalışmaz. Yedek, Auth daveti ve `012` aynı pencerede uygulanmadan istemciyi basmayın.
+- Geri alma: `supabase/012_auth_rls_rollback.sql`. Açık hali bırakmayın.
+- İnce API `SUPABASE_ANON_KEY` ve kullanıcı JWT ister. Paylaşılan anahtar veya ayrıcalıklı sunucu anahtarı bu yolu açmaz.
 
 ## Sızıntı olursa
 

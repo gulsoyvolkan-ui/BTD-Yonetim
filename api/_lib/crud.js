@@ -1,7 +1,5 @@
 'use strict';
 
-const crypto = require('crypto');
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const TABLES = {
@@ -47,22 +45,29 @@ function header(req, name) {
   return Array.isArray(value) ? String(value[0] || '') : String(value || '');
 }
 
-function keysMatch(given, expected) {
-  const a = Buffer.from(given);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
-
 function readConfig() {
   const url = String(process.env.SUPABASE_URL || '').trim().replace(/\/$/, '');
-  const secret = String(process.env.SUPABASE_SECRET_KEY || '').trim();
-  const apiKey = String(process.env.BTD_API_KEY || '').trim();
+  const anonKey = String(process.env.SUPABASE_ANON_KEY || '').trim();
   const missing = [];
   if (!url) missing.push('SUPABASE_URL');
-  if (!secret) missing.push('SUPABASE_SECRET_KEY');
-  if (!apiKey) missing.push('BTD_API_KEY');
-  return { url, secret, apiKey, missing };
+  if (!anonKey) missing.push('SUPABASE_ANON_KEY');
+  return { url, anonKey, missing };
+}
+
+function tokenRole(token) {
+  const part = String(token || '').split('.')[1];
+  if (!part) return '';
+  try {
+    const json = JSON.parse(Buffer.from(part, 'base64url').toString('utf8'));
+    return json && typeof json.role === 'string' ? json.role : '';
+  } catch {
+    return '';
+  }
+}
+
+function userToken(req) {
+  const match = /^Bearer\s+(\S+)$/i.exec(header(req, 'authorization'));
+  return match ? match[1] : '';
 }
 
 function queryValue(req, name) {
@@ -115,14 +120,14 @@ function readJson(req) {
   return { body };
 }
 
-async function rest(config, method, table, { firmaId, id, row }) {
+async function rest(config, token, method, table, { firmaId, id, row }) {
   const endpoint = new URL(`${config.url}/rest/v1/${table}`);
   endpoint.searchParams.set('firma_id', `eq.${firmaId}`);
   if (id) endpoint.searchParams.set('id', `eq.${id}`);
   if (method === 'GET') endpoint.searchParams.set('select', '*');
   const headers = {
-    apikey: config.secret,
-    Authorization: `Bearer ${config.secret}`,
+    apikey: config.anonKey,
+    Authorization: `Bearer ${token}`,
     Accept: 'application/json',
   };
   const init = { method, headers };
@@ -161,7 +166,8 @@ async function handle(req, res, table) {
   if (config.missing.length) {
     return send(res, 503, { error: 'ortam değişkeni eksik', missing: config.missing });
   }
-  if (!keysMatch(header(req, 'x-api-key'), config.apiKey)) {
+  const token = userToken(req);
+  if (!token || tokenRole(token) !== 'authenticated') {
     return send(res, 401, { error: 'yetkisiz' });
   }
 
@@ -198,7 +204,7 @@ async function handle(req, res, table) {
 
   let result;
   try {
-    result = await rest(config, method, table, {
+    result = await rest(config, token, method, table, {
       firmaId: firma.value,
       id: method === 'POST' ? '' : idq.value,
       row: method === 'DELETE' || method === 'GET' ? null : row,

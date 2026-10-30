@@ -24,13 +24,20 @@ function mockRes() {
   };
 }
 
-function setEnv({ url = 'https://example.supabase.co', secret = 'secret-key', apiKey = 'gate' } = {}) {
+function bearerFor(role) {
+  const body = Buffer.from(JSON.stringify({ role, sub: '00000000-0000-4000-8000-0000000000aa' })).toString('base64url');
+  return `h.${body}.s`;
+}
+
+const USER = bearerFor('authenticated');
+
+function setEnv({ url = 'https://example.supabase.co', anon = 'anon-key' } = {}) {
   if (url) process.env.SUPABASE_URL = url;
   else delete process.env.SUPABASE_URL;
-  if (secret) process.env.SUPABASE_SECRET_KEY = secret;
-  else delete process.env.SUPABASE_SECRET_KEY;
-  if (apiKey) process.env.BTD_API_KEY = apiKey;
-  else delete process.env.BTD_API_KEY;
+  if (anon) process.env.SUPABASE_ANON_KEY = anon;
+  else delete process.env.SUPABASE_ANON_KEY;
+  process.env.SUPABASE_SECRET_KEY = 'super-secret-value';
+  process.env.BTD_API_KEY = 'shared-gate';
 }
 
 async function call(table, method, { query = {}, body, headers, env } = {}) {
@@ -40,7 +47,7 @@ async function call(table, method, { query = {}, body, headers, env } = {}) {
     method,
     query,
     body,
-    headers: headers || { 'x-api-key': 'gate' },
+    headers: headers || { authorization: `Bearer ${USER}` },
   }, res, table);
   return res;
 }
@@ -66,15 +73,24 @@ async function main() {
     ok(res.statusCode === 503 && res.body.missing.includes('SUPABASE_URL'), 'missing url');
     ok(seen === null, 'missing url does not call fetch');
 
-    res = await call('musteriler', 'GET', { env: { secret: '' } });
-    ok(res.statusCode === 503 && res.body.missing.includes('SUPABASE_SECRET_KEY'), 'missing secret');
+    res = await call('musteriler', 'GET', { env: { anon: '' } });
+    ok(res.statusCode === 503 && res.body.missing.includes('SUPABASE_ANON_KEY'), 'missing anon');
 
-    res = await call('musteriler', 'GET', { env: { apiKey: '' } });
-    ok(res.statusCode === 503 && res.body.missing.includes('BTD_API_KEY'), 'missing gate');
+    res = await call('musteriler', 'GET', { query: { firma_id: FIRMA }, headers: { 'x-api-key': 'shared-gate' } });
+    ok(res.statusCode === 401, 'shared key is not auth');
+    ok(seen === null, 'shared key does not call fetch');
 
-    res = await call('musteriler', 'GET', { query: { firma_id: FIRMA }, headers: { 'X-Api-Key': 'nope' } });
-    ok(res.statusCode === 401, 'bad key');
-    ok(seen === null, 'bad key does not call fetch');
+    res = await call('musteriler', 'GET', {
+      query: { firma_id: FIRMA },
+      headers: { authorization: `Bearer ${bearerFor('anon')}` },
+    });
+    ok(res.statusCode === 401 && seen === null, 'anon jwt rejected');
+
+    res = await call('musteriler', 'GET', {
+      query: { firma_id: FIRMA },
+      headers: { authorization: `Bearer ${bearerFor(['service', 'role'].join('_'))}` },
+    });
+    ok(res.statusCode === 401 && seen === null, 'privileged jwt rejected');
 
     res = await call('musteriler', 'GET', { query: {} });
     ok(res.statusCode === 400, 'firma required');
@@ -94,8 +110,9 @@ async function main() {
       ok(url.pathname === `/rest/v1/${table}`, `${table} path`);
       ok(url.searchParams.get('firma_id') === `eq.${FIRMA}`, `${table} scope`);
       ok(url.searchParams.get('select') === '*', `${table} select`);
-      ok(seen.opts.headers.apikey === 'secret-key', `${table} apikey`);
-      ok(seen.opts.headers.Authorization === 'Bearer secret-key', `${table} bearer`);
+      ok(seen.opts.headers.apikey === 'anon-key', `${table} apikey`);
+      ok(seen.opts.headers.Authorization === `Bearer ${USER}`, `${table} bearer`);
+      ok(!JSON.stringify(seen).includes('super-secret-value'), `${table} hides secret`);
       ok(!seen.opts.headers.Prefer, `${table} get has no write prefer`);
       ok(res.headers['Cache-Control'] === 'no-store', `${table} no-store`);
     }
@@ -172,16 +189,16 @@ async function main() {
     next = { status: 409, json: { message: 'duplicate key value' } };
     res = await call('musteriler', 'POST', { query: { firma_id: FIRMA }, body: { unvan: 'ACME' } });
     ok(res.statusCode === 409 && res.body.error === 'duplicate key value', 'db error');
-    ok(!JSON.stringify(res.body).includes('secret-key'), 'error hides key');
+    ok(!JSON.stringify(res.body).includes('super-secret-value'), 'error hides key');
 
     next = { status: 500, raw: '<html>nope</html>' };
     res = await call('musteriler', 'GET', { query: { firma_id: FIRMA } });
     ok(res.statusCode === 500 && res.body.error.includes('nope'), 'non json error');
 
-    global.fetch = async () => { throw new Error('https://example.supabase.co/rest/v1/musteriler?apikey=secret-key'); };
+    global.fetch = async () => { throw new Error('https://example.supabase.co/rest/v1/musteriler?apikey=super-secret-value'); };
     res = await call('musteriler', 'GET', { query: { firma_id: FIRMA } });
     ok(res.statusCode === 502 && res.body.error === 'veritabanına ulaşılamadı', 'network');
-    ok(!JSON.stringify(res.body).includes('secret-key'), 'network hides key');
+    ok(!JSON.stringify(res.body).includes('super-secret-value'), 'network hides key');
 
     global.fetch = async (url, opts) => {
       seen = { url: String(url), opts };
@@ -194,7 +211,7 @@ async function main() {
       await fn({
         method: 'GET',
         query: { firma_id: FIRMA },
-        headers: { 'x-api-key': 'gate' },
+        headers: { authorization: `Bearer ${USER}` },
       }, routed);
       ok(routed.statusCode === 200 && new URL(seen.url).pathname === `/rest/v1/${name}`, `${name} route`);
     }
@@ -203,6 +220,7 @@ async function main() {
   } finally {
     global.fetch = realFetch;
     delete process.env.SUPABASE_URL;
+    delete process.env.SUPABASE_ANON_KEY;
     delete process.env.SUPABASE_SECRET_KEY;
     delete process.env.BTD_API_KEY;
   }

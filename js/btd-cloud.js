@@ -8,8 +8,6 @@
 
   const CURRENCY_TO_DB = { '₺': 'TRY', '€': 'EUR', '$': 'USD', '£': 'GBP', TRY: 'TRY', EUR: 'EUR', USD: 'USD', GBP: 'GBP' };
   const CURRENCY_TO_UI = { TRY: '₺', EUR: '€', USD: '$', GBP: '£', '₺': '₺', '€': '€', '$': '$', '£': '£' };
-  const PROTECTED_USERS = new Set(['volkan', 'ahmet']);
-
   // ─── Helpers ───────────────────────────────────────────────────────────────
   function currencyToDb(sym) {
     if (!sym) return 'EUR';
@@ -757,72 +755,30 @@
     }
   }
 
-  async function saveUser(u, companies) {
+  async function saveUser(u) {
     try {
       const client = sb();
-      if (!client || !u) return fail('no-client', 'saveUser');
-      const uname = (u.username || '').toLowerCase();
+      if (!client || !u?.dbId) return fail('profil yok', 'saveUser');
       const row = {
-        kullanici_adi: uname,
-        ad_soyad: u.name || uname,
-        sifre_hash: u.password || null,
-        rol: u.role || 'Operatör',
-        kapsam: u.scope || 'Firma',
-        tum_grup: !!(u.isGod || u.scope === 'Tüm Grup'),
-        is_god: !!u.isGod,
-        erisim_kritik: !!u.accessCritical,
+        ad_soyad: u.name || u.username,
         yaka: collarToDb(u.collar),
-        tc_no: u.tcNo || null,
         telefon: u.phone || null,
         eposta: u.email || null,
         adres: u.address || null,
-        aktif: true,
       };
-      let dbId = u.dbId;
-      if (dbId) {
-        const { error } = await client.from('kullanicilar').update(row).eq('id', dbId);
-        if (error) throw error;
-      } else {
-        const { data, error } = await client
-          .from('kullanicilar')
-          .upsert(row, { onConflict: 'kullanici_adi' })
-          .select('id')
-          .single();
-        if (error) throw error;
-        dbId = data.id;
-        u.dbId = dbId;
-      }
-      await client.from('kullanici_firmalar').delete().eq('kullanici_id', dbId);
-      const firmNames = u.isGod || u.scope === 'Tüm Grup'
-        ? Object.keys(companies || {})
-        : (u.companies || []);
-      const links = firmNames
-        .map((n) => firmaId(companies, n))
-        .filter(Boolean)
-        .map((fid) => ({ kullanici_id: dbId, firma_id: fid }));
-      if (links.length) {
-        const { error } = await client.from('kullanici_firmalar').insert(links);
-        if (error) throw error;
-      }
-      return ok({ dbId });
+      const { error } = await client.from('kullanicilar').update(row).eq('id', u.dbId);
+      if (error) throw error;
+      return ok({ dbId: u.dbId });
     } catch (e) { return fail(e, 'saveUser'); }
   }
   async function hydrateUsers(ctx) {
     const client = sb();
     if (!client || !ctx.users) return;
-    const n = await countTable(client, 'kullanicilar');
-    if (!n) {
-      if (ctx.users.length) {
-        progress(ctx, `Kullanıcılar seed (${ctx.users.length})…`);
-        for (const u of ctx.users) await saveUser(u, ctx.companies);
-      }
-      return;
-    }
     progress(ctx, 'Kullanıcılar hydrate…');
     const rows = await selectAll(
       client,
       'kullanicilar',
-      '*, kullanici_firmalar(firma_id, firmalar(ad))'
+      'id, kullanici_adi, ad_soyad, rol, yaka, eposta, telefon, adres, aktif, kullanici_firmalar(firma_id, firmalar(ad))'
     );
     const localByUser = Object.fromEntries((ctx.users || []).map((u) => [(u.username || '').toLowerCase(), u]));
     const mapped = rows.map((r) => {
@@ -833,45 +789,21 @@
         dbId: r.id,
         username: r.kullanici_adi,
         name: r.ad_soyad,
-        password: r.sifre_hash || (prev?.password || ''),
+        password: '',
         role: r.rol || 'Operatör',
-        scope: (r.tum_grup || r.kapsam === 'Tüm Grup') ? 'Tüm Grup' : (r.kapsam || firmNames[0] || 'Firma'),
+        scope: firmNames.length === 1 ? firmNames[0] : (firmNames.join(', ') || 'Firma'),
         companies: firmNames,
-        isGod: !!(r.is_god || r.tum_grup),
-        accessCritical: !!r.erisim_kritik,
+        isGod: false,
+        accessCritical: false,
         collar: collarToUi(r.yaka),
         email: r.eposta || '',
         phone: r.telefon || '',
-        tcNo: r.tc_no || '',
+        tcNo: '',
         address: r.adres || '',
         dept: prev?.dept || '',
         personnelId: prev?.personnelId || null,
         perms: prev?.perms,
       };
-    });
-    // Korunan demo kullanıcıları: kaybolmasın + şifre/yetki bozulmasın
-    PROTECTED_USERS.forEach((uname) => {
-      const local = localByUser[uname];
-      if (!local) return;
-      const idx = mapped.findIndex((u) => (u.username || '').toLowerCase() === uname);
-      if (idx < 0) {
-        mapped.push({ ...local });
-        return;
-      }
-      const row = mapped[idx];
-      if (local.password) row.password = local.password;
-      if (local.isGod) {
-        row.isGod = true;
-        row.scope = 'Tüm Grup';
-        row.role = local.role || row.role || 'Yönetici';
-        row.accessCritical = true;
-        if (!row.companies || row.companies.length < (local.companies || []).length) {
-          row.companies = (local.companies || []).slice();
-        }
-      }
-      if (local.personnelId && !row.personnelId) row.personnelId = local.personnelId;
-      if (local.collar) row.collar = local.collar;
-      if (local.perms) row.perms = local.perms;
     });
     replaceArray(ctx.users, mapped);
   }

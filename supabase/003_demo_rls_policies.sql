@@ -1,6 +1,13 @@
 -- Demo RLS: anon/authenticated için tüm public tablolarda izin
 -- Uygulandı (MCP): demo_rls_allow_all_policies
--- Üretimde firma bazlı politikalarla değiştirilecek.
+-- 012_auth_rls.sql uygulandıktan sonra bu dosyayı yeniden çalıştırmayın.
+
+DO $$
+BEGIN
+  IF to_regprocedure('public.can_firma(uuid)') IS NOT NULL THEN
+    RAISE EXCEPTION '003 retired after 012_auth_rls.sql';
+  END IF;
+END $$;
 
 DO $$
 DECLARE r RECORD;

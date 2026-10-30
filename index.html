@@ -321,10 +321,10 @@
           </select>
         </div>
         <div>
-          <label class="text-[11px] font-semibold text-white/50 uppercase tracking-wide">Kullanıcı Adı</label>
+          <label class="text-[11px] font-semibold text-white/50 uppercase tracking-wide">E-posta</label>
           <div class="login-field mt-1.5 flex items-center gap-2.5 bg-white/[0.06] border border-white/15 rounded-xl px-3.5 py-3 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            <input id="loginUsername" type="text" autocomplete="username" placeholder="kullanici.adi" class="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none min-w-0" />
+            <input id="loginUsername" type="email" autocomplete="username" placeholder="ad@firma.com" class="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none min-w-0" />
           </div>
         </div>
         <div>
@@ -344,7 +344,7 @@
           <input id="loginRemember" type="checkbox" checked class="w-3.5 h-3.5 rounded border-white/30 bg-transparent accent-sky-400" />
           Beni hatırla
         </label>
-        <a href="#" class="text-xs text-sky-300 hover:text-sky-200 font-medium">Şifremi unuttum</a>
+        <a href="#" id="loginForgot" class="text-xs text-sky-300 hover:text-sky-200 font-medium">Şifremi unuttum</a>
       </div>
 
       <p id="loginError" class="hidden text-xs text-red-300 bg-red-500/10 border border-red-400/20 rounded-lg px-3 py-2 mt-4">Kullanıcı adı / şifre hatalı veya firma eşleşmiyor.</p>
@@ -7142,19 +7142,7 @@ ${vadeLine}`;
       return;
     }
     writeAuthSessionRaw({
-      username: (user.username || '').toLowerCase(),
-      name: user.name || '',
-      role: user.role || '',
-      scope: user.scope || '',
-      companies: user.companies || [],
-      company: company || activeCompany || 'Bluemac',
-      isGod: !!user.isGod,
-      collar: user.collar || 'white',
-      accessCritical: !!user.accessCritical,
-      personnelId: user.personnelId || null,
-      dept: user.dept || '',
-      loginPortal: user.loginPortal || '',
-      perms: user.perms || null,
+      company: company || activeCompany || '',
       lastActiveAt: Date.now(),
       savedAt: Date.now(),
     });
@@ -7224,6 +7212,7 @@ ${vadeLine}`;
 
   function performLogout({ idle } = {}) {
     clearAuthSession();
+    try { window.BtdSupabase?.signOut?.(); } catch (_) { /* ignore */ }
     appShell.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     if (!idle) loginForm.reset();
@@ -7235,96 +7224,15 @@ ${vadeLine}`;
     if (remember) remember.checked = true;
   }
 
-  function findLocalUserForLogin(username, password) {
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    const list = (typeof users !== 'undefined') ? users : [];
-    return list.find((row) => {
-      const uname = (row.username || '').trim().toLowerCase();
-      const name = (row.name || '').trim().toLowerCase();
-      return (uname === u || name === u) && String(row.password || '') === p;
-    }) || null;
-  }
-
-  function applyDemoLoginOverrides(user) {
-    if (!user) return user;
-    const uname = (user.username || '').trim().toLowerCase();
-    const name = (user.name || '').trim().toLowerCase();
-    if (uname === 'volkan' || uname === 'admin' || name === 'volkan') {
-      user.username = user.username || 'volkan';
-      user.name = user.name || 'Volkan';
-      user.isGod = true;
-      user.role = 'Yönetici';
-      user.scope = 'Tüm Grup';
-      user.accessCritical = true;
-      user.collar = user.collar || 'white';
-      user.companies = ['Technomac', 'Bluemac', 'Devorias'];
-      if (typeof adminPerms === 'function') user.perms = user.perms || adminPerms();
-    }
-    return user;
-  }
-
-  function buildEmergencyAdminUser() {
-    return {
-      username: 'volkan',
-      name: 'Volkan',
-      password: '123456',
-      dept: 'Yönetim',
-      scope: 'Tüm Grup',
-      companies: ['Technomac', 'Bluemac', 'Devorias'],
-      role: 'Yönetici',
-      perms: (typeof adminPerms === 'function') ? adminPerms() : {},
-      isGod: true,
-      collar: 'white',
-      accessCritical: true,
-      tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
-    };
-  }
-
-  function isDemoAdminCredentials(username, password) {
-    const u = (username || '').trim().toLowerCase();
-    const p = (password || '').trim();
-    return (u === 'volkan' || u === 'admin' || u === 'btd') && p === '123456';
-  }
-
-  function tryRestoreAuthSession() {
-    const raw = readAuthSessionRaw();
-    if (!raw || !raw.username) return false;
-    if (authSessionIdleExpired(raw)) {
-      clearAuthSession();
-      return false;
-    }
-    const list = (typeof users !== 'undefined') ? users : [];
-    let found = list.find(u => (u.username || '').toLowerCase() === String(raw.username).toLowerCase());
-    if (!found) {
-      found = {
-        username: raw.username,
-        name: raw.name || raw.username,
-        role: raw.role || 'Operatör',
-        scope: raw.scope || '',
-        companies: raw.companies || [],
-        isGod: !!raw.isGod,
-        collar: raw.collar || 'white',
-        accessCritical: !!raw.accessCritical,
-        personnelId: raw.personnelId || null,
-        dept: raw.dept || '',
-        perms: raw.perms || (typeof defaultPerms === 'function' ? defaultPerms() : {}),
-      };
-    }
-    applyDemoLoginOverrides(found);
-    if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
-      found.perms = found.perms || ((found.role === 'Yönetici' || found.isGod) ? adminPerms() : defaultPerms());
-    }
-    const company = raw.company || 'Bluemac';
-    const session = sessionFromFoundUser(found, company === 'BTD Yönetim' ? 'BTD Yönetim' : company)
-      || authSessionFromUser(found, company, company);
-    if (!session) {
-      clearAuthSession();
-      return false;
-    }
+  async function restoreAuthFromSupabase() {
+    clearAuthSession();
+    const profile = await window.BtdSupabase?.loadProfile?.();
+    if (!profile) return false;
+    const company = (profile.companies && profile.companies[0]) || 'Bluemac';
+    const session = sessionFromFoundUser(profile, company)
+      || authSessionFromUser(profile, company, company);
+    if (!session) return false;
     enterAppAsUser(session, company, { restore: true });
-    touchAuthSession();
-    showToast(`Hoş geldiniz, ${session.name}`, 'success');
     return true;
   }
 
@@ -7981,55 +7889,15 @@ ${vadeLine}`;
     return null;
   }
 
-  function authenticateLogin(username, password, company) {
-    let found = findLocalUserForLogin(username, password);
-    if (!found && isDemoAdminCredentials(username, password)) {
-      found = buildEmergencyAdminUser();
+  async function authenticateLoginAsync(email, password, company) {
+    if (!window.BtdSupabase?.signInWithProfile) return null;
+    const remote = await window.BtdSupabase.signInWithProfile(email, password);
+    if (!remote) return null;
+    if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
+      remote.perms = remote.role === 'Yönetici' ? adminPerms() : defaultPerms();
     }
-    if (!found) return null;
-    applyDemoLoginOverrides(found);
-    return sessionFromFoundUser(found, company)
-      || authSessionFromUser(found, company === 'BTD Yönetim' ? 'Bluemac' : (company || 'Bluemac'), company);
-  }
-
-  async function authenticateLoginAsync(username, password, company) {
-    // Demo yönetici: önce yerel / acil kapı (bulut hatası giriş engellemesin)
-    const localFirst = authenticateLogin(username, password, company);
-    if (localFirst) {
-      localFirst.authSource = 'local';
-      return localFirst;
-    }
-
-    if (window.BtdSupabase?.fetchUserForLogin) {
-      try {
-        const remote = await window.BtdSupabase.fetchUserForLogin(username, password);
-        if (remote) {
-          applyDemoLoginOverrides(remote);
-          if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
-            remote.perms = (remote.role === 'Yönetici' || remote.isGod) ? adminPerms() : defaultPerms();
-          }
-          const session = sessionFromFoundUser(remote, company)
-            || authSessionFromUser(remote, company === 'BTD Yönetim' ? 'Bluemac' : company, company);
-          if (session) {
-            session.authSource = 'supabase';
-            return session;
-          }
-        }
-      } catch (err) {
-        console.warn('[BTD] Uzak giriş denemesi başarısız:', err);
-      }
-    }
-
-    // Son çare: sabit yönetici kimlik bilgileri
-    if (isDemoAdminCredentials(username, password)) {
-      const found = buildEmergencyAdminUser();
-      const session = authSessionFromUser(found, 'Bluemac', company || 'BTD Yönetim');
-      if (session) {
-        session.authSource = 'emergency';
-        return session;
-      }
-    }
-    return null;
+    return sessionFromFoundUser(remote, company)
+      || authSessionFromUser(remote, (remote.companies && remote.companies[0]) || company, company);
   }
 
   loginForm.addEventListener('submit', async (e) => {
@@ -8039,7 +7907,7 @@ ${vadeLine}`;
     const company = document.getElementById('loginCompany')?.value || 'Bluemac';
 
     if (!username || !password) {
-      loginError.textContent = 'Kullanıcı adı ve şifre zorunludur.';
+      loginError.textContent = 'E-posta ve şifre zorunludur.';
       loginError.classList.remove('hidden');
       loginForm.classList.remove('login-shake');
       requestAnimationFrame(() => loginForm.classList.add('login-shake'));
@@ -8054,34 +7922,23 @@ ${vadeLine}`;
     try {
       const auth = await authenticateLoginAsync(username, password, company);
       if (!auth) {
-        loginError.textContent = 'Hatalı giriş. Deneyin: kullanıcı volkan · şifre 123456 · firma BTD Yönetim';
+        loginError.textContent = 'Giriş olmadı. Davet edilmiş e-posta ve şifreyi kullanın.';
         loginError.classList.remove('hidden');
         loginForm.classList.remove('login-shake');
         requestAnimationFrame(() => loginForm.classList.add('login-shake'));
         return;
       }
 
+      currentUser = auth;
+      if (typeof btdCloudBoot === 'function') await btdCloudBoot();
       const targetCompany = enterAppAsUser(auth, company);
-      const srcHint = auth.authSource === 'supabase' ? ' · bulut' : '';
       if (typeof showToast === 'function') {
-        showToast(auth.isGod ? `Hoş geldiniz, ${auth.name} · grup yöneticisi${srcHint}` : `Hoş geldiniz, ${auth.name} · ${targetCompany}${srcHint}`, 'success');
+        showToast(`Hoş geldiniz, ${auth.name} · ${targetCompany}`, 'success');
       }
     } catch (err) {
       console.error('Login error:', err);
-      loginError.textContent = `Giriş hatası: ${err && err.message ? err.message : 'bilinmeyen'}. Tekrar deneyin: volkan / 123456`;
+      loginError.textContent = 'Giriş hatası. E-posta ve şifreyi yeniden deneyin.';
       loginError.classList.remove('hidden');
-      // Acil kaçış: sabit kimlik yine de içeri alsın
-      if (isDemoAdminCredentials(username, password)) {
-        try {
-          const found = buildEmergencyAdminUser();
-          const session = authSessionFromUser(found, 'Bluemac', 'BTD Yönetim');
-          enterAppAsUser(session, company);
-          if (typeof showToast === 'function') showToast('Acil giriş ile içeri alındınız.', 'success');
-          loginError.classList.add('hidden');
-        } catch (e2) {
-          console.error('Emergency login failed', e2);
-        }
-      }
     } finally {
       loginSubmitBtn.disabled = false;
       loginSubmitBtn.classList.remove('opacity-70', 'cursor-not-allowed');
@@ -8089,6 +7946,13 @@ ${vadeLine}`;
     }
   });
 
+  document.getElementById('loginForgot')?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginUsername')?.value.trim() || '';
+    if (window.BtdSupabase?.sendPasswordReset) await window.BtdSupabase.sendPasswordReset(email);
+    loginError.textContent = 'E-posta kayıtlıysa sıfırlama bağlantısı gönderilir.';
+    loginError.classList.remove('hidden');
+  });
 
   document.getElementById('logoutBtn').addEventListener('click', () => {
     performLogout();
@@ -15182,22 +15046,21 @@ ${vadeLine}`;
 
   let users = [
     {
-      username: 'volkan', name: 'Volkan', password: '123456', dept: 'Yönetim',
-      scope: 'Tüm Grup', companies: ['Technomac', 'Bluemac', 'Devorias'],
-      role: 'Yönetici', perms: adminPerms(), isGod: true,
+      username: 'volkan', name: 'Volkan', password: '', dept: 'Yönetim',
+      scope: 'Bluemac', companies: ['Bluemac'],
+      role: 'Yönetici', perms: adminPerms(), isGod: false,
       tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
-      collar: 'white', accessCritical: true,
+      collar: 'white', accessCritical: false,
     },
     {
-      username: 'ahmet', name: 'Ahmet Yıldız', password: '123456', dept: 'CNC',
+      username: 'ahmet', name: 'Ahmet Yıldız', password: '', dept: 'CNC',
       scope: 'Technomac', companies: ['Technomac'],
       role: 'Operatör', perms: defaultPerms(), isGod: false,
-      tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
+      tcNo: '', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
       address: 'Pendik / İstanbul', personnelId: 'P-TM-001',
       collar: 'blue', accessCritical: false,
     },
   ];
-  // Yönetici: Volkan / 123456 · Mavi yaka demo: ahmet / 123456 (Technomac)
 
   function formatUserCompaniesLabel(u) {
     if (!u) return '—';
@@ -19454,14 +19317,8 @@ ${vadeLine}`;
 
   setActiveCompany('Bluemac');
 
-  // Sayfa yenilemede oturumu geri yükle (çıkış yapılmadıysa)
-  try {
-    if (typeof tryRestoreAuthSession === 'function') tryRestoreAuthSession();
-  } catch (e) {
-    console.warn('[BTD] Oturum geri yükleme atlandı', e);
-  }
-
-  (async function btdCloudBoot() {
+  async function btdCloudBoot() {
+    if (!currentUser) return { ok: false, reason: 'no-session' };
     try {
       if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
       // Öncelik şemalarını firmalar için hazırla (boşsa varsayılan)
@@ -19512,22 +19369,21 @@ ${vadeLine}`;
       console.info('[BTD] Cloud boot', bootRes);
       window.__btdBootDone = true;
       if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
-      // Hydrate sonrası kullanıcı bayraklarını düzelterek oturumu taze tut
-      if (currentUser && typeof applyDemoLoginOverrides === 'function') {
-        const live = (users || []).find(u => (u.username || '').toLowerCase() === (currentUser.username || '').toLowerCase());
-        if (live) applyDemoLoginOverrides(live);
-        applyDemoLoginOverrides(currentUser);
-        if (typeof applyCurrentUser === 'function') applyCurrentUser();
-        if (typeof touchAuthSession === 'function') touchAuthSession();
-      } else if (!currentUser && typeof tryRestoreAuthSession === 'function') {
-        tryRestoreAuthSession();
-      }
+      if (typeof applyCurrentUser === 'function') applyCurrentUser();
+      return bootRes;
     } catch (err) {
       console.warn('[BTD] Cloud boot failed — yerel veri ile devam', err);
       window.__btdBootDone = true;
-      if (!currentUser && typeof tryRestoreAuthSession === 'function') {
-        try { tryRestoreAuthSession(); } catch (_) { /* ignore */ }
-      }
+      return { ok: false };
+    }
+  }
+
+  (async function btdAuthBoot() {
+    try {
+      const restored = await restoreAuthFromSupabase();
+      if (restored) await btdCloudBoot();
+    } catch (e) {
+      console.warn('[BTD] Oturum geri yükleme atlandı', e);
     }
   })();
 </script>
