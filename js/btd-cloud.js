@@ -868,19 +868,10 @@
         return;
       }
       const row = mapped[idx];
-      if (local.password) row.password = local.password;
-      if (local.isGod) {
-        row.isGod = true;
-        row.scope = 'Tüm Grup';
-        row.role = local.role || row.role || 'Yönetici';
-        row.accessCritical = true;
-        if (!row.companies || row.companies.length < (local.companies || []).length) {
-          row.companies = (local.companies || []).slice();
-        }
-      }
+      // Sunucu satırı rol ve firma listesini belirler. Yerel tohum yükseltmez.
       if (local.personnelId && !row.personnelId) row.personnelId = local.personnelId;
-      if (local.collar) row.collar = local.collar;
-      if (local.perms) row.perms = local.perms;
+      if (!row.perms && local.perms) row.perms = local.perms;
+      if (!row.collar && local.collar) row.collar = local.collar;
     });
     replaceArray(ctx.users, mapped);
   }
