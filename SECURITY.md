@@ -23,12 +23,14 @@
 - CI: `.github/workflows/secret-scan.yml` (açık token / service_role / private key taraması)
 - Deploy: secret boşsa fail; credential persist kapalı
 
-## Auth ve RLS
+Ayrıntı: `docs/security/BTD_SECURITY_BASELINE.md`, `docs/security/PRODUCTION_MIGRATION_RUNBOOK.md`, `docs/integrations/SHADOW_BTD_READ_V1.md`.
 
-- `supabase/012_auth_rls.sql` demo politikasını ve anon GRANT’ı kapatır. Üyelik `kullanici_firmalar` satırındandır. Kullanıcı adı yetki vermez.
-- Dosya üretimde kendi kendine çalışmaz. Yedek, Auth daveti ve `012` aynı pencerede uygulanmadan istemciyi basmayın.
-- Geri alma: `supabase/012_auth_rls_rollback.sql`. Açık hali bırakmayın.
-- İnce API `SUPABASE_ANON_KEY` ve kullanıcı JWT ister. Paylaşılan anahtar veya ayrıcalıklı sunucu anahtarı bu yolu açmaz.
+## Bilinen demo riskleri (bilinçli)
+
+- `003` ve `002` yeniden çalıştırılmaz. Eski halleri anon’a geniş izin veriyordu. Güncel dosyalar durur ve izin yazmaz.
+- Acil kapatma `supabase/017_emergency_anon_containment.sql`. Üretimde bu PR sırasında çalıştırılmadı. Sıra ve NO-GO: `docs/security/GUVENLIK_TOPARLAMA.md`.
+- `016` anon okumayı geri açmaz.
+- Giriş iş e-postası ve Supabase Auth’tır. İstemci parola özeti ile giriş yapmaz. Başarısız giriş yönetici hesabı üretmez.
 
 ## Sızıntı olursa
 

@@ -31,4 +31,6 @@ BEFORE UPDATE ON public.gorevler
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
 ALTER TABLE public.gorevler ENABLE ROW LEVEL SECURITY;
--- Firma politikası 012_auth_rls.sql içindedir. demo_all_access yeniden yazılmaz.
+
+-- demo_all_access ve anon GRANT bu dosyadan çıkarıldı.
+-- Yeniden çalıştırmak anon okumayı açmaz. Politika 017/015 ile düşer.

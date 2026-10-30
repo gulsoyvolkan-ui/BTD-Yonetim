@@ -1,45 +1,11 @@
--- Demo: anon/authenticated erişim + volkan/ahmet kullanıcı seed
--- Uygulandı (MCP): demo_users_and_anon_grants
--- 012_auth_rls.sql uygulandıktan sonra bu dosyayı yeniden çalıştırmayın.
+-- Demo grant ve demo kullanıcı yazımı kapatıldı.
+-- Eski sürüm anon rolüne şema genelinde yazma veriyor ve yerel hesap ekliyordu.
+-- O komutlar bu dosyadan çıkarıldı. Git geçmişindeki kopya yeniden çalıştırılmaz.
+-- Üretim sırası: 013, hesap bağlama, 017, kod dağıtımı, 018, 019, 014, 015.
+-- Bu dosya hiçbir GRANT ve hiçbir INSERT çalıştırmaz.
 
-DO $$
+DO $guard$
 BEGIN
-  IF to_regprocedure('public.can_firma(uuid)') IS NOT NULL THEN
-    RAISE EXCEPTION '002 retired after 012_auth_rls.sql';
-  END IF;
-END $$;
-
-GRANT USAGE ON SCHEMA public TO anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO anon, authenticated;
-
-INSERT INTO public.kullanicilar (kullanici_adi, ad_soyad, sifre_hash, rol, kapsam, tum_grup, is_god, erisim_kritik, yaka, eposta)
-VALUES
-  ('volkan', 'Volkan', '123456', 'Yönetici', 'Tüm Grup', TRUE, TRUE, TRUE, 'white', 'volkan@btd.com.tr'),
-  ('ahmet', 'Ahmet Yıldız', '123456', 'Operatör', 'Firma', FALSE, FALSE, FALSE, 'blue', 'ahmet.yildiz@technomac.com.tr')
-ON CONFLICT (kullanici_adi) DO UPDATE SET
-  ad_soyad = EXCLUDED.ad_soyad,
-  sifre_hash = EXCLUDED.sifre_hash,
-  rol = EXCLUDED.rol,
-  kapsam = EXCLUDED.kapsam,
-  tum_grup = EXCLUDED.tum_grup,
-  is_god = EXCLUDED.is_god,
-  erisim_kritik = EXCLUDED.erisim_kritik,
-  yaka = EXCLUDED.yaka,
-  eposta = EXCLUDED.eposta;
-
-INSERT INTO public.kullanici_firmalar (kullanici_id, firma_id)
-SELECT u.id, f.id
-FROM public.kullanicilar u
-CROSS JOIN public.firmalar f
-WHERE u.kullanici_adi = 'volkan'
-ON CONFLICT DO NOTHING;
-
-INSERT INTO public.kullanici_firmalar (kullanici_id, firma_id)
-SELECT u.id, f.id
-FROM public.kullanicilar u
-JOIN public.firmalar f ON f.kod = 'TM'
-WHERE u.kullanici_adi = 'ahmet'
-ON CONFLICT DO NOTHING;
+  RAISE EXCEPTION 'Durdu: 002 demo grant kapalı. anon yetkisi ve demo kullanıcı yazılmadı. Değişiklik yok.';
+END
+$guard$;

@@ -58,4 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_siparis_kalem_urun ON public.siparis_kalemleri(ur
 
 ALTER TABLE public.urunler ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fasoncular ENABLE ROW LEVEL SECURITY;
--- Firma politikası 012_auth_rls.sql içindedir. demo_all_access yeniden yazılmaz.
+
+-- demo_all_access ve anon GRANT bu dosyadan çıkarıldı.
+-- Yeniden çalıştırmak anon okumayı açmaz. Politika 017/015 ile düşer.
+-- authenticated yetkisi 014/015 ile gelir.

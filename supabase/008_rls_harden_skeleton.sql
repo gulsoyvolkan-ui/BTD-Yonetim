@@ -1,6 +1,8 @@
--- Üretim öncesi: demo RLS'i kaldırıp sıkı politikalara geçiş iskeleti.
--- ŞU AN ÇALIŞTIRMA — uygulama hâlâ anon key ile yazıyor; sıkı RLS uygulamayı kırar.
--- Gerçek müşteri verisi öncesi: Supabase Auth + firma bazlı politikalar gerekir.
+-- Eski iskelet. Çalıştırmayın.
+-- Güncel sıra: 013, tek tek hesap, 017 acil kapatma, 018 kolon, 019 denetim, 014, 015.
+-- 016 anon yetkisini geri açmaz ve çalıştırılmaz.
+-- Ayrıntı: docs/security/GUVENLIK_TOPARLAMA.md
+-- Bu dosyalar üretimde bu PR sırasında çalıştırılmadı.
 
 -- 1) Demo politikalarını düşürmek için (yalnızca Auth hazır olduğunda):
 -- DO $$

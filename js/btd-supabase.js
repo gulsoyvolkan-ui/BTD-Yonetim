@@ -21,8 +21,14 @@
       lastError = 'Supabase istemcisi yüklenemedi';
       return null;
     }
+    const storage = global.sessionStorage;
     client = global.supabase.createClient(cfg.url, cfg.anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true, storageKey: 'btd_supabase_auth' },
+      auth: {
+        persistSession: !!storage,
+        autoRefreshToken: !!storage,
+        detectSessionInUrl: false,
+        storage: storage,
+      },
     });
     ready = true;
     return client;
@@ -32,19 +38,68 @@
     return CURRENCY_UI[code] || code || '₺';
   }
 
+  function safeError(err) {
+    return String(err?.message || err || '')
+      .replace(/sifre_hash|tc_no|password|bearer\s+\S+/gi, '[gizli]')
+      .slice(0, 200);
+  }
+
   function mapCollar(yaka) {
     if (yaka === 'blue' || yaka === 'mavi') return 'blue';
     if (yaka === 'manager' || yaka === 'yonetici' || yaka === 'yönetici') return 'manager';
     return 'white';
   }
 
+  /** 64 karakterlik SHA-256 hex özeti. Büyük/küçük harf fark etmez. */
+  function isPasswordHash(value) {
+    return /^[0-9a-f]{64}$/i.test(String(value || '').trim());
+  }
+
+  /**
+   * Giriş karşılaştırması: kırpılmış düz metnin UTF-8 SHA-256 özeti (küçük harf hex).
+   * Girdi zaten özet gibi görünse bile yeniden özetlenir; özeti yapıştırmak giriş sayılmaz.
+   */
+  async function digestPassword(plain) {
+    const text = String(plain ?? '').trim();
+    if (!text) return '';
+    if (!global.crypto?.subtle?.digest) {
+      throw new Error('Web Crypto SHA-256 kullanılamıyor');
+    }
+    const data = new TextEncoder().encode(text);
+    const buf = await global.crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(buf);
+    let hex = '';
+    for (let i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
+    return hex;
+  }
+
+  /** Kayıt: özet ise olduğu gibi (küçük harf), değilse digestPassword. Çift özet yazılmaz. */
+  async function passwordForStorage(value) {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    if (isPasswordHash(text)) return text.toLowerCase();
+    return digestPassword(text);
+  }
+
+  async function hasUserSession() {
+    const sb = getClient();
+    if (!sb?.auth?.getSession) return false;
+    try {
+      const session = await sb.auth.getSession();
+      return !!(session && session.data && session.data.session && session.data.session.access_token);
+    } catch (err) {
+      return false;
+    }
+  }
+
   /**
    * firmalar + banka hesaplarını mevcut `companies` nesnesine merge eder.
-   * UI chrome (badgeBg vb.) yerel varsayılanlarla korunur.
+   * Oturum yoksa anon anahtarla firma satırı okunmaz. Yerel kart kalır.
    */
   async function hydrateCompanies(companies) {
     const sb = getClient();
     if (!sb || !companies) return { ok: false, reason: lastError || 'no-client' };
+    if (!(await hasUserSession())) return { ok: false, reason: 'no-auth-session' };
 
     try {
       const { data: firmalar, error: fErr } = await sb
@@ -107,95 +162,26 @@
       console.info('[BTD] Firmalar Supabase\'den yüklendi:', firmalar.map((x) => x.ad).join(', '));
       return { ok: true, count: firmalar.length };
     } catch (err) {
-      lastError = err?.message || String(err);
+      lastError = safeError(err);
       console.warn('[BTD] Firma hydrate başarısız, yerel veri kullanılıyor:', lastError);
       return { ok: false, reason: lastError };
     }
   }
 
-  const USER_COLS = 'id, kullanici_adi, ad_soyad, rol, yaka, eposta, telefon, adres, aktif, kullanici_firmalar(firma_id, firmalar(ad))';
-
-  function profileFromRow(row) {
-    const firmNames = (row.kullanici_firmalar || []).map((kf) => kf.firmalar?.ad).filter(Boolean);
-    return {
-      id: row.id,
-      dbId: row.id,
-      username: row.kullanici_adi,
-      name: row.ad_soyad,
-      role: row.rol || 'Operatör',
-      companies: firmNames,
-      scope: firmNames.length === 1 ? firmNames[0] : (firmNames.join(', ') || 'Firma'),
-      isGod: false,
-      accessCritical: false,
-      collar: mapCollar(row.yaka),
-      email: row.eposta || '',
-      phone: row.telefon || '',
-      address: row.adres || '',
-      personnelId: null,
-      source: 'supabase',
-    };
-  }
-
-  async function loadProfile() {
-    const sb = getClient();
-    if (!sb) return null;
-    const { data: sessionData, error } = await sb.auth.getSession();
-    if (error || !sessionData?.session?.user) return null;
-    const { data: row, error: qErr } = await sb
-      .from('kullanicilar')
-      .select(USER_COLS)
-      .eq('auth_user_id', sessionData.session.user.id)
-      .eq('aktif', true)
-      .maybeSingle();
-    if (qErr || !row) return null;
-    return profileFromRow(row);
-  }
-
-  async function signInWithProfile(email, password) {
-    const sb = getClient();
-    if (!sb) return null;
-    const address = String(email || '').trim();
-    if (!address.includes('@') || !password) return null;
-    const { data, error } = await sb.auth.signInWithPassword({ email: address, password });
-    if (error || !data?.user) {
-      lastError = error?.message || 'giriş yok';
-      return null;
-    }
-    let profile = await loadProfile();
-    if (!profile) {
-      const linked = await sb.rpc('link_my_auth');
-      if (!linked.error) profile = await loadProfile();
-    }
-    if (!profile) {
-      await sb.auth.signOut();
-      lastError = 'hesap eşleşmedi';
-      return null;
-    }
-    return profile;
-  }
-
-  async function signOut() {
-    const sb = getClient();
-    if (sb) await sb.auth.signOut();
-  }
-
-  async function sendPasswordReset(email) {
-    const sb = getClient();
-    if (!sb) return { ok: false };
-    const address = String(email || '').trim();
-    if (!address.includes('@')) return { ok: false };
-    await sb.auth.resetPasswordForEmail(address, { redirectTo: global.location?.origin });
-    return { ok: true };
+  /** Eski istemci parola karşılaştırması kapatıldı. Kimlik Supabase Auth'tadır. */
+  async function fetchUserForLogin() {
+    return null;
   }
 
   global.BtdSupabase = {
     getClient,
     isReady: () => ready && !!getClient(),
     getLastError: () => lastError,
+    hasUserSession,
     hydrateCompanies,
-    loadProfile,
-    signInWithProfile,
-    signOut,
-    sendPasswordReset,
+    fetchUserForLogin,
+    isPasswordHash,
+    digestPassword,
+    passwordForStorage,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

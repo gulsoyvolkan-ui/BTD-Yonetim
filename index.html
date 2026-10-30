@@ -14,6 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/btd-supabase.js"></script>
+<script src="js/btd-auth.js"></script>
+<script src="js/btd-kiosk.js"></script>
 <script src="js/btd-cloud.js"></script>
 <script src="js/btd-prices.js"></script>
 <script src="js/btd-brands.js"></script>
@@ -321,10 +323,10 @@
           </select>
         </div>
         <div>
-          <label class="text-[11px] font-semibold text-white/50 uppercase tracking-wide">E-posta</label>
+          <label class="text-[11px] font-semibold text-white/50 uppercase tracking-wide">İş e-postası</label>
           <div class="login-field mt-1.5 flex items-center gap-2.5 bg-white/[0.06] border border-white/15 rounded-xl px-3.5 py-3 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white/40 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-            <input id="loginUsername" type="email" autocomplete="username" placeholder="ad@firma.com" class="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none min-w-0" />
+            <input id="loginUsername" type="email" autocomplete="username" placeholder="ad.soyad@firma.com" class="flex-1 bg-transparent text-sm text-white placeholder-white/30 outline-none min-w-0" />
           </div>
         </div>
         <div>
@@ -344,7 +346,7 @@
           <input id="loginRemember" type="checkbox" checked class="w-3.5 h-3.5 rounded border-white/30 bg-transparent accent-sky-400" />
           Beni hatırla
         </label>
-        <a href="#" id="loginForgot" class="text-xs text-sky-300 hover:text-sky-200 font-medium">Şifremi unuttum</a>
+        <a href="#" class="text-xs text-sky-300 hover:text-sky-200 font-medium">Şifremi unuttum</a>
       </div>
 
       <p id="loginError" class="hidden text-xs text-red-300 bg-red-500/10 border border-red-400/20 rounded-lg px-3 py-2 mt-4">Kullanıcı adı / şifre hatalı veya firma eşleşmiyor.</p>
@@ -4355,7 +4357,7 @@
         <div>
           <label class="text-[11px] font-semibold text-steel-500 uppercase tracking-wide">Şifre</label>
           <div class="mt-1 flex items-center gap-1.5 rounded-xl border border-steel-200 px-1.5 focus-within:ring-2 focus-within:ring-navy/30 focus-within:border-navy">
-            <input id="editUserPassword" type="password" placeholder="Şifre" class="flex-1 min-w-0 border-none px-2 py-2.5 text-sm text-steel-800 focus:outline-none" />
+            <input id="editUserPassword" type="password" placeholder="Değiştirmek için yeni şifre" class="flex-1 min-w-0 border-none px-2 py-2.5 text-sm text-steel-800 focus:outline-none" />
             <button type="button" id="editUserPasswordToggle" class="text-steel-400 hover:text-steel-600 p-1.5 shrink-0" title="Şifreyi göster/gizle">
               <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s3-8 11-8 11 8 11 8-3 8-11 8-11-8-11-8Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
             </button>
@@ -6029,6 +6031,7 @@ ${vadeLine}`;
 
   /** Siparişi sil → teklif Onaylandı kalır, yeniden dönüştürülebilir */
   function revertOrderFromQuote(quoteOrOrderId, { confirmMsg } = {}) {
+    if (blockModuleDelete('Siparişler')) return false;
     const order = orders.find(o =>
       o.id === quoteOrOrderId || o.quoteId === quoteOrOrderId
     );
@@ -7112,8 +7115,30 @@ ${vadeLine}`;
 
   // ---------- Login / Authentication (Firma izolasyonu + grup yöneticisi) ----------
   var currentUser = null;
-  const AUTH_SESSION_KEY = 'btd_auth_session_v1';
-  const AUTH_IDLE_MS = 2 * 60 * 60 * 1000; // 2 saat hareketsizlik
+  const AUTH_SESSION_KEY = (window.BtdAuth && window.BtdAuth.SESSION_KEY) || 'btd_auth_session_v2';
+  const AUTH_IDLE_MS = 2 * 60 * 60 * 1000; // masaüstü: 2 saat
+  function btdPortal() {
+    try { return window.BtdKiosk?.detectPortal(location.search) || 'desktop'; }
+    catch (_) { return 'desktop'; }
+  }
+  function authIdleMs() {
+    const fn = window.BtdKiosk?.idleMs;
+    return typeof fn === 'function' ? fn(btdPortal()) : AUTH_IDLE_MS;
+  }
+  if (btdPortal() === 'kiosk') {
+    const remember = document.getElementById('loginRemember');
+    if (remember) {
+      remember.checked = false;
+      const label = remember.closest('label');
+      if (label) label.classList.add('hidden');
+    }
+    const companyWrap = document.getElementById('loginCompanyWrap');
+    if (companyWrap) companyWrap.classList.add('hidden');
+    const pw = document.getElementById('loginPassword');
+    const un = document.getElementById('loginUsername');
+    if (pw) pw.setAttribute('autocomplete', 'off');
+    if (un) un.setAttribute('autocomplete', 'off');
+  }
   const loginScreen = document.getElementById('loginScreen');
   const appShell = document.getElementById('app');
   const loginForm = document.getElementById('loginForm');
@@ -7123,7 +7148,20 @@ ${vadeLine}`;
   let authActivityTimer = null;
 
   function readAuthSessionRaw() {
-    try { return JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); } catch (_) { return null; }
+    const legacy = (window.BtdAuth && window.BtdAuth.LEGACY_SESSION_KEYS) || ['btd_auth_session_v1'];
+    legacy.forEach((key) => { try { localStorage.removeItem(key); } catch (_) { /* ignore */ } });
+    let payload = null;
+    try { payload = JSON.parse(localStorage.getItem(AUTH_SESSION_KEY) || 'null'); } catch (_) { payload = null; }
+    if (!payload) return null;
+    const accept = window.BtdAuth?.acceptStoredSession
+      ? window.BtdAuth.acceptStoredSession(payload)
+      : payload.v === 2 && payload.authSource === 'supabase-auth';
+    if (!accept) {
+      clearAuthSession();
+      try { window.BtdSupabase?.getClient?.()?.auth?.signOut?.(); } catch (_) { /* oturum yok */ }
+      return null;
+    }
+    return payload;
   }
   function writeAuthSessionRaw(payload) {
     try {
@@ -7141,11 +7179,34 @@ ${vadeLine}`;
       clearAuthSession();
       return;
     }
-    writeAuthSessionRaw({
-      company: company || activeCompany || '',
+    const portal = btdPortal();
+    if (window.BtdKiosk && window.BtdKiosk.allowsRemember(portal) === false) {
+      clearAuthSession();
+      return;
+    }
+    const payload = {
+      v: 2,
+      username: (user.username || '').toLowerCase(),
+      name: user.name || '',
+      role: user.role || '',
+      scope: user.scope || '',
+      companies: user.companies || [],
+      company: company || activeCompany || 'Bluemac',
+      isGod: !!user.isGod,
+      collar: user.collar || 'white',
+      accessCritical: !!user.accessCritical,
+      personnelId: user.personnelId || null,
+      dept: user.dept || '',
+      loginPortal: user.loginPortal || portal,
+      perms: user.perms || null,
+      authSource: user.authSource || '',
+      dbId: user.dbId || null,
+      authUserId: user.authUserId || null,
+      kiosk: !!user.kiosk,
       lastActiveAt: Date.now(),
       savedAt: Date.now(),
-    });
+    };
+    writeAuthSessionRaw(window.BtdAuth?.sanitizeSession ? window.BtdAuth.sanitizeSession(payload) : payload);
   }
   function touchAuthSession() {
     const raw = readAuthSessionRaw();
@@ -7156,7 +7217,7 @@ ${vadeLine}`;
   function authSessionIdleExpired(raw) {
     if (!raw) return true;
     const last = Number(raw.lastActiveAt || raw.savedAt || 0);
-    return !last || (Date.now() - last) > AUTH_IDLE_MS;
+    return !last || (Date.now() - last) > authIdleMs();
   }
   function startAuthIdleWatch() {
     if (authActivityTimer) return;
@@ -7175,7 +7236,7 @@ ${vadeLine}`;
       if (!currentUser) return;
       const raw = readAuthSessionRaw();
       if (raw && authSessionIdleExpired(raw)) {
-        showToast('2 saat hareketsizlik — yeniden giriş gerekli.', 'info');
+        showToast(btdPortal() === 'kiosk' ? 'Kiosk oturumu kapandı — yeniden giriş gerekli.' : '2 saat hareketsizlik — yeniden giriş gerekli.', 'info');
         performLogout({ idle: true });
       }
     }, 60000);
@@ -7212,7 +7273,7 @@ ${vadeLine}`;
 
   function performLogout({ idle } = {}) {
     clearAuthSession();
-    try { window.BtdSupabase?.signOut?.(); } catch (_) { /* ignore */ }
+    try { window.BtdSupabase?.getClient?.()?.auth?.signOut?.(); } catch (_) { /* oturum yok */ }
     appShell.classList.add('hidden');
     loginScreen.classList.remove('hidden');
     if (!idle) loginForm.reset();
@@ -7224,16 +7285,65 @@ ${vadeLine}`;
     if (remember) remember.checked = true;
   }
 
-  async function restoreAuthFromSupabase() {
+  function findLocalUserForLogin() {
+    return null;
+  }
+
+  function applyDemoLoginOverrides(user) {
+    return user || null;
+  }
+
+  // Kapalı: başarısız giriş yönetici hesabı üretemez.
+  function buildEmergencyAdminUser() {
+    return null;
+  }
+
+  function sessionForUser(found, company, authSource) {
+    const known = (typeof companies !== 'undefined') ? Object.keys(companies) : [];
+    let session = null;
+    if (window.BtdAuth?.buildSession) {
+      session = window.BtdAuth.buildSession(found, company, { portal: btdPortal(), knownCompanies: known });
+    } else {
+      session = sessionFromFoundUser(found, company);
+    }
+    if (!session) return null;
+    session.authSource = authSource;
+    if (!session.perms && typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
+      session.perms = (session.role === 'Yönetici' && session.isGod) ? adminPerms() : (found.perms || defaultPerms());
+    }
+    return window.BtdAuth?.sanitizeSession ? window.BtdAuth.sanitizeSession(session) : session;
+  }
+
+  async function tryRestoreAuthSession() {
+    if (btdPortal() === 'kiosk') {
+      clearAuthSession();
+      return false;
+    }
+    const raw = readAuthSessionRaw();
+    if (!raw || !raw.username) return false;
+    if (authSessionIdleExpired(raw)) {
+      clearAuthSession();
+      return false;
+    }
+    if (raw.authSource === 'supabase-auth') {
+      const membership = window.BtdAuth?.restoreMembership ? await window.BtdAuth.restoreMembership() : null;
+      if (!membership) {
+        clearAuthSession();
+        return false;
+      }
+      const session = sessionForUser(membership, raw.company, 'supabase-auth');
+      if (!session) {
+        clearAuthSession();
+        return false;
+      }
+      enterAppAsUser(session, session.company, { restore: true });
+      touchAuthSession();
+      showToast(`Hoş geldiniz, ${session.name}`, 'success');
+      return true;
+    }
     clearAuthSession();
-    const profile = await window.BtdSupabase?.loadProfile?.();
-    if (!profile) return false;
-    const company = (profile.companies && profile.companies[0]) || 'Bluemac';
-    const session = sessionFromFoundUser(profile, company)
-      || authSessionFromUser(profile, company, company);
-    if (!session) return false;
-    enterAppAsUser(session, company, { restore: true });
-    return true;
+    try { window.BtdSupabase?.getClient?.()?.auth?.signOut?.(); } catch (_) { /* oturum yok */ }
+    return false;
   }
 
   document.getElementById('loginTogglePw').addEventListener('click', () => {
@@ -7258,6 +7368,22 @@ ${vadeLine}`;
   const NAV_REGION2_CRITICAL = ['customers', 'suppliers', 'hr', 'settings'];
   const NAV_BLUE_ALLOWED = ['dashboard', 'workorders', 'procurement', 'manufacturing', 'tasks', 'fason', 'quality', 'shipping', 'machinepark', 'andon'];
   const NAV_PRICE_PAGES = ['costing', 'quotes', 'invoicing', 'orders', 'products'];
+  // Sayfa kimliği → mevcut permModules satırı. Matriste olmayan sayfalar burada yok.
+  const PAGE_PERM_MODULE = {
+    costing: 'Maliyet',
+    quotes: 'Teklifler',
+    orders: 'Siparişler',
+    workorders: 'İş Emirleri',
+    procurement: 'Tedarik',
+    manufacturing: 'İmalat',
+    fason: 'Fason Takip',
+    quality: 'Kalite Kontrol',
+    shipping: 'Sevkiyat',
+    invoicing: 'Faturalandırma',
+    customers: 'Müşteriler',
+    suppliers: 'Tedarikçiler',
+    stock: 'Stok',
+  };
 
   function isGroupAdmin(user) {
     if (!user || user.role !== 'Yönetici') return false;
@@ -7304,18 +7430,41 @@ ${vadeLine}`;
     if (isBlueCollar(user)) return false;
     return !!user.accessCritical;
   }
+  function permModuleRow(user, moduleName) {
+    if (!user || !moduleName || !user.perms) return null;
+    const row = user.perms[moduleName];
+    if (!row || typeof row !== 'object') return null;
+    return row;
+  }
+  function moduleViewAllowed(user, page) {
+    const row = permModuleRow(user, PAGE_PERM_MODULE[page]);
+    if (!row) return true;
+    return row.view !== false;
+  }
+  function userCanDeleteModule(user, moduleName) {
+    const row = permModuleRow(user, moduleName);
+    if (!row) return true;
+    return row.delete !== false;
+  }
+  function blockModuleDelete(moduleName) {
+    if (userCanDeleteModule(currentUser, moduleName)) return false;
+    showToast('Bu modülde silme yetkiniz yok.', 'error');
+    return true;
+  }
   function userCanAccessPage(user, page) {
     if (!user || !page) return true;
     // Mavi yaka: yaka kuralı yönetici rolünden önce uygulanır
     if (isBlueCollar(user)) {
       if (NAV_PRICE_PAGES.includes(page)) return false;
-      return NAV_BLUE_ALLOWED.includes(page);
+      if (!NAV_BLUE_ALLOWED.includes(page)) return false;
+      return moduleViewAllowed(user, page);
     }
+    // Yönetici sayfa kontrolünü geçer; view bayrağı onu kesmez
     if (user.isGod || user.role === 'Yönetici') return true;
     const allowed = roleNavAccess[user.role];
     if (allowed && !allowed.includes(page)) return false;
     if (NAV_REGION2_CRITICAL.includes(page) && !userHasCriticalAccess(user)) return false;
-    return true;
+    return moduleViewAllowed(user, page);
   }
   function applyPriceVisibility() {
     document.body.classList.toggle('collar-blue', !!(currentUser && isBlueCollar(currentUser)));
@@ -7337,7 +7486,6 @@ ${vadeLine}`;
       isGod: god,
       perms: found.perms,
       loginPortal: portal,
-      tcNo: found.tcNo || '',
       phone: found.phone || '',
       email: found.email || '',
       address: found.address || '',
@@ -7878,26 +8026,26 @@ ${vadeLine}`;
     if (ov && !ov.classList.contains('hidden')) closePartInfoPanel();
   });
 
-  function sessionFromFoundUser(found, company) {
-    if (!found) return null;
-    if (company === 'BTD Yönetim') {
-      if (!isGroupAdmin(found)) return null;
-      return authSessionFromUser(found, 'Bluemac', 'BTD Yönetim');
-    }
-    if (isGroupAdmin(found)) return authSessionFromUser(found, company, company);
-    if (normalizeUserCompanies(found).includes(company)) return authSessionFromUser(found, company, company);
+  function sessionFromFoundUser() {
     return null;
   }
 
-  async function authenticateLoginAsync(email, password, company) {
-    if (!window.BtdSupabase?.signInWithProfile) return null;
-    const remote = await window.BtdSupabase.signInWithProfile(email, password);
-    if (!remote) return null;
-    if (typeof adminPerms === 'function' && typeof defaultPerms === 'function') {
-      remote.perms = remote.role === 'Yönetici' ? adminPerms() : defaultPerms();
+  function authenticateLogin() {
+    return null;
+  }
+
+  async function authenticateLoginAsync(username, password, company) {
+    const id = String(username || '').trim();
+    if (!id.includes('@')) return { error: 'email-required' };
+    if (!window.BtdAuth?.signInWithSupabase) return { error: 'unavailable' };
+    const authTry = await window.BtdAuth.signInWithSupabase(id, password);
+    if (authTry?.ok) {
+      const session = sessionForUser(authTry.membership, company, 'supabase-auth');
+      return session || { error: 'firma' };
     }
-    return sessionFromFoundUser(remote, company)
-      || authSessionFromUser(remote, (remote.companies && remote.companies[0]) || company, company);
+    if (authTry?.code === 'unlinked') return { error: 'unlinked' };
+    if (authTry?.code === 'unavailable') return { error: 'unavailable' };
+    return null;
   }
 
   loginForm.addEventListener('submit', async (e) => {
@@ -7907,7 +8055,7 @@ ${vadeLine}`;
     const company = document.getElementById('loginCompany')?.value || 'Bluemac';
 
     if (!username || !password) {
-      loginError.textContent = 'E-posta ve şifre zorunludur.';
+      loginError.textContent = 'İş e-postası ve parola zorunludur.';
       loginError.classList.remove('hidden');
       loginForm.classList.remove('login-shake');
       requestAnimationFrame(() => loginForm.classList.add('login-shake'));
@@ -7921,23 +8069,29 @@ ${vadeLine}`;
 
     try {
       const auth = await authenticateLoginAsync(username, password, company);
-      if (!auth) {
-        loginError.textContent = 'Giriş olmadı. Davet edilmiş e-posta ve şifreyi kullanın.';
+      if (!auth || auth.error) {
+        const loginMessages = {
+          unlinked: 'Bu e-posta henüz BTD hesabına bağlı değil. Bağlantı tek tek yapılır.',
+          'email-required': 'Giriş yalnız iş e-postası ile yapılır. Kullanıcı adı yolu kapatıldı.',
+          unavailable: 'Kimlik servisine ulaşılamadı. Eski parola yolu açılmaz.',
+          firma: 'Bu hesap için firma üyeliği yok.',
+        };
+        loginError.textContent = loginMessages[auth && auth.error] || 'Giriş başarısız. Bilgiler veya firma üyeliği eşleşmiyor.';
         loginError.classList.remove('hidden');
         loginForm.classList.remove('login-shake');
         requestAnimationFrame(() => loginForm.classList.add('login-shake'));
         return;
       }
 
-      currentUser = auth;
-      if (typeof btdCloudBoot === 'function') await btdCloudBoot();
-      const targetCompany = enterAppAsUser(auth, company);
+      const targetCompany = enterAppAsUser(auth, auth.company || company);
+      if (typeof startCloudSync === 'function') startCloudSync();
+      const srcHint = auth.authSource === 'supabase-auth' ? ' · hesap' : '';
       if (typeof showToast === 'function') {
-        showToast(`Hoş geldiniz, ${auth.name} · ${targetCompany}`, 'success');
+        showToast(auth.isGod ? `Hoş geldiniz, ${auth.name} · grup yöneticisi${srcHint}` : `Hoş geldiniz, ${auth.name} · ${targetCompany}${srcHint}`, 'success');
       }
     } catch (err) {
-      console.error('Login error:', err);
-      loginError.textContent = 'Giriş hatası. E-posta ve şifreyi yeniden deneyin.';
+      console.warn('[BTD] Giriş hatası');
+      loginError.textContent = 'Giriş hatası. Bilgileri kontrol edip tekrar deneyin.';
       loginError.classList.remove('hidden');
     } finally {
       loginSubmitBtn.disabled = false;
@@ -7946,13 +8100,6 @@ ${vadeLine}`;
     }
   });
 
-  document.getElementById('loginForgot')?.addEventListener('click', async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('loginUsername')?.value.trim() || '';
-    if (window.BtdSupabase?.sendPasswordReset) await window.BtdSupabase.sendPasswordReset(email);
-    loginError.textContent = 'E-posta kayıtlıysa sıfırlama bağlantısı gönderilir.';
-    loginError.classList.remove('hidden');
-  });
 
   document.getElementById('logoutBtn').addEventListener('click', () => {
     performLogout();
@@ -10174,6 +10321,7 @@ ${vadeLine}`;
 
     tbody.querySelectorAll('[data-del-customer]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Müşteriler')) return;
         const target = list[Number(btn.dataset.delCustomer)];
         customers = customers.filter(c => c !== target);
         renderCustomersPage();
@@ -10271,6 +10419,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-supplier]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Tedarikçiler')) return;
         const target = list[Number(btn.dataset.delSupplier)];
         if (!target) return;
         suppliers = suppliers.filter(s => s !== target);
@@ -11545,6 +11694,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-quote]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Teklifler')) return;
         const id = btn.dataset.delQuote;
         if (findOrderForQuote(id)) {
           showToast('Önce bağlı siparişi iptal edin.', 'error');
@@ -13344,6 +13494,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-proc]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Tedarik')) return;
         procurementItems = procurementItems.filter(p => p.id !== btn.dataset.delProc);
         renderProcurementPage();
       });
@@ -13821,7 +13972,11 @@ ${vadeLine}`;
       </tr>
     `).join('');
     tbody.querySelectorAll('[data-del-qc]').forEach(btn => {
-      btn.addEventListener('click', () => { qcRecords = qcRecords.filter(r => r.id !== btn.dataset.delQc); renderQualityPage(); });
+      btn.addEventListener('click', () => {
+        if (blockModuleDelete('Kalite Kontrol')) return;
+        qcRecords = qcRecords.filter(r => r.id !== btn.dataset.delQc);
+        renderQualityPage();
+      });
     });
   }
 
@@ -14034,6 +14189,7 @@ ${vadeLine}`;
     tbody.querySelectorAll('[data-fason-del]').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (blockModuleDelete('Fason Takip')) return;
         fasonJobs = fasonJobs.filter(x => x.id !== btn.dataset.fasonDel);
         renderFasonPage();
         if (typeof renderDashboard === 'function') renderDashboard();
@@ -14201,7 +14357,11 @@ ${vadeLine}`;
         btn.addEventListener('click', () => openShipSignModal(btn.dataset.shipDeliver));
       });
       root.querySelectorAll('[data-del-ship]').forEach(btn => {
-        btn.addEventListener('click', () => { shipments = shipments.filter(s => s.id !== btn.dataset.delShip); renderShippingPage(); });
+        btn.addEventListener('click', () => {
+          if (blockModuleDelete('Sevkiyat')) return;
+          shipments = shipments.filter(s => s.id !== btn.dataset.delShip);
+          renderShippingPage();
+        });
       });
     };
     wireShip(tbody);
@@ -14308,7 +14468,11 @@ ${vadeLine}`;
       });
     });
     tbody.querySelectorAll('[data-del-inv]').forEach(btn => {
-      btn.addEventListener('click', () => { invoices = invoices.filter(i => i.id !== btn.dataset.delInv); renderInvoicingPage(); });
+      btn.addEventListener('click', () => {
+        if (blockModuleDelete('Faturalandırma')) return;
+        invoices = invoices.filter(i => i.id !== btn.dataset.delInv);
+        renderInvoicingPage();
+      });
     });
   }
 
@@ -15047,20 +15211,21 @@ ${vadeLine}`;
   let users = [
     {
       username: 'volkan', name: 'Volkan', password: '', dept: 'Yönetim',
-      scope: 'Bluemac', companies: ['Bluemac'],
-      role: 'Yönetici', perms: adminPerms(), isGod: false,
+      scope: 'Tüm Grup', companies: ['Technomac', 'Bluemac', 'Devorias'],
+      role: 'Yönetici', perms: adminPerms(), isGod: true,
       tcNo: '', phone: '', email: 'volkan@btd.com.tr', address: '', personnelId: null,
-      collar: 'white', accessCritical: false,
+      collar: 'white', accessCritical: true,
     },
     {
       username: 'ahmet', name: 'Ahmet Yıldız', password: '', dept: 'CNC',
       scope: 'Technomac', companies: ['Technomac'],
       role: 'Operatör', perms: defaultPerms(), isGod: false,
-      tcNo: '', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
+      tcNo: '11111111111', phone: '0532 100 00 01', email: 'ahmet.yildiz@technomac.com.tr',
       address: 'Pendik / İstanbul', personnelId: 'P-TM-001',
       collar: 'blue', accessCritical: false,
     },
   ];
+  // Yerel dizin giriş değildir. Parola burada tutulmaz. Kimlik Supabase Auth'tadır.
 
   function formatUserCompaniesLabel(u) {
     if (!u) return '—';
@@ -15361,7 +15526,7 @@ ${vadeLine}`;
           </td>
           <td class="px-4 py-3.5">
             <div class="flex items-center gap-1.5">
-              <span class="mono text-steel-600">${revealed ? (u.password || '—') : '••••••••'}</span>
+              <span class="mono text-steel-600">${revealed ? 'özet kayıtlı' : '••••••••'}</span>
               <button data-toggle-pw="${idx}" class="text-steel-300 hover:text-steel-600 transition-colors p-1 rounded-lg hover:bg-steel-100 shrink-0" title="${revealed ? 'Şifreyi gizle' : 'Şifreyi göster'}">
                 ${revealed
                   ? '<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.4 18.4 0 0 1 4.22-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>'
@@ -15471,12 +15636,13 @@ ${vadeLine}`;
     syncCriticalAccessUiFromCollar('editUserCollar', 'editUserAccessCritical');
   });
 
-  document.getElementById('addUserBtn').addEventListener('click', () => {
+  document.getElementById('addUserBtn').addEventListener('click', async () => {
     const mode = newUserSourceMode();
     const username = (document.getElementById('newUserUsername')?.value || '').trim().toLowerCase();
-    const password = document.getElementById('newUserPassword').value;
+    const plainPassword = document.getElementById('newUserPassword').value;
     if (!username) { showToast('Giriş kullanıcı adı zorunludur.', 'error'); return; }
-    if (!password) { showToast('Şifre zorunludur.', 'error'); return; }
+    if (plainPassword) showToast('Parola bu ekranda tutulmaz. Hesap Supabase Auth ile tek tek açılır.', 'info');
+    const password = '';
     if (users.some(u => (u.username || '').toLowerCase() === username)) {
       showToast('Bu kullanıcı adı zaten kullanılıyor.', 'error'); return;
     }
@@ -15555,7 +15721,7 @@ ${vadeLine}`;
     document.getElementById('editUserName').value = user.name;
     const unEl = document.getElementById('editUserUsername');
     if (unEl) unEl.value = user.username || '';
-    document.getElementById('editUserPassword').value = user.password || '';
+    document.getElementById('editUserPassword').value = '';
     document.getElementById('editUserDept').value = user.dept;
     document.getElementById('editUserRole').value = user.role;
     if (document.getElementById('editUserCollar')) {
@@ -15604,7 +15770,7 @@ ${vadeLine}`;
     if (e.key === 'Escape' && !editUserModalOverlay.classList.contains('hidden')) closeEditUserModal();
   });
 
-  document.getElementById('editUserSaveBtn').addEventListener('click', () => {
+  document.getElementById('editUserSaveBtn').addEventListener('click', async () => {
     if (!editUserTarget) return;
     const name = document.getElementById('editUserName').value.trim();
     const username = (document.getElementById('editUserUsername')?.value || '').trim().toLowerCase();
@@ -15629,7 +15795,12 @@ ${vadeLine}`;
     const linkedP = getPersonnelForUser(editUserTarget);
     editUserTarget.name = name;
     editUserTarget.username = username;
-    editUserTarget.password = document.getElementById('editUserPassword').value.trim() || editUserTarget.password;
+    const typedPassword = document.getElementById('editUserPassword').value.trim();
+    if (typedPassword) {
+      showToast('Parola bu ekranda değişmez. Supabase Auth panelinden verilir.', 'info');
+      document.getElementById('editUserPassword').value = '';
+    }
+    editUserTarget.password = '';
     editUserTarget.dept = document.getElementById('editUserDept').value;
     editUserTarget.role = document.getElementById('editUserRole').value;
     editUserTarget.companies = access.companies.slice();
@@ -16468,6 +16639,7 @@ ${vadeLine}`;
     });
     tbody.querySelectorAll('[data-del-cost]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (blockModuleDelete('Maliyet')) return;
         costAnalyses = costAnalyses.filter(x => x.id !== btn.dataset.delCost);
         renderCostingPage();
       });
@@ -19317,73 +19489,70 @@ ${vadeLine}`;
 
   setActiveCompany('Bluemac');
 
-  async function btdCloudBoot() {
-    if (!currentUser) return { ok: false, reason: 'no-session' };
+  async function startCloudSync() {
+    if (window.BtdCloud?.setSensitiveAccess && window.BtdAuth?.canReadSensitive) {
+      window.BtdCloud.setSensitiveAccess(window.BtdAuth.canReadSensitive(currentUser));
+    }
+    if (window.BtdSupabase?.hydrateCompanies) {
+      const hr = await window.BtdSupabase.hydrateCompanies(companies);
+      if (hr?.ok && typeof refreshCompanyChromeClasses === 'function') refreshCompanyChromeClasses();
+    }
+    if (!window.BtdCloud?.boot) return;
+    const bootRes = await window.BtdCloud.boot({
+      session: currentUser,
+      companies,
+      customers,
+      suppliers,
+      products,
+      subcontractors,
+      supplierGroupPriorities,
+      personnel,
+      attendanceLogs,
+      leaveRequests,
+      users,
+      costAnalyses,
+      quotes,
+      orders,
+      orderRevisionLog,
+      workOrders,
+      tasks,
+      procurementItems,
+      materialRfqs,
+      reprocRequests,
+      unforeseenCosts,
+      fasonJobs,
+      qcRecords,
+      shipments,
+      invoices,
+      stockItems,
+      stockMoves,
+      machinePark,
+      procMaterialCatalog,
+      heatTreatmentCatalog,
+      coatingCatalog,
+      productShapes,
+      operationCatalog,
+      fxRates,
+      turkishHolidays2026,
+    });
+    console.info('[BTD] Cloud boot', bootRes && bootRes.ok, bootRes && bootRes.reason ? bootRes.reason : '');
+    window.__btdBootDone = true;
+    if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
+  }
+
+  (async function btdCloudBoot() {
     try {
       if (typeof seedPersonnelIfEmpty === 'function') seedPersonnelIfEmpty();
-      // Öncelik şemalarını firmalar için hazırla (boşsa varsayılan)
       ['Technomac', 'Bluemac', 'Devorias'].forEach((c) => {
         if (typeof ensureSupplierGroupPriorities === 'function') ensureSupplierGroupPriorities(c);
       });
-      if (window.BtdSupabase?.hydrateCompanies) {
-        const hr = await window.BtdSupabase.hydrateCompanies(companies);
-        if (hr?.ok && typeof refreshCompanyChromeClasses === 'function') refreshCompanyChromeClasses();
+      if (typeof tryRestoreAuthSession === 'function') {
+        try { await tryRestoreAuthSession(); } catch (e) { console.warn('[BTD] Oturum geri yükleme atlandı'); }
       }
-      if (!window.BtdCloud?.boot) return;
-      const bootRes = await window.BtdCloud.boot({
-        companies,
-        customers,
-        suppliers,
-        products,
-        subcontractors,
-        supplierGroupPriorities,
-        personnel,
-        attendanceLogs,
-        leaveRequests,
-        users,
-        costAnalyses,
-        quotes,
-        orders,
-        orderRevisionLog,
-        workOrders,
-        tasks,
-        procurementItems,
-        materialRfqs,
-        reprocRequests,
-        unforeseenCosts,
-        fasonJobs,
-        qcRecords,
-        shipments,
-        invoices,
-        stockItems,
-        stockMoves,
-        machinePark,
-        procMaterialCatalog,
-        heatTreatmentCatalog,
-        coatingCatalog,
-        productShapes,
-        operationCatalog,
-        fxRates,
-        turkishHolidays2026,
-      });
-      console.info('[BTD] Cloud boot', bootRes);
-      window.__btdBootDone = true;
-      if (typeof setActiveCompany === 'function' && activeCompany) setActiveCompany(activeCompany);
-      if (typeof applyCurrentUser === 'function') applyCurrentUser();
-      return bootRes;
+      await startCloudSync();
     } catch (err) {
-      console.warn('[BTD] Cloud boot failed — yerel veri ile devam', err);
+      console.warn('[BTD] Cloud boot failed — yerel veri ile devam');
       window.__btdBootDone = true;
-      return { ok: false };
-    }
-  }
-
-  (async function btdAuthBoot() {
-    try {
-      const restored = await restoreAuthFromSupabase();
-      if (restored) await btdCloudBoot();
-    } catch (e) {
-      console.warn('[BTD] Oturum geri yükleme atlandı', e);
     }
   })();
 </script>
