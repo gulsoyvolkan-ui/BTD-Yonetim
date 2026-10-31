@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const replayStore = require('./shadow-replay');
 
 const AUDIENCE = 'shadow-btd-read-v1';
 const ISSUER = 'btd';
@@ -10,8 +11,6 @@ const SERVICE_AUDIENCE = 'btd-shadow-service-v1';
 const SERVICE_SUBJECT = 'shadow-service';
 const PERMISSION = 'shadow.read';
 const MAX_TTL_SEC = 300;
-const REPLAY_LIMIT = 2000;
-const replay = new Map();
 const FRESH_MS = 5 * 60 * 1000;
 const FIELDS = ['ref', 'durum', 'adet', 'guncellendi', 'kaynak_id'];
 const SOURCE_ID = 'btd-operasyon';
@@ -81,22 +80,62 @@ function signUserConsent({ firmaId, secret, nowSec, ttlSec, jti }) {
 }
 
 function resetReplay() {
-  replay.clear();
+  replayStore.resetMockReplay();
 }
 
-function rememberJti(iss, jti, exp, nowSec) {
-  const now = Number(nowSec);
-  for (const [key, until] of replay) {
-    if (until <= now) replay.delete(key);
+function jtiShape(value) {
+  const jti = value == null ? '' : String(value);
+  if (!jti || jti.length > 128 || /\s/.test(jti)) return '';
+  return jti;
+}
+
+function releaseFor(replay, claims, sinif) {
+  const input = {
+    iss: claims.iss,
+    jti: claims.jti,
+    sinif,
+    firmaId: claims.firma_id,
+    exp: claims.exp,
+    kv: claims.kv == null ? null : claims.kv,
+  };
+  return {
+    async finish() {
+      try {
+        return await replay.complete(input);
+      } catch {
+        return { ok: false, reason: 'replay_unverified' };
+      }
+    },
+    async cancel() {
+      try {
+        return await replay.rollback(input);
+      } catch {
+        return { ok: false, reason: 'replay_unverified' };
+      }
+    },
+  };
+}
+
+async function consumeJti(replay, claims, sinif, nowSec) {
+  if (!replay || typeof replay.consume !== 'function') return { ok: false, reason: 'replay_unverified' };
+  let consumed;
+  try {
+    consumed = await replay.consume({
+      iss: claims.iss,
+      jti: claims.jti,
+      sinif,
+      firmaId: claims.firma_id,
+      exp: claims.exp,
+      nowSec,
+      kv: claims.kv == null ? null : claims.kv,
+    });
+  } catch {
+    return { ok: false, reason: 'replay_unverified' };
   }
-  while (replay.size >= REPLAY_LIMIT) {
-    const oldest = replay.keys().next().value;
-    replay.delete(oldest);
+  if (!consumed || consumed.ok !== true) {
+    return { ok: false, reason: (consumed && consumed.reason) || 'replay_unverified' };
   }
-  const key = `${iss}\n${jti}`;
-  if (replay.has(key)) return false;
-  replay.set(key, exp);
-  return true;
+  return { ok: true, reason: 'ok', ...releaseFor(replay, claims, sinif) };
 }
 
 function readSigned(token, secret) {
@@ -133,14 +172,7 @@ function checkLifetime(claims, nowSec) {
   return { ok: true };
 }
 
-function checkReplay(claims, nowSec) {
-  const jti = claims.jti == null ? '' : String(claims.jti);
-  if (!jti || jti.length > 128 || /\s/.test(jti)) return { ok: false, reason: 'jti' };
-  if (!rememberJti(claims.iss, jti, claims.exp, nowSec)) return { ok: false, reason: 'replay' };
-  return { ok: true };
-}
-
-function verifyUserConsent(token, secret, nowSec, expectedFirmaId) {
+function inspectUserConsent(token, secret, nowSec, expectedFirmaId) {
   const read = readSigned(token, secret);
   if (!read.ok) return read;
   const claims = read.claims;
@@ -148,30 +180,128 @@ function verifyUserConsent(token, secret, nowSec, expectedFirmaId) {
   if (claims.aud !== AUDIENCE) return { ok: false, reason: 'audience' };
   if (claims.perm !== PERMISSION) return { ok: false, reason: 'permission' };
   if (claims.sub !== CONSENT_SUBJECT) return { ok: false, reason: 'subject' };
+  if (claims.use != null && claims.use !== 'once') return { ok: false, reason: 'sinif' };
   const life = checkLifetime(claims, nowSec);
   if (!life.ok) return life;
-  const seen = checkReplay(claims, nowSec);
-  if (!seen.ok) return seen;
+  if (!jtiShape(claims.jti)) return { ok: false, reason: 'jti' };
   if (expectedFirmaId && claims.firma_id !== expectedFirmaId) return { ok: false, reason: 'firma' };
   return { ok: true, claims };
 }
 
-function verifyServiceIdentity(token, verifyKey, nowSec, expectedFirmaId, signingKey) {
-  if (!verifyKey) return { ok: false, reason: 'malformed' };
-  if (signingKey && sameSecret(verifyKey, signingKey)) return { ok: false, reason: 'key' };
-  const read = readSigned(token, verifyKey);
+async function verifyUserConsent(token, secret, nowSec, expectedFirmaId) {
+  const preview = inspectUserConsent(token, secret, nowSec, expectedFirmaId);
+  if (!preview.ok) return preview;
+  const replay = replayStore.authoritativeReplay();
+  if (!replay) return { ok: false, reason: 'replay_unverified' };
+  const consumed = await consumeJti(replay, preview.claims, replayStore.SINGLE_USE, nowSec);
+  if (!consumed.ok) return consumed;
+  return { ok: true, claims: preview.claims, finish: consumed.finish, cancel: consumed.cancel };
+}
+
+function integerVersion(value) {
+  const version = Number(value);
+  if (!Number.isInteger(version) || version < 1) return null;
+  return version;
+}
+
+function serviceKeyRing(verifyKey, signingKey, options) {
+  const opts = options || {};
+  const currentSecret = String(verifyKey || '');
+  const currentVersion = integerVersion(opts.keyVersion == null ? 1 : opts.keyVersion);
+  if (!currentSecret || !currentVersion) return { ok: false, reason: 'malformed' };
+  if (signingKey && sameSecret(currentSecret, signingKey)) return { ok: false, reason: 'key' };
+  let previous = null;
+  if (opts.previous && opts.previous.secret) {
+    const previousVersion = integerVersion(opts.previous.version);
+    if (!previousVersion || previousVersion === currentVersion) return { ok: false, reason: 'key' };
+    if (signingKey && sameSecret(opts.previous.secret, signingKey)) return { ok: false, reason: 'key' };
+    previous = { version: previousVersion, secret: String(opts.previous.secret) };
+  }
+  return { ok: true, current: { version: currentVersion, secret: currentSecret }, previous };
+}
+
+function secretForVersion(ring, version) {
+  if (version === ring.current.version) return ring.current.secret;
+  if (ring.previous && version === ring.previous.version) return ring.previous.secret;
+  return '';
+}
+
+function serviceUse(claims) {
+  if (claims.use == null || claims.use === 'read') return replayStore.REUSABLE;
+  if (claims.use === 'once') return replayStore.SINGLE_USE;
+  return '';
+}
+
+function inspectServiceIdentity(token, verifyKey, nowSec, expectedFirmaId, signingKey, options) {
+  const ring = serviceKeyRing(verifyKey, signingKey, options);
+  if (!ring.ok) return ring;
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) return { ok: false, reason: 'malformed' };
+  let unverified;
+  try {
+    unverified = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+  } catch {
+    return { ok: false, reason: 'malformed' };
+  }
+  const version = integerVersion(unverified && unverified.kv);
+  if (!version) return { ok: false, reason: 'key' };
+  const secret = secretForVersion(ring, version);
+  if (!secret) return { ok: false, reason: 'key' };
+  const read = readSigned(token, secret);
   if (!read.ok) return read;
   const claims = read.claims;
+  if (integerVersion(claims.kv) !== version) return { ok: false, reason: 'key' };
   if (claims.iss !== SERVICE_ISSUER) return { ok: false, reason: 'issuer' };
   if (claims.aud !== SERVICE_AUDIENCE) return { ok: false, reason: 'audience' };
   if (claims.perm !== PERMISSION) return { ok: false, reason: 'permission' };
   if (claims.sub !== SERVICE_SUBJECT) return { ok: false, reason: 'subject' };
+  const sinif = serviceUse(claims);
+  if (!sinif) return { ok: false, reason: 'sinif' };
   const life = checkLifetime(claims, nowSec);
   if (!life.ok) return life;
-  const seen = checkReplay(claims, nowSec);
-  if (!seen.ok) return seen;
+  if (!jtiShape(claims.jti)) return { ok: false, reason: 'jti' };
   if (expectedFirmaId && claims.firma_id !== expectedFirmaId) return { ok: false, reason: 'firma' };
-  return { ok: true, claims };
+  return { ok: true, claims, sinif };
+}
+
+async function verifyServiceIdentity(token, verifyKey, nowSec, expectedFirmaId, signingKey, options) {
+  const preview = inspectServiceIdentity(token, verifyKey, nowSec, expectedFirmaId, signingKey, options);
+  if (!preview.ok) return preview;
+  const registry = replayStore.authoritativeRegistry();
+  const replay = replayStore.authoritativeReplay();
+  if (!registry || !replay) return { ok: false, reason: 'replay_unverified' };
+  let decision;
+  try {
+    decision = await registry.authorize({
+      servisKod: SERVICE_SUBJECT,
+      firmaId: preview.claims.firma_id,
+      scope: PERMISSION,
+      kv: integerVersion(preview.claims.kv),
+      nowSec,
+    });
+  } catch {
+    return { ok: false, reason: 'replay_unverified' };
+  }
+  if (!decision || decision.ok !== true) {
+    return { ok: false, reason: (decision && decision.reason) || 'replay_unverified' };
+  }
+  const consumed = await consumeJti(replay, preview.claims, preview.sinif, nowSec);
+  if (!consumed.ok) return consumed;
+  return {
+    ok: true,
+    claims: preview.claims,
+    sinif: preview.sinif,
+    finish: consumed.finish,
+    cancel: consumed.cancel,
+  };
+}
+
+function securityPrerequisite(kind) {
+  const missing = [];
+  if (!replayStore.authoritativeReplay()) missing.push('BTD_SHADOW_REPLAY_DATABASE_URL');
+  if (kind === 'service' && !replayStore.authoritativeRegistry()) missing.push('BTD_SERVIS_KAYIT');
+  if (missing.length) return { ok: false, missing };
+  return { ok: true };
 }
 
 function stampOk(value) {
@@ -295,8 +425,12 @@ module.exports = {
   summarizeOperational,
   sameSecret,
   signUserConsent,
+  inspectUserConsent,
   verifyUserConsent,
+  inspectServiceIdentity,
   verifyServiceIdentity,
+  securityPrerequisite,
   resetReplay,
   assertReadOnly,
+  serviceKeyRing,
 };

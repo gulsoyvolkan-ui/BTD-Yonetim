@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const shadow = require('./shadow');
+const replayLib = require('./shadow-replay');
 const shadowRead = require('../shadow-read');
 const shadowConsent = require('../shadow-consent');
 const health = require('../health');
@@ -59,9 +60,11 @@ function serviceToken(firmaId, opts = {}) {
     firma_id: String(firmaId),
     perm: 'shadow.read',
     jti: opts.jti || crypto.randomUUID(),
+    kv: opts.kv == null ? 1 : opts.kv,
     iat: nowSec,
     exp: nowSec + ttl,
   }, opts.claims || {});
+  if (opts.use) payload.use = opts.use;
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const mac = crypto.createHmac('sha256', opts.secret || VERIFY).update(body).digest('base64url');
   return `${body}.${mac}`;
@@ -176,16 +179,35 @@ function applyEnv(opts = {}) {
   process.env.BTD_API_KEY = 'gate';
   process.env.BTD_SHADOW_SIGNING_KEY = opts.signingKey === undefined ? SIGNING : opts.signingKey;
   process.env.BTD_SHADOW_SERVICE_VERIFY_KEY = opts.verifyKey === undefined ? VERIFY : opts.verifyKey;
+  process.env.BTD_SHADOW_SERVICE_KEY_VERSION = opts.keyVersion == null ? '1' : String(opts.keyVersion);
   process.env.BTD_RATE_LIMIT = '500';
   process.env.SUPABASE_SECRET_KEY = SECRET;
+  process.env.BTD_SHADOW_REPLAY_MOCK = '1';
+  delete process.env.BTD_SHADOW_REPLAY_DATABASE_URL;
+  delete process.env.BTD_SHADOW_READER_DATABASE_URL;
+  delete process.env.BTD_SHADOW_SERVICE_VERIFY_KEY_PREV;
+  delete process.env.BTD_SHADOW_SERVICE_KEY_VERSION_PREV;
   if (opts.signingKey === '') delete process.env.BTD_SHADOW_SIGNING_KEY;
   if (opts.verifyKey === '') delete process.env.BTD_SHADOW_SERVICE_VERIFY_KEY;
+  if (opts.previousKey) {
+    process.env.BTD_SHADOW_SERVICE_VERIFY_KEY_PREV = opts.previousKey;
+    process.env.BTD_SHADOW_SERVICE_KEY_VERSION_PREV = String(opts.previousVersion);
+  }
+  if (opts.replayUrl) process.env.BTD_SHADOW_REPLAY_DATABASE_URL = opts.replayUrl;
+  if (opts.readerUrl) process.env.BTD_SHADOW_READER_DATABASE_URL = opts.readerUrl;
+  if (opts.noMock) delete process.env.BTD_SHADOW_REPLAY_MOCK;
 }
 
 async function call(method, query, extraHeaders, opts = {}) {
   resetGuards();
-  if (!opts.keepReplay) shadow.resetReplay();
   applyEnv(opts);
+  if (opts.detach || opts.noMock) {
+    replayLib.detachSecurity();
+  } else {
+    if (!opts.keepReplay) shadow.resetReplay();
+    if (opts.registry) replayLib.setMockRegistry(opts.registry);
+    else if (!replayLib.getRegistry()) replayLib.setMockRegistry({ firms: [FIRMA], keyVersion: 1 });
+  }
   const res = mockRes();
   await shadowRead({
     method,
@@ -212,6 +234,8 @@ function tableCalls() {
 }
 
 async function main() {
+  process.env.BTD_SHADOW_REPLAY_MOCK = '1';
+  replayLib.useMockHarness({ firms: [FIRMA], keyVersion: 1 });
   const summary = shadow.summarizeOperational({
     orders,
     workOrders,
@@ -230,25 +254,49 @@ async function main() {
   ok(minted.claims.iss === 'btd' && minted.claims.sub === 'user-consent' && minted.claims.jti === 'consent-1', 'btd mints user consent');
   ok(minted.claims.aud === 'shadow-btd-read-v1' && minted.claims.exp - minted.claims.iat === 120, 'consent lifetime');
   ok(shadow.signUserConsent({ firmaId: FIRMA, secret: SIGNING, nowSec: 1000, ttlSec: 301 }) === null, 'consent ttl cap');
-  ok(shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA).ok, 'consent verifies with signing key');
-  ok(shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA).reason === 'replay', 'consent jti replay');
-  ok(!shadow.verifyUserConsent(minted.token, VERIFY, 1100, FIRMA).ok, 'verify key cannot mint consent');
+  ok((await shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA)).ok, 'mock consent verifies with signing key');
+  ok((await shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA)).reason === 'replay', 'mock consent jti replay');
+  ok(!(await shadow.verifyUserConsent(minted.token, VERIFY, 1100, FIRMA)).ok, 'verify key cannot mint consent');
   shadow.resetReplay();
-  ok(shadow.verifyUserConsent(minted.token, SIGNING, 2000, FIRMA).reason === 'expired', 'consent expiry');
+  ok((await shadow.verifyUserConsent(minted.token, SIGNING, 2000, FIRMA)).reason === 'expired', 'consent expiry');
   const shadowSignedConsent = serviceToken(FIRMA, { secret: VERIFY, claims: { iss: 'btd', aud: 'shadow-btd-read-v1', sub: 'user-consent' } });
-  ok(shadow.verifyUserConsent(shadowSignedConsent, SIGNING, Math.floor(Date.now() / 1000), FIRMA).reason === 'signature', 'shadow signature is not a btd consent');
+  ok((await shadow.verifyUserConsent(shadowSignedConsent, SIGNING, Math.floor(Date.now() / 1000), FIRMA)).reason === 'signature', 'shadow signature is not a btd consent');
+
+  shadow.resetReplay();
+  const rolled = await shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA);
+  ok(rolled.ok, 'mock single-use consume');
+  ok((await rolled.cancel()).reason === 'ok', 'mock rollback');
+  const rolledAgain = await shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA);
+  ok(rolledAgain.ok, 'mock rollback allows one later success');
+  await rolledAgain.finish();
+  ok((await shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA)).reason === 'replay', 'mock completed jti stays consumed');
+  ok((await rolledAgain.cancel()).reason === 'committed', 'mock rollback does not reopen a completed jti');
 
   shadow.resetReplay();
   const service = serviceToken(FIRMA, { jti: 'svc-1', nowSec: 1000 });
-  ok(shadow.verifyServiceIdentity(service, VERIFY, 1100, FIRMA, SIGNING).ok, 'service identity verifies with the other key');
-  ok(shadow.verifyServiceIdentity(service, VERIFY, 1100, FIRMA, SIGNING).reason === 'replay', 'service jti replay');
+  ok((await shadow.verifyServiceIdentity(service, VERIFY, 1100, FIRMA, SIGNING)).ok, 'mock service identity verifies with the other key');
+  ok((await shadow.verifyServiceIdentity(service, VERIFY, 1100, FIRMA, SIGNING)).ok, 'mock reusable service read repeats');
+  const once = serviceToken(FIRMA, { jti: 'svc-once-unit', nowSec: 1000, use: 'once' });
+  ok((await shadow.verifyServiceIdentity(once, VERIFY, 1100, FIRMA, SIGNING)).ok, 'mock single-use service token');
+  ok((await shadow.verifyServiceIdentity(once, VERIFY, 1100, FIRMA, SIGNING)).reason === 'replay', 'mock single-use service replay');
   shadow.resetReplay();
-  ok(shadow.verifyServiceIdentity(service, VERIFY, 2000, FIRMA, SIGNING).reason === 'expired', 'service expiry');
-  ok(shadow.verifyServiceIdentity(service, SIGNING, 1100, FIRMA, SIGNING).reason === 'key', 'signing key is not the service verifier');
-  ok(shadow.verifyServiceIdentity(serviceToken(FIRMA, { secret: SIGNING }), VERIFY, Math.floor(Date.now() / 1000), FIRMA, SIGNING).reason === 'signature', 'btd signing key does not authenticate shadow');
+  ok((await shadow.verifyServiceIdentity(service, VERIFY, 2000, FIRMA, SIGNING)).reason === 'expired', 'service expiry');
+  ok((await shadow.verifyServiceIdentity(service, SIGNING, 1100, FIRMA, SIGNING)).reason === 'key', 'signing key is not the service verifier');
+  ok((await shadow.verifyServiceIdentity(serviceToken(FIRMA, { secret: SIGNING }), VERIFY, Math.floor(Date.now() / 1000), FIRMA, SIGNING)).reason === 'signature', 'btd signing key does not authenticate shadow');
   const btdOnServiceHeader = serviceToken(FIRMA, { claims: { iss: 'btd', sub: 'shadow-reader', aud: 'shadow-btd-read-v1' } });
-  ok(shadow.verifyServiceIdentity(btdOnServiceHeader, VERIFY, Math.floor(Date.now() / 1000), FIRMA, SIGNING).reason === 'issuer', 'service header rejects iss=btd');
+  ok((await shadow.verifyServiceIdentity(btdOnServiceHeader, VERIFY, Math.floor(Date.now() / 1000), FIRMA, SIGNING)).reason === 'issuer', 'service header rejects iss=btd');
   ok(typeof shadow.signServiceIdentity !== 'function' && typeof shadow.signIdentity !== 'function', 'btd does not sign for shadow');
+  delete process.env.BTD_SHADOW_REPLAY_MOCK;
+  replayLib.detachSecurity();
+  ok((await shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA)).reason === 'replay_unverified', 'missing replay store fails closed');
+  process.env.BTD_SHADOW_REPLAY_MOCK = '1';
+  replayLib.useMockHarness({ firms: [FIRMA], keyVersion: 1 });
+  const raceToken = consentToken(FIRMA, { jti: 'race', nowSec: 1000 });
+  const race = await Promise.all([
+    shadow.verifyUserConsent(raceToken, SIGNING, 1100, FIRMA),
+    shadow.verifyUserConsent(raceToken, SIGNING, 1100, FIRMA),
+  ]);
+  ok(race.filter((item) => item.ok).length === 1, 'mock single-use race allows one success');
 
   install();
   seen.length = 0;
@@ -326,7 +374,7 @@ async function main() {
 
   seen.length = 0;
   res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA) });
-  ok(res.statusCode === 200 && res.body.data === null && res.body.freshness === 'UNAVAILABLE', 'verified service read invents no rows');
+  ok(res.statusCode === 200 && res.body.data === null && res.body.freshness === 'UNAVAILABLE' && res.body.read === 'BLOCKED', 'verified service read is blocked without a reader role');
   ok(!Object.prototype.hasOwnProperty.call(res.body, 'error') && res.body.businessError !== true, 'service unavailable is not a business error');
   ok(res.body.identity.iss === 'shadow' && res.body.identity.aud === 'btd-shadow-service-v1', 'service identity claims');
   ok(seen.length === 0, 'service identity does not query tables');
@@ -339,11 +387,41 @@ async function main() {
   res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA, { nowSec: 1000 }) });
   ok(res.statusCode === 401 && seen.length === 0, '401 expired service identity');
 
-  const replayService = serviceToken(FIRMA, { jti: 'svc-once' });
+  const replayService = serviceToken(FIRMA, { jti: 'svc-repeat' });
   res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': replayService });
-  ok(res.statusCode === 200, 'first service presentation verifies');
+  ok(res.statusCode === 200 && res.body.read === 'BLOCKED' && res.body.data === null, 'first service presentation verifies');
   res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': replayService }, { keepReplay: true });
-  ok(res.statusCode === 401, 'replayed service jti is rejected');
+  ok(res.statusCode === 200 && res.body.data === null && res.body.read === 'BLOCKED', 'reusable service jti does not invent a second total');
+  const onceService = serviceToken(FIRMA, { jti: 'svc-http-once', use: 'once' });
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': onceService });
+  ok(res.statusCode === 200, 'single-use service presentation verifies');
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': onceService }, { keepReplay: true });
+  ok(res.statusCode === 401, 'replayed single-use service jti is rejected');
+  const revoked = serviceToken(FIRMA, { jti: 'svc-revoke' });
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': revoked });
+  ok(res.statusCode === 200, 'service token before revocation');
+  await replayLib.getReplayStore().revoke({ iss: 'shadow', jti: 'svc-revoke', nowSec: Math.floor(Date.now() / 1000) });
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': revoked }, { keepReplay: true });
+  ok(res.statusCode === 401, 'revoked reusable service jti is rejected');
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA) }, {
+    registry: { firms: [OTHER], keyVersion: 1 },
+  });
+  ok(res.statusCode === 403 && res.body.freshness === 'PERMISSION_DENIED' && seen.length === 0, 'registry firm wins over the signed claim');
+  const previous = serviceToken(FIRMA, { secret: 'onceki-ornek-anahtar', kv: 1 });
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': previous }, {
+    keyVersion: 2,
+    previousKey: 'onceki-ornek-anahtar',
+    previousVersion: 1,
+    registry: { firms: [FIRMA], keyVersion: 2, previousKeyVersion: 1 },
+  });
+  ok(res.statusCode === 200 && res.body.read === 'BLOCKED', 'previous key version still verifies during rotation');
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': previous }, {
+    keyVersion: 2,
+    registry: { firms: [FIRMA], keyVersion: 2 },
+  });
+  ok(res.statusCode === 401 && seen.length === 0, 'retired key version is rejected');
 
   seen.length = 0;
   res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA, { secret: SIGNING }) });
@@ -437,7 +515,7 @@ async function main() {
     const text = fs.readFileSync(path.join(root, name), 'utf8');
     for (const word of banned) ok(!text.includes(word), `${name} does not reference ${word}`);
   }
-  const bridgeSrc = ['api/shadow-read.js', 'api/shadow-consent.js', 'api/health.js', 'api/_lib/shadow.js']
+  const bridgeSrc = ['api/shadow-read.js', 'api/shadow-consent.js', 'api/health.js', 'api/_lib/shadow.js', 'api/_lib/shadow-replay.js']
     .map((name) => fs.readFileSync(path.join(root, name), 'utf8'))
     .join('\n');
   ok(!bridgeSrc.includes('SHADOW_BTD_LIVE'), 'live flag is not read');
@@ -449,7 +527,40 @@ async function main() {
   ok(healthRes.statusCode === 200 && healthRes.body.ok === true && healthRes.body.shadowRequired === false, 'health stays up when shadow is down');
   ok(typeof require('./crud').handle === 'function', 'existing crud module still loads');
 
-  console.log(`shadow contract: ${calls} passed`);
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, headers(), { noMock: true });
+  ok(res.statusCode === 503 && res.body.missing.indexOf('BTD_SHADOW_REPLAY_DATABASE_URL') !== -1, 'missing replay store fails closed');
+  ok(seen.length === 0, 'missing replay store does not read');
+  process.env.BTD_SHADOW_REPLAY_MOCK = '1';
+  replayLib.useMockHarness({ firms: [FIRMA], keyVersion: 1 });
+
+  let remoteHits = 0;
+  replayLib.setDatabaseConnector(async () => {
+    remoteHits += 1;
+    throw new Error('connect');
+  });
+  const remote = 'postgres://role:parola-degil@db.proj.supabase.co:5432/postgres';
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    'x-shadow-service-identity': serviceToken(FIRMA),
+  }, { readerUrl: remote, replayUrl: remote });
+  ok(remoteHits === 0 && res.statusCode === 200 && res.body.read === 'BLOCKED' && res.body.data === null, 'remote reader url is not contacted');
+  ok(!JSON.stringify(res.body).includes('parola-degil') && !JSON.stringify(res.body).includes('supabase.co'), 'remote url is not echoed');
+  replayLib.setDatabaseConnector(null);
+
+  const sql = fs.readFileSync(path.join(root, 'supabase/030_shadow_kimlik.sql'), 'utf8');
+  const rollback = fs.readFileSync(path.join(root, 'supabase/030_shadow_kimlik_rollback.sql'), 'utf8');
+  ok(sql.includes('tek_kullanim') && sql.includes('kisa_tekrar'), 'sql defines both jti classes');
+  ok(sql.includes('btd_shadow_okuyucu') && sql.includes('service_role'), 'sql names the reader and revokes service role');
+  ok(!/CREATE POLICY/i.test(sql), 'sql does not add a client firma policy');
+  ok(!sql.includes('SUPABASE_SECRET') && !sql.includes('SHADOW_BTD_LIVE'), 'sql has no secret or live flag');
+  ok(rollback.includes('DROP TABLE IF EXISTS public.btd_shadow_jti'), 'rollback drops the jti table');
+  ok(!/DROP ROLE (anon|authenticated|service_role)/.test(rollback), 'rollback keeps platform roles');
+  const shadowSrc = fs.readFileSync(path.join(root, 'api/_lib/shadow.js'), 'utf8');
+  ok(!shadowSrc.includes('REPLAY_LIMIT') && !shadowSrc.includes('rememberJti'), 'authoritative replay is not a process map');
+
+  console.log(`shadow contract: ${calls} passed (mock replay, not live postgres)`);
 }
 
 main().catch((err) => {

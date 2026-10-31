@@ -52,7 +52,7 @@ function read(rel) {
   return fs.readFileSync(path.join(root, rel), 'utf8');
 }
 
-function main() {
+async function main() {
   const session = auth.buildSession(volkan(), 'Devorias', { knownCompanies: known, requestedRole: 'Operatör' });
   ok(session.company === 'Devorias', 'group member can open own firm');
   ok(session.role === 'Yönetici', 'client role is ignored');
@@ -116,13 +116,14 @@ function main() {
   ok(shadow.assertReadOnly('POST').ok === false, 'writes disabled');
 
   const firma = '11111111-1111-4111-8111-111111111111';
+  process.env.BTD_SHADOW_REPLAY_MOCK = '1';
   shadow.resetReplay();
   const signed = shadow.signUserConsent({ firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 120, jti: 'jti-1' });
   ok(signed.claims.aud === 'shadow-btd-read-v1', 'audience');
   ok(signed.claims.iss === 'btd' && signed.claims.sub === 'user-consent' && signed.claims.perm === 'shadow.read', 'user consent scope');
-  ok(shadow.verifyUserConsent(signed.token, 'ornek-imza-anahtari', 1100, firma).ok, 'signature');
-  ok(!shadow.verifyUserConsent(signed.token, 'baska', 1100, firma).ok, 'wrong key');
-  ok(shadow.verifyUserConsent(signed.token, 'ornek-imza-anahtari', 2000, firma).reason === 'expired', 'expired');
+  ok((await shadow.verifyUserConsent(signed.token, 'ornek-imza-anahtari', 1100, firma)).ok, 'signature');
+  ok(!(await shadow.verifyUserConsent(signed.token, 'baska', 1100, firma)).ok, 'wrong key');
+  ok((await shadow.verifyUserConsent(signed.token, 'ornek-imza-anahtari', 2000, firma)).reason === 'expired', 'expired');
   ok(shadow.signUserConsent({ firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 900 }) === null, 'ttl cap');
 
   const sql013 = read('supabase/013_auth_membership.sql');
@@ -200,6 +201,10 @@ async function shadowHttp() {
   process.env.BTD_API_KEY = 'gate';
   process.env.BTD_SHADOW_SIGNING_KEY = 'ornek-imza-anahtari';
   process.env.BTD_SHADOW_SERVICE_VERIFY_KEY = 'ornek-dogrulama-anahtari';
+  process.env.BTD_SHADOW_SERVICE_KEY_VERSION = '1';
+  process.env.BTD_SHADOW_REPLAY_MOCK = '1';
+  delete process.env.BTD_SHADOW_REPLAY_DATABASE_URL;
+  delete process.env.BTD_SHADOW_READER_DATABASE_URL;
   process.env.BTD_RATE_LIMIT = '20';
   process.env.SUPABASE_SECRET_KEY = 'super-secret-value';
   const firma = '11111111-1111-4111-8111-111111111111';
@@ -366,8 +371,7 @@ async function kioskSession() {
   ok(missing === false, 'kiosk signOut fails closed without a client');
 }
 
-main();
-shadowHttp().then(() => cloudGate()).then(() => kioskSession()).then(() => {
+main().then(() => shadowHttp()).then(() => cloudGate()).then(() => kioskSession()).then(() => {
   console.log('shadow http checks passed');
 }).catch((err) => {
   console.error(err);
