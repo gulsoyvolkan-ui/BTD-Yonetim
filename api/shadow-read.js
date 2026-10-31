@@ -173,6 +173,14 @@ function copyOperational(data) {
   };
 }
 
+function serviceDenial(reason) {
+  if (reason === 'firma') return 403;
+  if (reason === 'revoked' || reason === 'disabled' || reason === 'expired' || reason === 'key' || reason === 'scope' || reason === 'unknown') {
+    return 401;
+  }
+  return 0;
+}
+
 async function serviceOperational(claims) {
   const raw = String(process.env.BTD_SHADOW_READER_DATABASE_URL || '').trim();
   const decision = replayLib.replayUrlDecision(raw);
@@ -184,11 +192,23 @@ async function serviceOperational(claims) {
       'SELECT public.btd_shadow_operasyon_ozet($1, $2::uuid, $3::int) AS payload',
       [SERVICE_SUBJECT, claims.firma_id, Number(claims.kv)]
     );
-  } catch {
-    return { blocked: true };
+  } catch (err) {
+    if (err && err.reason === 'bridge') return { blocked: true };
+    return { unavailable: true };
   }
-  const payload = rows && rows[0] && rows[0].payload;
-  if (!payload || payload.ok !== true) return { unavailable: true };
+  let payload = rows && rows[0] && rows[0].payload;
+  if (typeof payload === 'string') {
+    try {
+      payload = JSON.parse(payload);
+    } catch {
+      return { unavailable: true };
+    }
+  }
+  if (!payload || payload.ok !== true) {
+    const denied = serviceDenial(payload && payload.reason);
+    if (denied) return { denied, reason: payload.reason };
+    return { unavailable: true };
+  }
   const data = copyOperational(payload.data);
   if (!data) return { unavailable: true };
   return { data };
@@ -332,6 +352,21 @@ async function handle(req, res) {
       try { await verified.finish(); } catch { /* acik kayit yeniden kullanimi kapatir */ }
     }
     const operational = await serviceOperational(verified.claims);
+    if (operational && operational.denied) {
+      audit({
+        event: operational.denied === 403 ? 'shadow_denied' : 'shadow_service_rejected',
+        table: 'shadow',
+        method,
+        firmaId: firma.value,
+        status: operational.denied,
+      });
+      return send(res, operational.denied, {
+        contract: AUDIENCE,
+        writes: false,
+        freshness: operational.denied === 403 ? 'PERMISSION_DENIED' : undefined,
+        error: operational.denied === 403 ? 'erişim yok' : 'kimlik doğrulanamadı',
+      });
+    }
     if (operational && operational.data) {
       const observedAt = Date.now();
       audit({

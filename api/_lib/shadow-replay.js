@@ -284,6 +284,51 @@ function createPostgresRegistry(query) {
   };
 }
 
+const BRIDGE_ROLE = 'btd_shadow_kopru';
+const READER_ROLE = 'btd_shadow_okuyucu';
+
+function roleFlag(value) {
+  return value === true || value === 't' || value === 'true';
+}
+
+function disconnectError(err) {
+  if (!err) return false;
+  const code = String(err.code || '');
+  if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'EPIPE' || code === 'ETIMEDOUT') return true;
+  if (code === '57P01' || code === '57P02' || code === '08000' || code === '08003' || code === '08006' || code === '08001') return true;
+  const message = String(err.message || '');
+  return message === 'Connection terminated' || message.indexOf('Connection terminated') !== -1;
+}
+
+function bridgeError() {
+  const error = new Error('bridge_unproven');
+  error.reason = 'bridge';
+  return error;
+}
+
+async function assertBridge(client) {
+  const ident = await client.query(
+    `SELECT session_user AS session_name, r.rolsuper, r.rolbypassrls, r.rolcanlogin
+       FROM pg_catalog.pg_roles r
+      WHERE r.rolname = session_user`
+  );
+  const row = ident.rows[0];
+  if (!row || row.session_name !== BRIDGE_ROLE || roleFlag(row.rolsuper) || roleFlag(row.rolbypassrls) || !roleFlag(row.rolcanlogin)) {
+    throw bridgeError();
+  }
+  try {
+    await client.query('SELECT set_config(\'statement_timeout\', \'2000\', true)');
+    await client.query('SELECT set_config(\'lock_timeout\', \'2000\', true)');
+    await client.query('SET LOCAL ROLE btd_shadow_okuyucu');
+    const current = await client.query('SELECT current_user AS role');
+    if (!current.rows[0] || current.rows[0].role !== READER_ROLE) throw bridgeError();
+  } catch (err) {
+    if (err && err.reason === 'bridge') throw err;
+    if (disconnectError(err)) throw err;
+    throw bridgeError();
+  }
+}
+
 async function databaseQuery(connectionString, sql, params) {
   const decision = replayUrlDecision(connectionString);
   if (!decision.ok) {
@@ -303,14 +348,33 @@ async function databaseQuery(connectionString, sql, params) {
   const client = new Client({
     connectionString,
     connectionTimeoutMillis: 2000,
-    statement_timeout: 2000,
+    application_name: 'btd-shadow-kopru',
   });
-  await client.connect();
   try {
-    const result = await client.query(sql, params);
-    return result.rows;
+    await client.connect();
+  } catch (err) {
+    try { await client.end(); } catch { /* kapali */ }
+    throw err;
+  }
+  try {
+    await client.query('BEGIN');
+    try {
+      await assertBridge(client);
+      let result;
+      try {
+        result = await client.query(sql, params);
+      } catch (err) {
+        if (err && err.code === '42501') throw bridgeError();
+        throw err;
+      }
+      await client.query('COMMIT');
+      return result.rows;
+    } catch (err) {
+      try { await client.query('ROLLBACK'); } catch { /* baglanti koptu */ }
+      throw err;
+    }
   } finally {
-    await client.end();
+    try { await client.end(); } catch { /* kapali */ }
   }
 }
 

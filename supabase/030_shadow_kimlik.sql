@@ -2,6 +2,8 @@
 -- Canlıda bu dosya ÇALIŞTIRILMADI. Üretim geçiş sırasına eklenmedi.
 -- service_role ile RLS aşılmaz. İstemcinin firma_id iddiasına güvenen politika yoktur.
 -- Anahtar değeri bu dosyada yoktur.
+-- SECURITY DEFINER search_path pg_catalog, public, pg_temp şeklindedir.
+-- pg_temp sonda durur; oturumun geçici now() fonksiyonu süre kontrolünün yerine geçmez.
 --
 -- Önkoşul: public.siparisler, public.is_emirleri, public.gorevler (001 ve 010).
 -- Aynı oturumda, dosyadan önce:
@@ -104,7 +106,7 @@ CREATE OR REPLACE FUNCTION public.btd_shadow_jti_tuket(
 ) RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   existing public.btd_shadow_jti%ROWTYPE;
@@ -167,7 +169,7 @@ CREATE OR REPLACE FUNCTION public.btd_shadow_jti_tamamla(p_iss text, p_jti text)
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   existing public.btd_shadow_jti%ROWTYPE;
@@ -196,7 +198,7 @@ CREATE OR REPLACE FUNCTION public.btd_shadow_jti_geri_al(p_iss text, p_jti text)
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   existing public.btd_shadow_jti%ROWTYPE;
@@ -223,7 +225,7 @@ CREATE OR REPLACE FUNCTION public.btd_shadow_jti_iptal(p_iss text, p_jti text)
 RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 BEGIN
   IF p_iss NOT IN ('btd', 'shadow') OR p_jti IS NULL OR length(p_jti) < 1 OR length(p_jti) > 128 THEN
@@ -252,7 +254,7 @@ CREATE OR REPLACE FUNCTION public.btd_shadow_jti_temizle(p_before timestamptz)
 RETURNS integer
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   n integer := 0;
@@ -276,7 +278,7 @@ CREATE OR REPLACE FUNCTION public.btd_servis_yetki(
 ) RETURNS text
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   rec public.btd_servis_kayit%ROWTYPE;
@@ -314,7 +316,7 @@ CREATE OR REPLACE FUNCTION public.btd_shadow_operasyon_ozet(
 ) RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   yetki text;
