@@ -4,16 +4,22 @@ const { header, keysMatch, bearerToken, rateLimit, audit } = require('./_lib/gua
 const { resolveMembership, firmaAllowed } = require('./_lib/membership');
 const {
   AUDIENCE,
+  SERVICE_SUBJECT,
   FIELDS,
   ORDER_COLUMNS,
   WORK_ORDER_COLUMNS,
   TASK_COLUMNS,
   classifyFreshness,
+  projectFields,
+  inspectUserConsent,
   verifyUserConsent,
+  inspectServiceIdentity,
   verifyServiceIdentity,
+  securityPrerequisite,
   assertReadOnly,
   summarizeOperational,
 } = require('./_lib/shadow');
+const replayLib = require('./_lib/shadow-replay');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -101,15 +107,91 @@ function identityView(claims) {
   };
 }
 
-function unavailable(res, identity) {
-  return send(res, 200, {
+function unavailable(res, identity, extra) {
+  return send(res, 200, Object.assign({
     contract: AUDIENCE,
     writes: false,
     freshness: 'UNAVAILABLE',
     fields: FIELDS,
     data: null,
     identity,
+  }, extra || {}));
+}
+
+function identityFailure(res, verified) {
+  if (verified && verified.reason === 'replay_unverified') {
+    return send(res, 503, {
+      error: 'ortam değişkeni eksik',
+      missing: ['BTD_SHADOW_REPLAY_DATABASE_URL'],
+      writes: false,
+    });
+  }
+  const denied = verified && verified.reason === 'firma';
+  return send(res, denied ? 403 : 401, {
+    contract: AUDIENCE,
+    writes: false,
+    freshness: denied ? 'PERMISSION_DENIED' : undefined,
+    error: denied ? 'erişim yok' : 'kimlik doğrulanamadı',
   });
+}
+
+function serviceOptions() {
+  const version = process.env.BTD_SHADOW_SERVICE_KEY_VERSION;
+  const previousSecret = String(process.env.BTD_SHADOW_SERVICE_VERIFY_KEY_PREV || '').trim();
+  const options = {
+    keyVersion: version == null || version === '' ? 1 : Number(version),
+  };
+  if (previousSecret) {
+    options.previous = {
+      secret: previousSecret,
+      version: Number(process.env.BTD_SHADOW_SERVICE_KEY_VERSION_PREV),
+    };
+  }
+  return options;
+}
+
+function ensureReplayFromEnv() {
+  if (replayLib.getReplayStore()) return;
+  const raw = String(process.env.BTD_SHADOW_REPLAY_DATABASE_URL || '').trim();
+  const decision = replayLib.replayUrlDecision(raw);
+  if (!decision.ok) return;
+  const query = (sql, params) => replayLib.databaseQuery(raw, sql, params);
+  replayLib.setReplayStore(replayLib.createPostgresReplayStore(query));
+  if (!replayLib.getRegistry()) replayLib.setRegistry(replayLib.createPostgresRegistry(query));
+}
+
+function copyOperational(data) {
+  if (!data || typeof data !== 'object' || !Array.isArray(data.siparis_ozet)) return null;
+  if (!Number.isInteger(data.geciken_is_emri_adet) || data.geciken_is_emri_adet < 0) return null;
+  if (!Number.isInteger(data.acik_gorev_adet) || data.acik_gorev_adet < 0) return null;
+  return {
+    kaynak_id: data.kaynak_id === 'btd-operasyon' ? data.kaynak_id : 'btd-operasyon',
+    guncellendi: data.guncellendi == null ? null : data.guncellendi,
+    siparis_ozet: data.siparis_ozet.map((row) => projectFields(row)),
+    geciken_is_emri_adet: data.geciken_is_emri_adet,
+    acik_gorev_adet: data.acik_gorev_adet,
+  };
+}
+
+async function serviceOperational(claims) {
+  const raw = String(process.env.BTD_SHADOW_READER_DATABASE_URL || '').trim();
+  const decision = replayLib.replayUrlDecision(raw);
+  if (!decision.ok) return { blocked: true };
+  let rows;
+  try {
+    rows = await replayLib.databaseQuery(
+      raw,
+      'SELECT public.btd_shadow_operasyon_ozet($1, $2::uuid, $3::int) AS payload',
+      [SERVICE_SUBJECT, claims.firma_id, Number(claims.kv)]
+    );
+  } catch {
+    return { blocked: true };
+  }
+  const payload = rows && rows[0] && rows[0].payload;
+  if (!payload || payload.ok !== true) return { unavailable: true };
+  const data = copyOperational(payload.data);
+  if (!data) return { unavailable: true };
+  return { data };
 }
 
 async function readOperational(req, res, config, accessToken, firmaId, membership, identity) {
@@ -232,28 +314,56 @@ async function handle(req, res) {
   }
 
   const nowSec = Math.floor(Date.now() / 1000);
+  ensureReplayFromEnv();
   if (serviceToken) {
     if (!config.verifyKey) {
       return send(res, 503, { error: 'ortam değişkeni eksik', missing: ['BTD_SHADOW_SERVICE_VERIFY_KEY'], writes: false });
     }
-    const verified = verifyServiceIdentity(serviceToken, config.verifyKey, nowSec, firma.value, config.signingKey);
-    if (!verified.ok) {
-      const denied = verified.reason === 'firma';
-      return send(res, denied ? 403 : 401, {
+    const options = serviceOptions();
+    const preview = inspectServiceIdentity(serviceToken, config.verifyKey, nowSec, firma.value, config.signingKey, options);
+    if (!preview.ok) return identityFailure(res, preview);
+    const gate = securityPrerequisite('service');
+    if (!gate.ok) {
+      return send(res, 503, { error: 'ortam değişkeni eksik', missing: gate.missing, writes: false });
+    }
+    const verified = await verifyServiceIdentity(serviceToken, config.verifyKey, nowSec, firma.value, config.signingKey, options);
+    if (!verified.ok) return identityFailure(res, verified);
+    if (verified.finish) {
+      try { await verified.finish(); } catch { /* acik kayit yeniden kullanimi kapatir */ }
+    }
+    const operational = await serviceOperational(verified.claims);
+    if (operational && operational.data) {
+      const observedAt = Date.now();
+      audit({
+        event: 'shadow_service_read',
+        table: 'shadow',
+        method,
+        firmaId: firma.value,
+        status: 200,
+      });
+      return send(res, 200, {
         contract: AUDIENCE,
         writes: false,
-        freshness: denied ? 'PERMISSION_DENIED' : undefined,
-        error: denied ? 'erişim yok' : 'kimlik doğrulanamadı',
+        freshness: classifyFreshness({
+          permission: true,
+          upstream: 'up',
+          observedAt,
+          now: observedAt,
+          clockTrusted: true,
+        }),
+        fields: FIELDS,
+        data: operational.data,
+        identity: identityView(verified.claims),
       });
     }
     audit({
-      event: 'shadow_service_verified',
+      event: operational && operational.blocked ? 'shadow_service_blocked' : 'shadow_service_unavailable',
       table: 'shadow',
       method,
       firmaId: firma.value,
       status: 200,
     });
-    return unavailable(res, identityView(verified.claims));
+    return unavailable(res, identityView(verified.claims), operational && operational.blocked ? { read: 'BLOCKED' } : {});
   }
 
   if (!consent || !accessToken) {
@@ -262,17 +372,12 @@ async function handle(req, res) {
   if (!config.signingKey) {
     return send(res, 503, { error: 'ortam değişkeni eksik', missing: ['BTD_SHADOW_SIGNING_KEY'], writes: false });
   }
-  const verified = verifyUserConsent(consent, config.signingKey, nowSec, firma.value);
-  if (!verified.ok) {
-    const denied = verified.reason === 'firma';
-    return send(res, denied ? 403 : 401, {
-      contract: AUDIENCE,
-      writes: false,
-      freshness: denied ? 'PERMISSION_DENIED' : undefined,
-      error: denied ? 'erişim yok' : 'kimlik doğrulanamadı',
-    });
+  const preview = inspectUserConsent(consent, config.signingKey, nowSec, firma.value);
+  if (!preview.ok) return identityFailure(res, preview);
+  const gate = securityPrerequisite('user');
+  if (!gate.ok) {
+    return send(res, 503, { error: 'ortam değişkeni eksik', missing: gate.missing, writes: false });
   }
-
   const membership = await resolveMembership(config, accessToken);
   if (membership.status !== 200) {
     return send(res, membership.status, { error: membership.error || 'erişim yok', writes: false });
@@ -285,8 +390,20 @@ async function handle(req, res) {
       error: 'erişim yok',
     });
   }
+  const verified = await verifyUserConsent(consent, config.signingKey, nowSec, firma.value);
+  if (!verified.ok) return identityFailure(res, verified);
 
-  return readOperational(req, res, config, accessToken, firma.value, membership, identityView(verified.claims));
+  let sent;
+  try {
+    sent = await readOperational(req, res, config, accessToken, firma.value, membership, identityView(verified.claims));
+  } catch {
+    if (verified.cancel) await verified.cancel();
+    return unavailable(res, identityView(verified.claims));
+  }
+  if (verified.finish) {
+    try { await verified.finish(); } catch { /* acik kayit ikinci sunumu kapatir */ }
+  }
+  return sent;
 }
 
 module.exports = handle;

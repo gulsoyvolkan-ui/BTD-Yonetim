@@ -53,7 +53,7 @@ Kullanıcı onayı:
 - `Authorization: Bearer` kullanıcının Supabase erişim jetonudur. Satırlar bu jetonla ve anon anahtarla okunur. Service role kullanılmaz.
 - `x-btd-user-consent` BTD’nin ürettiği onayı taşır. SHADOW yeniden imzalamaz.
 
-Onay: HMAC-SHA256, `base64url(json).base64url(imza)`. Yayıncı `btd`, izleyici `shadow-btd-read-v1`, konu `user-consent`, izin `shadow.read`, `jti` vardır, süre en fazla 300 saniye. Süre dolması ve aynı `jti` 401 döner.
+Onay: HMAC-SHA256, `base64url(json).base64url(imza)`. Yayıncı `btd`, izleyici `shadow-btd-read-v1`, konu `user-consent`, izin `shadow.read`, `jti` vardır, süre en fazla 300 saniye. Onay tek kullanımlıktır. Süre dolması ve aynı `jti` 401 döner. Tüketim Postgres’tedir. Depo doğrulanamazsa 503, tablo okunmaz.
 
 ```json
 {
@@ -68,9 +68,11 @@ Onay: HMAC-SHA256, `base64url(json).base64url(imza)`. Yayıncı `btd`, izleyici 
 }
 ```
 
-Servis kimliği ayrıdır. SHADOW `iss=shadow` imzalar. Başlık `x-shadow-service-identity`. İzleyici `btd-shadow-service-v1`, konu `shadow-service`. BTD bunu imza anahtarından başka bir doğrulama anahtarıyla kontrol eder. Bu çağrıda `Authorization` ve `x-btd-user-consent` yoktur. Doğrulama tablo okumaz; `data: null` ve `UNAVAILABLE` iş hatası değildir.
+Servis kimliği ayrıdır. SHADOW `iss=shadow` imzalar. Başlık `x-shadow-service-identity`. İzleyici `btd-shadow-service-v1`, konu `shadow-service`. BTD bunu imza anahtarından başka bir doğrulama anahtarıyla kontrol eder. Gövde `kv` anahtar sürümünü taşır. `use` yoksa jeton kısa tekrarlıdır; süre içinde aynı `jti` ikinci okumayı düşürmez. `use: "once"` tek kullanımlıktır. Bu çağrıda `Authorization` ve `x-btd-user-consent` yoktur.
 
-İmza anahtarının adı `BTD_SHADOW_SIGNING_KEY`. Doğrulama anahtarının adı `BTD_SHADOW_SERVICE_VERIFY_KEY`. Değerler bu nota yazılmaz. İkisi aynı olamaz. Supabase service role bu anahtarların yerine geçmez.
+Firma listesi imzadan okunmaz. BTD `btd_servis_kayit` satırına bakar. Kayıt firmayı içermiyorsa 403. Dar okuma fonksiyonu `btd_shadow_okuyucu` rolüne bağlıdır. Rol yoksa yanıt `data: null`, `freshness: UNAVAILABLE`, `read: BLOCKED` olur. Bu sıfır toplam değildir ve iş hatası değildir. `service_role` bu okumayı çalıştıramaz.
+
+İmza anahtarının adı `BTD_SHADOW_SIGNING_KEY`. Doğrulama anahtarının adı `BTD_SHADOW_SERVICE_VERIFY_KEY`. Sürüm adı `BTD_SHADOW_SERVICE_KEY_VERSION`. Değerler bu nota yazılmaz. İkisi aynı olamaz. Supabase service role bu anahtarların yerine geçmez.
 
 ## 4. Kiracı
 
@@ -81,16 +83,17 @@ Servis kimliği ayrıdır. SHADOW `iss=shadow` imzalar. Başlık `x-shadow-servi
 | Durum | HTTP | Gövde |
 |---|---|---|
 | Yazma | 405 | `writes: false`, `freshness: PERMISSION_DENIED` |
-| Anahtar, kullanıcı jetonu veya onay eksik; süre dolmuş; aynı `jti`; imza bozuk; eski başlık | 401 | `yetkisiz` veya `kimlik doğrulanamadı` |
-| Firma üyeliği yok, onay veya servis kimliği başka firma | 403 | `freshness: PERMISSION_DENIED` |
+| Anahtar, kullanıcı jetonu veya onay eksik; süre dolmuş; tek kullanımlık `jti`; iptal; imza bozuk; eski başlık; anahtar sürümü uymuyor | 401 | `yetkisiz` veya `kimlik doğrulanamadı` |
+| Jti deposu veya servis kaydı doğrulanamıyor | 503 | `writes: false`, tablo okunmaz |
+| Firma üyeliği yok, onay başka firma veya servis kaydı firmayı içermiyor | 403 | `freshness: PERMISSION_DENIED` |
 | `firma_id` UUID değil | 400 | |
-| Kaynak kesik, bilinmeyen durum, sayım 1000 satırda kesildi | 200 | `freshness: UNAVAILABLE`, `data: null` |
+| Kaynak kesik, bilinmeyen durum, sayım 1000 satırda kesildi veya servis okuması `BLOCKED` | 200 | `freshness: UNAVAILABLE`, `data: null` |
 
 Kısmi sayım dönmez. Hata gövdesine jeton, anahtar veya satır yazılmaz.
 
 ## 6. Tazelik
 
-`FRESH`: üç tablo okundu, gözlem 5 dakikadan yeni. `STALE`: gözlem daha eski. `UNKNOWN`: saat yok. `UNAVAILABLE`: kaynak yok veya sonuç güvenilmez; `data` null. `PERMISSION_DENIED`: yetki yok veya yazma denendi.
+`FRESH`: üç tablo okundu, gözlem 5 dakikadan yeni. `STALE`: gözlem daha eski. `UNKNOWN`: saat yok. `UNAVAILABLE`: kaynak yok, sonuç güvenilmez veya servis okuması `BLOCKED`; `data` null. `PERMISSION_DENIED`: yetki yok veya yazma denendi.
 
 `guncellendi`, okunan satırlardaki `updated_at` alanının en yenisidir. Boş sonuçta null olur. Tazelik bundan ayrıdır: tazelik gözlem anıdır.
 
@@ -107,9 +110,10 @@ SHADOW tarafının yapması gerekenler:
 3. Kullanıcı onayını `x-btd-user-consent` içinde taşımak, yeniden imzalamamak.
 4. Servis çağrısında yalnız `iss=shadow` ve `x-shadow-service-identity` kullanmak. Kullanıcı jetonu ve onayı bu çağrıya koymamak.
 5. Yalnız `GET /api/shadow-read` çağırmak. Yazma yöntemi göndermemek.
-6. `firma_id` değerini, jetonu alınan kullanıcının üyelik listesinden seçmek.
-7. Boş 200 yanıtını ve `data: null` ile `UNAVAILABLE` değerini iş hatası saymamak. `PERMISSION_DENIED` ile karıştırmamak.
+6. Kullanıcı akışında `firma_id` değerini üyelik listesinden seçmek. Servis akışında firma iznini imzaya yazmak yetki doğurmaz; BTD kaydı karar verir.
+7. Boş 200 yanıtını, `data: null` ile `UNAVAILABLE` değerini ve `read: BLOCKED` değerini iş hatası veya sıfır toplam saymamak. `PERMISSION_DENIED` ile karıştırmamak.
 8. Ham HMAC, Bearer ve API anahtarını loglamamak.
+9. Servis jetonuna `kv` koymak. Kısa tekrarlı jetonu süre içinde yeniden göndermek serbesttir. Tek kullanımlık onayın aynı `jti` değeri ikinci kez gönderilmez.
 
 ## 8. BTD bağımsızlığı
 
