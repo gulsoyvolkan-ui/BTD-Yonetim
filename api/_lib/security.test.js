@@ -205,6 +205,8 @@ async function shadowHttp() {
   process.env.BTD_SHADOW_REPLAY_MOCK = '1';
   delete process.env.BTD_SHADOW_REPLAY_DATABASE_URL;
   delete process.env.BTD_SHADOW_READER_DATABASE_URL;
+  delete process.env.BTD_SHADOW_DB_TARGET;
+  delete process.env.BTD_SHADOW_STAGING_HOST_ALLOWLIST;
   process.env.BTD_RATE_LIMIT = '20';
   process.env.SUPABASE_SECRET_KEY = 'super-secret-value';
   const firma = '11111111-1111-4111-8111-111111111111';

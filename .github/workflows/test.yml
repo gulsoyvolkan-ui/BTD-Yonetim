@@ -20,6 +20,8 @@ jobs:
         run: node api/_lib/selfcheck.js
       - name: SHADOW read contract
         run: node api/_lib/shadow-read.contract.test.js
+      - name: SHADOW staging allowlist
+        run: node api/_lib/shadow-staging-allowlist.test.js
       - name: SHADOW read live RLS
         run: node api/_lib/shadow-read.rls.test.js
 
