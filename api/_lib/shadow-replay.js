@@ -7,6 +7,42 @@ let replayStore = null;
 let registry = null;
 let databaseConnector = null;
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+const PRODUCTION_REF = 'jramfrqlndfjxyhszvup';
+const HOST_NAME = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+
+function productionHost(host) {
+  const name = String(host || '').toLowerCase();
+  if (!name) return false;
+  if (name === 'btdcore.com' || name.endsWith('.btdcore.com')) return true;
+  if (name.includes(PRODUCTION_REF)) return true;
+  return false;
+}
+
+function productionContext() {
+  const vercel = String(process.env.VERCEL_ENV || '').trim().toLowerCase();
+  if (vercel === 'production') return true;
+  const target = String(process.env.BTD_SHADOW_DB_TARGET || '').trim().toLowerCase();
+  if (target === 'production') return true;
+  const supabase = String(process.env.SUPABASE_URL || '').toLowerCase();
+  if (supabase.includes(PRODUCTION_REF) || supabase.includes('btdcore.com')) return true;
+  return false;
+}
+
+function parseStagingAllowlist(raw) {
+  const text = String(raw || '').trim().toLowerCase();
+  if (!text || text.includes('*') || /\s/.test(text)) return null;
+  const parts = text.split(',').filter(Boolean);
+  if (!parts.length || parts.length > 4) return null;
+  const hosts = [];
+  for (const host of parts) {
+    if (!HOST_NAME.test(host) || productionHost(host) || LOOPBACK_HOSTS.has(host)) return null;
+    if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) return null;
+    hosts.push(host);
+  }
+  return hosts;
+}
+
 function replayUrlDecision(raw) {
   const value = String(raw || '').trim();
   if (!value) return { ok: false, reason: 'missing' };
@@ -19,10 +55,28 @@ function replayUrlDecision(raw) {
   const scheme = parsed.protocol.replace(':', '');
   if (scheme !== 'postgres' && scheme !== 'postgresql') return { ok: false, reason: 'scheme' };
   const host = String(parsed.hostname || '').toLowerCase();
-  if (host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') {
+  if (LOOPBACK_HOSTS.has(host)) return { ok: true, host, staging: false };
+  if (productionHost(host) || productionContext()) return { ok: false, reason: 'production' };
+  if (String(process.env.BTD_SHADOW_DB_TARGET || '').trim().toLowerCase() !== 'staging') {
     return { ok: false, reason: 'remote' };
   }
-  return { ok: true, host };
+  const allow = parseStagingAllowlist(process.env.BTD_SHADOW_STAGING_HOST_ALLOWLIST);
+  if (!allow || allow.indexOf(host) === -1) return { ok: false, reason: 'remote' };
+  let user = '';
+  try {
+    user = decodeURIComponent(parsed.username || '');
+  } catch {
+    return { ok: false, reason: 'remote' };
+  }
+  if (user !== 'btd_shadow_kopru') return { ok: false, reason: 'remote' };
+  if (!parsed.password) return { ok: false, reason: 'remote' };
+  if (parsed.port !== '5432') return { ok: false, reason: 'remote' };
+  const sslmode = String(parsed.searchParams.get('sslmode') || '').toLowerCase();
+  if (sslmode !== 'require' && sslmode !== 'verify-full') return { ok: false, reason: 'remote' };
+  if (/sslmode=(disable|allow|prefer|no-verify)/i.test(value)) return { ok: false, reason: 'remote' };
+  const database = String(parsed.pathname || '').replace(/^\//, '');
+  if (!database || database.includes('/')) return { ok: false, reason: 'remote' };
+  return { ok: true, host, staging: true };
 }
 
 function authoritativeReplay() {
@@ -345,11 +399,11 @@ async function databaseQuery(connectionString, sql, params) {
     error.reason = 'driver';
     throw error;
   }
-  const client = new Client({
+  const client = new Client(Object.assign({
     connectionString,
     connectionTimeoutMillis: 2000,
     application_name: 'btd-shadow-kopru',
-  });
+  }, decision.staging ? { ssl: { rejectUnauthorized: true } } : {}));
   try {
     await client.connect();
   } catch (err) {

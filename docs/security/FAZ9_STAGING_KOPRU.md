@@ -23,7 +23,7 @@ Yedekten sonra, staging SQL editöründe, tek oturumda:
 5. Parolayı kasaya yazdıktan sonra rolü `LOGIN` bırakıp parolayı yalnız staging kasasında tut. Bağlantı dizesi `sslmode=require` taşır. Havuz oturum kipidir (doğrudan 5432). İşlem kipi 6543 kullanılmaz; `SET LOCAL ROLE` ve hazırlanmış ifade orada güvenilir değildir.
 6. Sunucusuz işlev başına tek kısa bağlantı. Rolün bağlantı tavanı 8’dir. Havuz dolarsa çağrı kapanır, sayı uydurulmaz.
 
-Bugünkü BTD kodu yerel olmayan hostu açmaz ve aramaz. Staging adresini Vercel ortamına koymak servis okumasını açmaz. Host izni ayrı bir incelemedir. Bu prosedür o izni vermez.
+Uzak host kilidi durur. Yalnız `BTD_SHADOW_DB_TARGET=staging`, boşluksuz tam host listesi, port 5432, `sslmode=require` ve kullanıcı `btd_shadow_kopru` birlikteyse uzak adres değerlendirilir. `VERCEL_ENV=production`, üretim projesi ve `btdcore.com` listede yazsa da açılmaz. Joker listeyi kapatır. Ayrıntı `docs/security/FAZ10_STAGING_ALLOWLIST.md`. Bu prosedür production bağlantısı vermez.
 
 ## Köprü kimliği
 

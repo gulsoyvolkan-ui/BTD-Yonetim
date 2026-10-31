@@ -203,6 +203,8 @@ async function main() {
     delete process.env.BTD_SHADOW_REPLAY_MOCK;
     delete process.env.SUPABASE_SECRET_KEY;
     delete process.env.SHADOW_BTD_LIVE;
+    delete process.env.BTD_SHADOW_DB_TARGET;
+    delete process.env.BTD_SHADOW_STAGING_HOST_ALLOWLIST;
     process.env.SUPABASE_URL = 'https://example.supabase.co';
     process.env.SUPABASE_ANON_KEY = 'anon-key';
     process.env.BTD_API_KEY = 'gate';

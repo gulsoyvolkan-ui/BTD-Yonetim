@@ -185,6 +185,8 @@ function applyEnv(opts = {}) {
   process.env.BTD_SHADOW_REPLAY_MOCK = '1';
   delete process.env.BTD_SHADOW_REPLAY_DATABASE_URL;
   delete process.env.BTD_SHADOW_READER_DATABASE_URL;
+  delete process.env.BTD_SHADOW_DB_TARGET;
+  delete process.env.BTD_SHADOW_STAGING_HOST_ALLOWLIST;
   delete process.env.BTD_SHADOW_SERVICE_VERIFY_KEY_PREV;
   delete process.env.BTD_SHADOW_SERVICE_KEY_VERSION_PREV;
   if (opts.signingKey === '') delete process.env.BTD_SHADOW_SIGNING_KEY;
