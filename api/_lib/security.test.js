@@ -118,6 +118,7 @@ function main() {
   const firma = '11111111-1111-4111-8111-111111111111';
   const signed = shadow.signIdentity({ sub: 'user-1', firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 120 });
   ok(signed.claims.aud === 'shadow-btd-read-v1', 'audience');
+  ok(signed.claims.iss === 'btd' && signed.claims.perm === 'shadow.read', 'service identity scope');
   ok(shadow.verifyIdentity(signed.token, 'ornek-imza-anahtari', 1100, firma).ok, 'signature');
   ok(!shadow.verifyIdentity(signed.token, 'baska', 1100, firma).ok, 'wrong key');
   ok(!shadow.verifyIdentity(signed.token, 'ornek-imza-anahtari', 2000, firma).ok, 'expired');
@@ -159,6 +160,14 @@ function main() {
   ok(auth.canReadSensitive({ role: 'Operatör', kiosk: true, accessCritical: true }) === false, 'kiosk cannot read sensitive');
   ok(auth.canReadSensitive({ role: 'Yönetici', authSource: 'supabase-auth' }) === true, 'manager can read sensitive');
 
+  const accessFn = read('index.html').slice(read('index.html').indexOf('function userCanAccessPage'), read('index.html').indexOf('function applyPriceVisibility'));
+  ok(!accessFn.includes("if (user.isGod || user.role === 'Yönetici') return true"), 'manager view flag is enforced');
+  ok(accessFn.includes('moduleViewAllowed(user, page)'), 'page access uses the view flag');
+  const restoreFn = read('index.html').slice(read('index.html').indexOf('async function tryRestoreAuthSession'), read('index.html').indexOf("document.getElementById('loginTogglePw')"));
+  ok(restoreFn.includes('endSupabaseSession'), 'kiosk restore clears the supabase session');
+  ok(read('index.html').includes("btdPortal() === 'kiosk' && !currentUser"), 'kiosk does not boot before login');
+  ok(!read('index.html').includes('shadow-read') && !read('js/btd-cloud.js').includes('shadow-read'), 'btd boots without the shadow read');
+
   const html = read('index.html');
   ok(!html.includes('şifre 123456'), 'login hint has no demo password');
   ok(!html.includes('8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'), 'client has no demo password hash');
@@ -186,6 +195,13 @@ async function shadowHttp() {
   process.env.BTD_RATE_LIMIT = '20';
   process.env.SUPABASE_SECRET_KEY = 'super-secret-value';
   const firma = '11111111-1111-4111-8111-111111111111';
+  const service = shadow.signIdentity({
+    sub: 'shadow-reader',
+    firmaId: firma,
+    secret: 'ornek-imza-anahtari',
+    nowSec: Math.floor(Date.now() / 1000),
+    ttlSec: 120,
+  });
   const urls = [];
   global.fetch = async (url) => {
     urls.push(String(url));
@@ -223,7 +239,11 @@ async function shadowHttp() {
   await shadowRead({
     method: 'GET',
     query: { firma_id: firma },
-    headers: { 'x-api-key': 'gate', authorization: 'Bearer good-token' },
+    headers: {
+      'x-api-key': 'gate',
+      authorization: 'Bearer good-token',
+      'x-btd-service-identity': service.token,
+    },
   }, okRes);
   ok(okRes.statusCode === 200 && okRes.body.freshness === 'UNAVAILABLE', 'shadow down is unavailable');
   ok(okRes.body.data === null && okRes.body.writes === false, 'no shadow rows');
@@ -279,10 +299,66 @@ async function cloudGate() {
   });
   ok(booted.ok === true, 'authenticated boot runs');
   ok(writes.length === 0, 'boot does not write local rows');
+
+  const packaged = [{ company: 'Technomac', name: 'Paketli Firma' }];
+  const emptyWrites = [];
+  context.BtdSupabase.getClient = () => ({
+    from(table) {
+      const query = {
+        select() { return query; },
+        order() { return query; },
+        eq() { return query; },
+        insert() { emptyWrites.push(table); return query; },
+        upsert() { emptyWrites.push(table); return query; },
+        update() { emptyWrites.push(table); return query; },
+        delete() { emptyWrites.push(table); return query; },
+        single() { return Promise.resolve({ data: { id: 'new' }, error: null, count: 0 }); },
+        then(resolve, reject) { return Promise.resolve({ data: [], error: null, count: 0 }).then(resolve, reject); },
+      };
+      return query;
+    },
+    rpc() { return Promise.resolve({ data: [], error: null }); },
+  });
+  const emptied = await context.BtdCloud.boot({
+    session,
+    companies: { Technomac: { dbId: '11111111-1111-4111-8111-111111111111' } },
+    customers: packaged,
+  });
+  ok(emptied.ok === true && packaged.length === 0, 'empty cloud drops packaged directory');
+  ok(emptyWrites.length === 0, 'empty cloud does not write packaged rows');
+  const blockedSave = await context.BtdCloud.saveCustomer(
+    { company: 'Technomac', name: 'Paketli Firma' },
+    { Technomac: { dbId: '11111111-1111-4111-8111-111111111111' } }
+  );
+  ok(blockedSave.ok === false && String(blockedSave.reason).includes('packaged-demo-blocked'), 'later save cannot write packaged customer');
+  ok(emptyWrites.length === 0, 'blocked save does not call the table');
+  const freshSave = await context.BtdCloud.saveCustomer(
+    { company: 'Technomac', name: 'Yeni Firma' },
+    { Technomac: { dbId: '11111111-1111-4111-8111-111111111111' } }
+  );
+  ok(freshSave.ok === true && emptyWrites.includes('musteriler'), 'a new customer can still be saved');
+}
+
+async function kioskSession() {
+  const fallen = [];
+  const local = await kiosk.endSupabaseSession({
+    async signOut(opts) {
+      fallen.push(opts || 'global');
+      if (!opts) throw new Error('network');
+    },
+  });
+  ok(local === true && fallen[0] === 'global' && fallen[1] && fallen[1].scope === 'local', 'kiosk falls back to local signOut');
+  const cleared = [];
+  const gone = await kiosk.endSupabaseSession({
+    async signOut() { cleared.push('gone'); },
+  });
+  ok(gone === true && cleared.length === 1, 'kiosk signOut clears the session');
+  const missing = await kiosk.endSupabaseSession(null);
+  ok(missing === false, 'kiosk signOut fails closed without a client');
 }
 
 main();
-shadowHttp().then(() => cloudGate()).then(() => {
+shadowHttp().then(() => cloudGate()).then(() => kioskSession()).then(() => {
   console.log('shadow http checks passed');
 }).catch((err) => {
   console.error(err);

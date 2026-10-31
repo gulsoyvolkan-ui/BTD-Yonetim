@@ -230,6 +230,21 @@ async function handle(req, res, table) {
     return send(res, 400, { error: 'id gerekli' });
   }
 
+  const mutating = method === 'POST' || method === 'PATCH' || method === 'DELETE';
+  if (mutating) {
+    const wrote = await writeAudit(config, accessToken, {
+      firma_id: firma.value,
+      actor_auth_id: membership.actor,
+      olay: 'yazma',
+      kaynak: table,
+      durum: method === 'POST' ? 201 : 200,
+    });
+    if (!wrote) {
+      audit({ event: 'audit_failed', table, method, firmaId: firma.value, actor: membership.actor, status: 503 });
+      return send(res, 503, { error: 'denetim yazılamadı' });
+    }
+  }
+
   let result;
   try {
     result = await rest(config, accessToken, method, table, spec, {
@@ -246,15 +261,19 @@ async function handle(req, res, table) {
     return send(res, result.status >= 400 && result.status < 600 ? result.status : 502, { error: result.error });
   }
 
-  const wrote = await writeAudit(config, accessToken, {
-    firma_id: firma.value,
-    actor_auth_id: membership.actor,
-    olay: method === 'GET' ? 'okuma' : 'yazma',
-    kaynak: table,
-    durum: method === 'POST' ? 201 : 200,
-  });
-  if (!wrote) {
-    audit({ event: 'audit_skip', table, method, firmaId: firma.value, actor: membership.actor, status: 200 });
+  if (!mutating) {
+    const wrote = await writeAudit(config, accessToken, {
+      firma_id: firma.value,
+      actor_auth_id: membership.actor,
+      olay: 'okuma',
+      kaynak: table,
+      durum: 200,
+    });
+    if (!wrote) {
+      audit({ event: 'audit_skip', table, method, firmaId: firma.value, actor: membership.actor, status: 200 });
+    } else {
+      audit({ event: 'ok', table, method, firmaId: firma.value, actor: membership.actor, status: 200 });
+    }
   } else {
     audit({ event: 'ok', table, method, firmaId: firma.value, actor: membership.actor, status: method === 'POST' ? 201 : 200 });
   }
