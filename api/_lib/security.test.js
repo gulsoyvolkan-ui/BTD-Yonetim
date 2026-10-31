@@ -184,6 +184,11 @@ function main() {
   ok(!shadowSrc.includes('fetch(') || shadowSrc.includes('resolveMembership'), 'shadow handler has no own upstream fetch');
   ok(!/https?:\/\/(?!example)/.test(shadowSrc), 'shadow source has no external url');
 
+  const catalog = read('docs/security/FAZ2_CANLI_KATALOG_KONTROL.sql');
+  const catalogSql = catalog.split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
+  ok(catalog.includes('execute_acl') && catalog.includes('security_definer'), 'catalog reads function acl');
+  ok(!/\b(insert|update|delete|grant|revoke|alter|drop|truncate|call|copy)\b/i.test(catalogSql), 'catalog statements stay read only');
+
   console.log(`security: ${calls} passed`);
 }
 
