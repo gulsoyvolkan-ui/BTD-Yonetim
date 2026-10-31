@@ -45,39 +45,44 @@ Yalnız GET ve HEAD kabul edilir. POST, PATCH, PUT ve DELETE 405 döner. Gövde 
 
 ## 3. Kimlik
 
-Üç başlık birlikte gerekir.
+İki akış vardır. Aynı dize iki başlıkta durursa 401. Eski `x-btd-service-identity` kabul edilmez. SHADOW `iss=btd` imzalamaz. BTD imza anahtarı SHADOW ile paylaşılmaz.
+
+Kullanıcı onayı:
 
 - `x-api-key` kapıdır. Kimlik sayılmaz. Tek başına 401.
 - `Authorization: Bearer` kullanıcının Supabase erişim jetonudur. Satırlar bu jetonla ve anon anahtarla okunur. Service role kullanılmaz.
-- `x-btd-service-identity` makine kimliğidir. HMAC-SHA256, `base64url(json).base64url(imza)`. Yayıncı `btd`, izleyici `shadow-btd-read-v1`, izin `shadow.read`, süre en fazla 300 saniye. `sub` noktasız bir makine adıdır (`shadow-reader`). Kullanıcı jetonu bu alana veya bu başlığa kopyalanmaz. İki başlık aynı dizeyse 401.
+- `x-btd-user-consent` BTD’nin ürettiği onayı taşır. SHADOW yeniden imzalamaz.
 
-Örnek claim, anahtar sözcüğü `ornek-imza-anahtari` ile, üretim anahtarı değildir:
+Onay: HMAC-SHA256, `base64url(json).base64url(imza)`. Yayıncı `btd`, izleyici `shadow-btd-read-v1`, konu `user-consent`, izin `shadow.read`, `jti` vardır, süre en fazla 300 saniye. Süre dolması ve aynı `jti` 401 döner.
 
 ```json
 {
   "iss": "btd",
   "aud": "shadow-btd-read-v1",
-  "sub": "shadow-reader",
+  "sub": "user-consent",
   "firma_id": "11111111-1111-4111-8111-111111111111",
   "perm": "shadow.read",
+  "jti": "00000000-0000-4000-8000-000000000001",
   "iat": 1000,
   "exp": 1120
 }
 ```
 
-Paylaşılan imza anahtarının adı `BTD_SHADOW_SIGNING_KEY`. Değeri bu nota yazılmaz. Supabase service role bu anahtarın yerine geçmez.
+Servis kimliği ayrıdır. SHADOW `iss=shadow` imzalar. Başlık `x-shadow-service-identity`. İzleyici `btd-shadow-service-v1`, konu `shadow-service`. BTD bunu imza anahtarından başka bir doğrulama anahtarıyla kontrol eder. Bu çağrıda `Authorization` ve `x-btd-user-consent` yoktur. Doğrulama tablo okumaz; `data: null` ve `UNAVAILABLE` iş hatası değildir.
+
+İmza anahtarının adı `BTD_SHADOW_SIGNING_KEY`. Doğrulama anahtarının adı `BTD_SHADOW_SERVICE_VERIFY_KEY`. Değerler bu nota yazılmaz. İkisi aynı olamaz. Supabase service role bu anahtarların yerine geçmez.
 
 ## 4. Kiracı
 
-`firma_id` sorgu parametresidir. Makine kimliğindeki `firma_id` ile aynı olmak zorundadır. Kullanıcının `btd_oturum_baglami` firmaları arasında yoksa 403 ve `PERMISSION_DENIED`. Okuyucu başka firmanın satırını doldurmaz. Süzgeç sunucudadır: `firma_id=eq.<uuid>`.
+`firma_id` sorgu parametresidir. Onaydaki veya servis kimliğindeki `firma_id` ile aynı olmak zorundadır. Kullanıcı akışında `btd_oturum_baglami` firmaları arasında yoksa 403 ve `PERMISSION_DENIED`. Okuyucu başka firmanın satırını doldurmaz. Süzgeç sunucudadır: `firma_id=eq.<uuid>`.
 
 ## 5. Hatalar
 
 | Durum | HTTP | Gövde |
 |---|---|---|
 | Yazma | 405 | `writes: false`, `freshness: PERMISSION_DENIED` |
-| Anahtar, kullanıcı jetonu veya makine kimliği eksik, süresi dolmuş, imza bozuk | 401 | `yetkisiz` veya `kimlik doğrulanamadı` |
-| Firma üyeliği yok, makine kimliği başka firma | 403 | `freshness: PERMISSION_DENIED` |
+| Anahtar, kullanıcı jetonu veya onay eksik; süre dolmuş; aynı `jti`; imza bozuk; eski başlık | 401 | `yetkisiz` veya `kimlik doğrulanamadı` |
+| Firma üyeliği yok, onay veya servis kimliği başka firma | 403 | `freshness: PERMISSION_DENIED` |
 | `firma_id` UUID değil | 400 | |
 | Kaynak kesik, bilinmeyen durum, sayım 1000 satırda kesildi | 200 | `freshness: UNAVAILABLE`, `data: null` |
 
@@ -98,12 +103,14 @@ Bu depoda SHADOW kodu yoktur. `btd-read.ts` eklenmedi. SHADOW sunucusundaki serv
 SHADOW tarafının yapması gerekenler:
 
 1. BTD tablosunu service role ile okumamak.
-2. Yalnız `GET /api/shadow-read` çağırmak. Yazma yöntemi göndermemek.
-3. `x-api-key`, kullanıcı Bearer jetonu ve `x-btd-service-identity` başlıklarını ayrı tutmak.
-4. `firma_id` değerini, jetonu alınan kullanıcının üyelik listesinden seçmek.
-5. `data: null` ve `UNAVAILABLE` değerini iş hatası saymamak. `PERMISSION_DENIED` ile karıştırmamak.
-6. Ham HMAC, Bearer ve API anahtarını loglamamak.
+2. `iss=btd` imzalamamak ve BTD imza anahtarını istememek.
+3. Kullanıcı onayını `x-btd-user-consent` içinde taşımak, yeniden imzalamamak.
+4. Servis çağrısında yalnız `iss=shadow` ve `x-shadow-service-identity` kullanmak. Kullanıcı jetonu ve onayı bu çağrıya koymamak.
+5. Yalnız `GET /api/shadow-read` çağırmak. Yazma yöntemi göndermemek.
+6. `firma_id` değerini, jetonu alınan kullanıcının üyelik listesinden seçmek.
+7. Boş 200 yanıtını ve `data: null` ile `UNAVAILABLE` değerini iş hatası saymamak. `PERMISSION_DENIED` ile karıştırmamak.
+8. Ham HMAC, Bearer ve API anahtarını loglamamak.
 
 ## 8. BTD bağımsızlığı
 
-BTD ekranı bu ucu çağırmaz. SHADOW kapalı, ulaşılamaz veya 401 dönerse BTD açılışı ve bulut senkronu sürer. Okuma sözleşmesi BTD’nin çalışması için gerekli değildir.
+BTD ekranı bu ucu çağırmaz. `GET /api/health` SHADOW’a bağlanmaz; SHADOW kapalıyken `{ ok: true, shadowRequired: false }` döner. SHADOW ulaşılamaz veya 401 dönerse BTD açılışı ve bulut senkronu sürer. Okuma sözleşmesi BTD’nin çalışması için gerekli değildir.

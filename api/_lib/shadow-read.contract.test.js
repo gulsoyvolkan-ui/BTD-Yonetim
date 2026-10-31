@@ -1,16 +1,21 @@
 'use strict';
 
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const shadow = require('./shadow');
 const shadowRead = require('../shadow-read');
+const shadowConsent = require('../shadow-consent');
+const health = require('../health');
 const { resetGuards } = require('./guard');
 
 const FIRMA = '11111111-1111-4111-8111-111111111111';
 const OTHER = '33333333-3333-4333-8333-333333333333';
 const ACTOR = '44444444-4444-4444-8444-444444444444';
 const SECRET = 'super-secret-value';
+const SIGNING = 'ornek-imza-anahtari';
+const VERIFY = 'ornek-dogrulama-anahtari';
 const PRICE = 'FIYATMARKER';
 const TC = 'TCMARKER';
 const root = path.join(__dirname, '..', '..');
@@ -32,16 +37,34 @@ function mockRes() {
   };
 }
 
-function serviceToken(firmaId, opts = {}) {
+function consentToken(firmaId, opts = {}) {
   const nowSec = opts.nowSec == null ? Math.floor(Date.now() / 1000) : opts.nowSec;
-  const signed = shadow.signIdentity({
-    sub: opts.sub || 'shadow-reader',
+  const signed = shadow.signUserConsent({
     firmaId,
-    secret: 'ornek-imza-anahtari',
+    secret: opts.secret || SIGNING,
     nowSec,
     ttlSec: opts.ttlSec || 120,
+    jti: opts.jti,
   });
   return signed && signed.token;
+}
+
+function serviceToken(firmaId, opts = {}) {
+  const nowSec = opts.nowSec == null ? Math.floor(Date.now() / 1000) : opts.nowSec;
+  const ttl = opts.ttlSec == null ? 120 : opts.ttlSec;
+  const payload = Object.assign({
+    iss: 'shadow',
+    aud: 'btd-shadow-service-v1',
+    sub: 'shadow-service',
+    firma_id: String(firmaId),
+    perm: 'shadow.read',
+    jti: opts.jti || crypto.randomUUID(),
+    iat: nowSec,
+    exp: nowSec + ttl,
+  }, opts.claims || {});
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const mac = crypto.createHmac('sha256', opts.secret || VERIFY).update(body).digest('base64url');
+  return `${body}.${mac}`;
 }
 
 const orders = [
@@ -143,23 +166,43 @@ function headers(extra = {}) {
   return Object.assign({
     'x-api-key': 'gate',
     authorization: 'Bearer user-token',
-    'x-btd-service-identity': serviceToken(FIRMA),
+    'x-btd-user-consent': consentToken(FIRMA),
   }, extra);
 }
 
-async function call(method, query, extraHeaders) {
-  resetGuards();
+function applyEnv(opts = {}) {
   process.env.SUPABASE_URL = 'https://example.supabase.co';
   process.env.SUPABASE_ANON_KEY = 'anon-key';
   process.env.BTD_API_KEY = 'gate';
-  process.env.BTD_SHADOW_SIGNING_KEY = 'ornek-imza-anahtari';
+  process.env.BTD_SHADOW_SIGNING_KEY = opts.signingKey === undefined ? SIGNING : opts.signingKey;
+  process.env.BTD_SHADOW_SERVICE_VERIFY_KEY = opts.verifyKey === undefined ? VERIFY : opts.verifyKey;
   process.env.BTD_RATE_LIMIT = '500';
   process.env.SUPABASE_SECRET_KEY = SECRET;
+  if (opts.signingKey === '') delete process.env.BTD_SHADOW_SIGNING_KEY;
+  if (opts.verifyKey === '') delete process.env.BTD_SHADOW_SERVICE_VERIFY_KEY;
+}
+
+async function call(method, query, extraHeaders, opts = {}) {
+  resetGuards();
+  if (!opts.keepReplay) shadow.resetReplay();
+  applyEnv(opts);
   const res = mockRes();
   await shadowRead({
     method,
     query: query || { firma_id: FIRMA },
     headers: extraHeaders || headers(),
+  }, res);
+  return res;
+}
+
+async function consentCall(query, extraHeaders, opts = {}) {
+  resetGuards();
+  applyEnv(opts);
+  const res = mockRes();
+  await shadowConsent({
+    method: opts.method || 'POST',
+    query: query || { firma_id: FIRMA },
+    headers: extraHeaders || { 'x-api-key': 'gate', authorization: 'Bearer user-token' },
   }, res);
   return res;
 }
@@ -182,6 +225,31 @@ async function main() {
   ok(!JSON.stringify(summary.data).includes(PRICE) && !JSON.stringify(summary.data).includes(TC), 'summary drops price and tc');
   ok(!shadow.summarizeOperational({ orders: [{ durum: 'Uydurma' }], workOrders: [], tasks: [], today: '2026-10-30' }).ok, 'unknown status fails closed');
 
+  shadow.resetReplay();
+  const minted = shadow.signUserConsent({ firmaId: FIRMA, secret: SIGNING, nowSec: 1000, ttlSec: 120, jti: 'consent-1' });
+  ok(minted.claims.iss === 'btd' && minted.claims.sub === 'user-consent' && minted.claims.jti === 'consent-1', 'btd mints user consent');
+  ok(minted.claims.aud === 'shadow-btd-read-v1' && minted.claims.exp - minted.claims.iat === 120, 'consent lifetime');
+  ok(shadow.signUserConsent({ firmaId: FIRMA, secret: SIGNING, nowSec: 1000, ttlSec: 301 }) === null, 'consent ttl cap');
+  ok(shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA).ok, 'consent verifies with signing key');
+  ok(shadow.verifyUserConsent(minted.token, SIGNING, 1100, FIRMA).reason === 'replay', 'consent jti replay');
+  ok(!shadow.verifyUserConsent(minted.token, VERIFY, 1100, FIRMA).ok, 'verify key cannot mint consent');
+  shadow.resetReplay();
+  ok(shadow.verifyUserConsent(minted.token, SIGNING, 2000, FIRMA).reason === 'expired', 'consent expiry');
+  const shadowSignedConsent = serviceToken(FIRMA, { secret: VERIFY, claims: { iss: 'btd', aud: 'shadow-btd-read-v1', sub: 'user-consent' } });
+  ok(shadow.verifyUserConsent(shadowSignedConsent, SIGNING, Math.floor(Date.now() / 1000), FIRMA).reason === 'signature', 'shadow signature is not a btd consent');
+
+  shadow.resetReplay();
+  const service = serviceToken(FIRMA, { jti: 'svc-1', nowSec: 1000 });
+  ok(shadow.verifyServiceIdentity(service, VERIFY, 1100, FIRMA, SIGNING).ok, 'service identity verifies with the other key');
+  ok(shadow.verifyServiceIdentity(service, VERIFY, 1100, FIRMA, SIGNING).reason === 'replay', 'service jti replay');
+  shadow.resetReplay();
+  ok(shadow.verifyServiceIdentity(service, VERIFY, 2000, FIRMA, SIGNING).reason === 'expired', 'service expiry');
+  ok(shadow.verifyServiceIdentity(service, SIGNING, 1100, FIRMA, SIGNING).reason === 'key', 'signing key is not the service verifier');
+  ok(shadow.verifyServiceIdentity(serviceToken(FIRMA, { secret: SIGNING }), VERIFY, Math.floor(Date.now() / 1000), FIRMA, SIGNING).reason === 'signature', 'btd signing key does not authenticate shadow');
+  const btdOnServiceHeader = serviceToken(FIRMA, { claims: { iss: 'btd', sub: 'shadow-reader', aud: 'shadow-btd-read-v1' } });
+  ok(shadow.verifyServiceIdentity(btdOnServiceHeader, VERIFY, Math.floor(Date.now() / 1000), FIRMA, SIGNING).reason === 'issuer', 'service header rejects iss=btd');
+  ok(typeof shadow.signServiceIdentity !== 'function' && typeof shadow.signIdentity !== 'function', 'btd does not sign for shadow');
+
   install();
   seen.length = 0;
   mode = 'empty';
@@ -203,30 +271,91 @@ async function main() {
   res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', authorization: 'Bearer user-token' });
   ok(res.statusCode === 401, '401 user bearer alone');
 
-  const lone = serviceToken(FIRMA);
+  const lone = consentToken(FIRMA);
   seen.length = 0;
-  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-btd-service-identity': lone });
-  ok(res.statusCode === 401, '401 service identity alone');
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-btd-user-consent': lone });
+  ok(res.statusCode === 401, '401 consent without user bearer');
+  ok(seen.length === 0, 'consent without bearer does not read');
 
   seen.length = 0;
-  res = await call('GET', { firma_id: FIRMA }, headers({ authorization: `Bearer ${lone}`, 'x-btd-service-identity': lone }));
-  ok(res.statusCode === 401, '401 identical user and service tokens');
+  res = await call('GET', { firma_id: FIRMA }, headers({ authorization: `Bearer ${lone}`, 'x-btd-user-consent': lone }));
+  ok(res.statusCode === 401, '401 identical user and consent tokens');
   ok(seen.length === 0, 'identical tokens do not call upstream');
 
   seen.length = 0;
-  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-service-identity': serviceToken(FIRMA, { nowSec: 1000 }) }));
-  ok(res.statusCode === 401, '401 expired service identity');
-  ok(seen.length === 0, 'expired identity does not read');
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': consentToken(FIRMA, { nowSec: 1000 }) }));
+  ok(res.statusCode === 401, '401 expired consent');
+  ok(seen.length === 0, 'expired consent does not read');
 
-  const tampered = `${serviceToken(FIRMA)}x`;
+  const tampered = `${consentToken(FIRMA)}x`;
   seen.length = 0;
-  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-service-identity': tampered }));
-  ok(res.statusCode === 401, '401 invalid service identity');
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': tampered }));
+  ok(res.statusCode === 401, '401 invalid consent');
 
   seen.length = 0;
-  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-service-identity': serviceToken(OTHER) }));
-  ok(res.statusCode === 403 && res.body.freshness === 'PERMISSION_DENIED', '403 cross-company service identity');
-  ok(seen.length === 0, 'cross-company identity does not read');
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': consentToken(OTHER) }));
+  ok(res.statusCode === 403 && res.body.freshness === 'PERMISSION_DENIED', '403 cross-company consent');
+  ok(seen.length === 0, 'cross-company consent does not read');
+
+  const replayConsent = consentToken(FIRMA, { jti: 'once' });
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': replayConsent }));
+  ok(res.statusCode === 200, 'first consent presentation reads');
+  const afterFirst = tableCalls().length;
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': replayConsent }), { keepReplay: true });
+  ok(res.statusCode === 401 && res.body.error === 'kimlik doğrulanamadı', 'replayed consent is rejected');
+  ok(tableCalls().length === afterFirst, 'replay does not read again');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-service-identity': consentToken(FIRMA) }));
+  ok(res.statusCode === 401, 'legacy iss=btd service header is rejected');
+  ok(seen.length === 0, 'legacy header does not read');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-shadow-service-identity': serviceToken(FIRMA) }));
+  ok(res.statusCode === 401, 'both identity headers are rejected');
+  ok(seen.length === 0, 'mixed identities do not read');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    authorization: 'Bearer user-token',
+    'x-shadow-service-identity': serviceToken(FIRMA),
+  });
+  ok(res.statusCode === 401 && seen.length === 0, 'service identity with a user bearer is rejected');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA) });
+  ok(res.statusCode === 200 && res.body.data === null && res.body.freshness === 'UNAVAILABLE', 'verified service read invents no rows');
+  ok(!Object.prototype.hasOwnProperty.call(res.body, 'error') && res.body.businessError !== true, 'service unavailable is not a business error');
+  ok(res.body.identity.iss === 'shadow' && res.body.identity.aud === 'btd-shadow-service-v1', 'service identity claims');
+  ok(seen.length === 0, 'service identity does not query tables');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(OTHER) });
+  ok(res.statusCode === 403 && res.body.freshness === 'PERMISSION_DENIED' && seen.length === 0, '403 cross-company service identity');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA, { nowSec: 1000 }) });
+  ok(res.statusCode === 401 && seen.length === 0, '401 expired service identity');
+
+  const replayService = serviceToken(FIRMA, { jti: 'svc-once' });
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': replayService });
+  ok(res.statusCode === 200, 'first service presentation verifies');
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': replayService }, { keepReplay: true });
+  ok(res.statusCode === 401, 'replayed service jti is rejected');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA, { secret: SIGNING }) });
+  ok(res.statusCode === 401 && seen.length === 0, 'service token signed with the btd key is rejected');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA) }, { verifyKey: SIGNING });
+  ok(res.statusCode === 401 && seen.length === 0, 'equal signing and verify keys are rejected');
+
+  seen.length = 0;
+  res = await call('GET', { firma_id: FIRMA }, { 'x-api-key': 'gate', 'x-shadow-service-identity': serviceToken(FIRMA) }, { verifyKey: '' });
+  ok(res.statusCode === 503 && res.body.missing.indexOf('BTD_SHADOW_SERVICE_VERIFY_KEY') !== -1 && seen.length === 0, 'missing verify key does not read');
 
   memberFirms = [OTHER];
   seen.length = 0;
@@ -243,12 +372,13 @@ async function main() {
   ok(res.body.data.geciken_is_emri_adet === 0 && res.body.data.acik_gorev_adet === 0, 'empty counts');
   ok(res.body.data.kaynak_id === 'btd-operasyon' && res.body.data.guncellendi === null, 'empty source and time');
   ok(res.body.identity.aud === 'shadow-btd-read-v1' && res.body.identity.iss === 'btd' && res.body.identity.perm === 'shadow.read', 'identity claims');
-  ok(!res.body.identity.token, 'raw service token is not returned');
+  ok(!res.body.identity.token, 'raw consent token is not returned');
+  ok(!Object.prototype.hasOwnProperty.call(res.body, 'error') && res.body.businessError !== true, 'empty data is not a business error');
   ok(tableCalls().length === 3 && tableCalls().every((item) => item.method === 'GET'), 'three read-only gets');
   ok(tableCalls().every((item) => item.opts.headers.apikey === 'anon-key'), 'anon key not service role');
   ok(tableCalls().every((item) => item.opts.headers.Authorization === 'Bearer user-token'), 'user bearer stays distinct');
   ok(!JSON.stringify(tableCalls()).includes(SECRET), 'secret key is not sent');
-  ok(!tableCalls().some((item) => String(item.opts.headers.Authorization).includes(serviceToken(FIRMA).slice(0, 12)) && item.opts.headers.Authorization === `Bearer ${headers()['x-btd-service-identity']}`), 'table call is not the service token');
+  ok(tableCalls().every((item) => item.opts.headers.Authorization === 'Bearer user-token'), 'table call is the user bearer');
 
   mode = 'rows';
   seen.length = 0;
@@ -267,6 +397,7 @@ async function main() {
   mode = 'bad-status';
   res = await call('GET');
   ok(res.statusCode === 200 && res.body.freshness === 'UNAVAILABLE' && res.body.data === null, 'unknown status is unavailable');
+  ok(!Object.prototype.hasOwnProperty.call(res.body, 'error'), 'unknown status is not a business error');
 
   mode = 'truncated';
   res = await call('GET');
@@ -275,10 +406,47 @@ async function main() {
   mode = 'down';
   res = await call('GET');
   ok(res.statusCode === 200 && res.body.freshness === 'UNAVAILABLE' && res.body.data === null, 'upstream down is unavailable');
+  ok(!Object.prototype.hasOwnProperty.call(res.body, 'error') && res.body.businessError !== true, 'upstream down is not a business error');
+
+  mode = 'empty';
+  memberFirms = [OTHER];
+  seen.length = 0;
+  const foreignMint = await consentCall();
+  ok(foreignMint.statusCode === 403 && foreignMint.body.freshness === 'PERMISSION_DENIED' && !foreignMint.body.consent, 'non-member cannot mint consent');
+  ok(!seen.some((item) => /\/rest\/v1\/(siparisler|is_emirleri|gorevler)/.test(item.url)), 'non-member mint does not read tables');
+  memberFirms = [FIRMA];
+  seen.length = 0;
+  const mintedHttp = await consentCall();
+  ok(mintedHttp.statusCode === 200 && mintedHttp.body.consent && mintedHttp.body.writes === false, 'member mints consent');
+  ok(!JSON.stringify(mintedHttp.body).includes(SIGNING) && !JSON.stringify(mintedHttp.body).includes(SECRET), 'mint response hides keys');
+  ok(seen.every((item) => item.url.startsWith('https://example.supabase.co/')), 'mint stays on supabase');
+  ok(!seen.some((item) => item.url.includes('/rest/v1/siparisler')), 'mint does not read orders');
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': mintedHttp.body.consent }));
+  ok(res.statusCode === 200 && res.body.freshness === 'FRESH', 'minted consent is accepted once');
+  res = await call('GET', { firma_id: FIRMA }, headers({ 'x-btd-user-consent': mintedHttp.body.consent }), { keepReplay: true });
+  ok(res.statusCode === 401, 'minted consent cannot be replayed');
 
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const cloud = fs.readFileSync(path.join(root, 'js/btd-cloud.js'), 'utf8');
   ok(!html.includes('shadow-read') && !cloud.includes('shadow-read'), 'btd ui does not depend on shadow read');
+  const clientFiles = fs.readdirSync(root).filter((name) => name.endsWith('.html')).concat(
+    fs.readdirSync(path.join(root, 'js')).map((name) => path.join('js', name))
+  );
+  const banned = ['shadow-read', 'shadow-consent', 'x-btd-user-consent', 'x-shadow-service-identity', 'x-btd-service-identity'];
+  for (const name of clientFiles) {
+    const text = fs.readFileSync(path.join(root, name), 'utf8');
+    for (const word of banned) ok(!text.includes(word), `${name} does not reference ${word}`);
+  }
+  const bridgeSrc = ['api/shadow-read.js', 'api/shadow-consent.js', 'api/health.js', 'api/_lib/shadow.js']
+    .map((name) => fs.readFileSync(path.join(root, name), 'utf8'))
+    .join('\n');
+  ok(!bridgeSrc.includes('SHADOW_BTD_LIVE'), 'live flag is not read');
+  ok(!bridgeSrc.includes('SUPABASE_SECRET_KEY'), 'bridge does not read the secret key');
+  ok(!/iss:\s*SERVICE_ISSUER/.test(fs.readFileSync(path.join(root, 'api/_lib/shadow.js'), 'utf8')), 'btd signer does not emit iss=shadow');
+  global.fetch = async () => { throw new Error('shadow down'); };
+  const healthRes = mockRes();
+  health({ method: 'GET' }, healthRes);
+  ok(healthRes.statusCode === 200 && healthRes.body.ok === true && healthRes.body.shadowRequired === false, 'health stays up when shadow is down');
   ok(typeof require('./crud').handle === 'function', 'existing crud module still loads');
 
   console.log(`shadow contract: ${calls} passed`);

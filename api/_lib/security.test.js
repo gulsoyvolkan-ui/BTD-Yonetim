@@ -116,13 +116,14 @@ function main() {
   ok(shadow.assertReadOnly('POST').ok === false, 'writes disabled');
 
   const firma = '11111111-1111-4111-8111-111111111111';
-  const signed = shadow.signIdentity({ sub: 'user-1', firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 120 });
+  shadow.resetReplay();
+  const signed = shadow.signUserConsent({ firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 120, jti: 'jti-1' });
   ok(signed.claims.aud === 'shadow-btd-read-v1', 'audience');
-  ok(signed.claims.iss === 'btd' && signed.claims.perm === 'shadow.read', 'service identity scope');
-  ok(shadow.verifyIdentity(signed.token, 'ornek-imza-anahtari', 1100, firma).ok, 'signature');
-  ok(!shadow.verifyIdentity(signed.token, 'baska', 1100, firma).ok, 'wrong key');
-  ok(!shadow.verifyIdentity(signed.token, 'ornek-imza-anahtari', 2000, firma).ok, 'expired');
-  ok(shadow.signIdentity({ sub: 'user-1', firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 900 }) === null, 'ttl cap');
+  ok(signed.claims.iss === 'btd' && signed.claims.sub === 'user-consent' && signed.claims.perm === 'shadow.read', 'user consent scope');
+  ok(shadow.verifyUserConsent(signed.token, 'ornek-imza-anahtari', 1100, firma).ok, 'signature');
+  ok(!shadow.verifyUserConsent(signed.token, 'baska', 1100, firma).ok, 'wrong key');
+  ok(shadow.verifyUserConsent(signed.token, 'ornek-imza-anahtari', 2000, firma).reason === 'expired', 'expired');
+  ok(shadow.signUserConsent({ firmaId: firma, secret: 'ornek-imza-anahtari', nowSec: 1000, ttlSec: 900 }) === null, 'ttl cap');
 
   const sql013 = read('supabase/013_auth_membership.sql');
   const sql014 = read('supabase/014_tenant_rls.sql');
@@ -183,6 +184,7 @@ function main() {
   ok(!crud.includes('SUPABASE_SECRET_KEY') && !shadowSrc.includes('SUPABASE_SECRET_KEY'), 'ordinary reads do not use the secret key');
   ok(!shadowSrc.includes('fetch(') || shadowSrc.includes('resolveMembership'), 'shadow handler has no own upstream fetch');
   ok(!/https?:\/\/(?!example)/.test(shadowSrc), 'shadow source has no external url');
+  ok(!shadowSrc.includes('SHADOW_BTD_LIVE') && !read('api/_lib/shadow.js').includes('SHADOW_BTD_LIVE'), 'live flag is not read');
 
   const catalog = read('docs/security/FAZ2_CANLI_KATALOG_KONTROL.sql');
   const catalogSql = catalog.split('\n').filter((line) => !/^\s*--/.test(line)).join('\n');
@@ -197,11 +199,12 @@ async function shadowHttp() {
   process.env.SUPABASE_ANON_KEY = 'anon-key';
   process.env.BTD_API_KEY = 'gate';
   process.env.BTD_SHADOW_SIGNING_KEY = 'ornek-imza-anahtari';
+  process.env.BTD_SHADOW_SERVICE_VERIFY_KEY = 'ornek-dogrulama-anahtari';
   process.env.BTD_RATE_LIMIT = '20';
   process.env.SUPABASE_SECRET_KEY = 'super-secret-value';
   const firma = '11111111-1111-4111-8111-111111111111';
-  const service = shadow.signIdentity({
-    sub: 'shadow-reader',
+  shadow.resetReplay();
+  const service = shadow.signUserConsent({
     firmaId: firma,
     secret: 'ornek-imza-anahtari',
     nowSec: Math.floor(Date.now() / 1000),
@@ -247,12 +250,13 @@ async function shadowHttp() {
     headers: {
       'x-api-key': 'gate',
       authorization: 'Bearer good-token',
-      'x-btd-service-identity': service.token,
+      'x-btd-user-consent': service.token,
     },
   }, okRes);
   ok(okRes.statusCode === 200 && okRes.body.freshness === 'UNAVAILABLE', 'shadow down is unavailable');
   ok(okRes.body.data === null && okRes.body.writes === false, 'no shadow rows');
-  ok(okRes.body.identity.aud === 'shadow-btd-read-v1', 'http audience');
+  ok(!Object.prototype.hasOwnProperty.call(okRes.body, 'error') && okRes.body.businessError !== true, 'unavailable is not a business error');
+  ok(okRes.body.identity.aud === 'shadow-btd-read-v1' && okRes.body.identity.iss === 'btd', 'http audience');
   ok(!JSON.stringify(okRes.body).includes('super-secret-value'), 'response hides secret');
   ok(urls.every((url) => url.startsWith('https://example.supabase.co/')), 'no shadow host called');
   ok(!okRes.body.identity.token, 'raw token is not returned');
