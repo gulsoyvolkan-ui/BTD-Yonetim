@@ -19,6 +19,8 @@ Yedekten sonra. Bayraklar dosya başında. Anon’a izin veren adım yoktur.
 
 `002`, `003` ve `016` çalıştırılmaz. `016` anon okumayı geri açmaz; durur. Geniş anon `SELECT`/`ALL` geri açma önerilmez.
 
+`030_shadow_kimlik.sql` ve `031_shadow_kopru.sql` bu sırada yoktur. Üretimde çalıştırılmaz. Staging adımları `docs/security/FAZ9_STAGING_KOPRU.md` içindedir ve şu an NO-GO’dur.
+
 `014` demo politikayı silmez. `017` ve `015` kapatır. `015` içindeki tablo grant’i personel kolonunu yeniden açmasın diye dosyanın sonunda kolon daraltması vardır.
 
 ## Geri dönüş
