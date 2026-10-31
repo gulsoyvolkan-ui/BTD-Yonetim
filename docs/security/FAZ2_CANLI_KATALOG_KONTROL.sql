@@ -54,3 +54,22 @@ WHERE table_schema = 'public'
   AND table_name = 'personel'
   AND column_name IN ('tc_no', 'maas')
 ORDER BY grantee, column_name, privilege_type;
+
+-- Dört fonksiyonun güvenlik tanımı ve çalıştırma listesi.
+-- proacl NULL ise Postgres varsayılanı PUBLIC execute olabilir.
+-- Bu sorgu çalıştırılmadı. Sonuç üretim GO değildir.
+SELECT n.nspname AS schema_name,
+       p.proname AS function_name,
+       p.prosecdef AS security_definer,
+       p.proconfig AS config,
+       p.proacl::text AS execute_acl
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname = 'public'
+  AND p.proname IN (
+    'btd_oturum_baglami',
+    'btd_firma_erisir',
+    'btd_personel_hassas_liste',
+    'btd_personel_hassas_yaz'
+  )
+ORDER BY p.proname, p.oid;
