@@ -4,8 +4,14 @@ const crypto = require('crypto');
 
 const AUDIENCE = 'shadow-btd-read-v1';
 const ISSUER = 'btd';
+const CONSENT_SUBJECT = 'user-consent';
+const SERVICE_ISSUER = 'shadow';
+const SERVICE_AUDIENCE = 'btd-shadow-service-v1';
+const SERVICE_SUBJECT = 'shadow-service';
 const PERMISSION = 'shadow.read';
 const MAX_TTL_SEC = 300;
+const REPLAY_LIMIT = 2000;
+const replay = new Map();
 const FRESH_MS = 5 * 60 * 1000;
 const FIELDS = ['ref', 'durum', 'adet', 'guncellendi', 'kaynak_id'];
 const SOURCE_ID = 'btd-operasyon';
@@ -41,27 +47,59 @@ function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
 }
 
-function signIdentity({ sub, firmaId, secret, nowSec, ttlSec }) {
-  const ttl = Number(ttlSec);
-  const now = Number(nowSec);
-  if (!sub || !firmaId || !secret) return null;
-  if (!Number.isFinite(ttl) || ttl < 1 || ttl > MAX_TTL_SEC) return null;
-  if (!Number.isFinite(now)) return null;
-  const payload = {
-    iss: ISSUER,
-    aud: AUDIENCE,
-    sub: String(sub),
-    firma_id: String(firmaId),
-    perm: PERMISSION,
-    iat: now,
-    exp: now + ttl,
-  };
+function sameSecret(left, right) {
+  const a = Buffer.from(String(left || ''));
+  const b = Buffer.from(String(right || ''));
+  if (!a.length || !b.length || a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
+
+function signClaims(payload, secret) {
   const body = b64url(JSON.stringify(payload));
   const mac = crypto.createHmac('sha256', String(secret)).update(body).digest();
   return { token: `${body}.${b64url(mac)}`, claims: payload };
 }
 
-function verifyIdentity(token, secret, nowSec, expectedFirmaId) {
+function signUserConsent({ firmaId, secret, nowSec, ttlSec, jti }) {
+  const ttl = Number(ttlSec);
+  const now = Number(nowSec);
+  const id = jti == null || jti === '' ? crypto.randomUUID() : String(jti);
+  if (!firmaId || !secret) return null;
+  if (!Number.isFinite(ttl) || ttl < 1 || ttl > MAX_TTL_SEC) return null;
+  if (!Number.isFinite(now)) return null;
+  if (!id || id.length > 128 || /\s/.test(id)) return null;
+  return signClaims({
+    iss: ISSUER,
+    aud: AUDIENCE,
+    sub: CONSENT_SUBJECT,
+    firma_id: String(firmaId),
+    perm: PERMISSION,
+    jti: id,
+    iat: now,
+    exp: now + ttl,
+  }, secret);
+}
+
+function resetReplay() {
+  replay.clear();
+}
+
+function rememberJti(iss, jti, exp, nowSec) {
+  const now = Number(nowSec);
+  for (const [key, until] of replay) {
+    if (until <= now) replay.delete(key);
+  }
+  while (replay.size >= REPLAY_LIMIT) {
+    const oldest = replay.keys().next().value;
+    replay.delete(oldest);
+  }
+  const key = `${iss}\n${jti}`;
+  if (replay.has(key)) return false;
+  replay.set(key, exp);
+  return true;
+}
+
+function readSigned(token, secret) {
   const parts = String(token || '').split('.');
   if (parts.length !== 2 || !secret) return { ok: false, reason: 'malformed' };
   const mac = crypto.createHmac('sha256', String(secret)).update(parts[0]).digest();
@@ -80,18 +118,59 @@ function verifyIdentity(token, secret, nowSec, expectedFirmaId) {
   } catch {
     return { ok: false, reason: 'malformed' };
   }
-  if (!claims || claims.iss !== ISSUER) return { ok: false, reason: 'issuer' };
-  if (claims.aud !== AUDIENCE) return { ok: false, reason: 'audience' };
-  if (claims.perm !== PERMISSION) return { ok: false, reason: 'permission' };
-  if (!claims.sub || String(claims.sub).includes('.')) return { ok: false, reason: 'subject' };
-  if (expectedFirmaId && claims.firma_id !== expectedFirmaId) return { ok: false, reason: 'firma' };
+  if (!claims || typeof claims !== 'object') return { ok: false, reason: 'malformed' };
+  return { ok: true, claims };
+}
+
+function checkLifetime(claims, nowSec) {
   const now = Number(nowSec);
   if (!Number.isFinite(claims.iat) || !Number.isFinite(claims.exp) || !Number.isFinite(now)) {
     return { ok: false, reason: 'time' };
   }
-  if (claims.exp - claims.iat > MAX_TTL_SEC || claims.exp <= now || claims.iat > now) {
+  if (claims.exp - claims.iat < 1 || claims.exp - claims.iat > MAX_TTL_SEC || claims.exp <= now || claims.iat > now) {
     return { ok: false, reason: 'expired' };
   }
+  return { ok: true };
+}
+
+function checkReplay(claims, nowSec) {
+  const jti = claims.jti == null ? '' : String(claims.jti);
+  if (!jti || jti.length > 128 || /\s/.test(jti)) return { ok: false, reason: 'jti' };
+  if (!rememberJti(claims.iss, jti, claims.exp, nowSec)) return { ok: false, reason: 'replay' };
+  return { ok: true };
+}
+
+function verifyUserConsent(token, secret, nowSec, expectedFirmaId) {
+  const read = readSigned(token, secret);
+  if (!read.ok) return read;
+  const claims = read.claims;
+  if (claims.iss !== ISSUER) return { ok: false, reason: 'issuer' };
+  if (claims.aud !== AUDIENCE) return { ok: false, reason: 'audience' };
+  if (claims.perm !== PERMISSION) return { ok: false, reason: 'permission' };
+  if (claims.sub !== CONSENT_SUBJECT) return { ok: false, reason: 'subject' };
+  const life = checkLifetime(claims, nowSec);
+  if (!life.ok) return life;
+  const seen = checkReplay(claims, nowSec);
+  if (!seen.ok) return seen;
+  if (expectedFirmaId && claims.firma_id !== expectedFirmaId) return { ok: false, reason: 'firma' };
+  return { ok: true, claims };
+}
+
+function verifyServiceIdentity(token, verifyKey, nowSec, expectedFirmaId, signingKey) {
+  if (!verifyKey) return { ok: false, reason: 'malformed' };
+  if (signingKey && sameSecret(verifyKey, signingKey)) return { ok: false, reason: 'key' };
+  const read = readSigned(token, verifyKey);
+  if (!read.ok) return read;
+  const claims = read.claims;
+  if (claims.iss !== SERVICE_ISSUER) return { ok: false, reason: 'issuer' };
+  if (claims.aud !== SERVICE_AUDIENCE) return { ok: false, reason: 'audience' };
+  if (claims.perm !== PERMISSION) return { ok: false, reason: 'permission' };
+  if (claims.sub !== SERVICE_SUBJECT) return { ok: false, reason: 'subject' };
+  const life = checkLifetime(claims, nowSec);
+  if (!life.ok) return life;
+  const seen = checkReplay(claims, nowSec);
+  if (!seen.ok) return seen;
+  if (expectedFirmaId && claims.firma_id !== expectedFirmaId) return { ok: false, reason: 'firma' };
   return { ok: true, claims };
 }
 
@@ -195,6 +274,10 @@ function assertReadOnly(method) {
 module.exports = {
   AUDIENCE,
   ISSUER,
+  CONSENT_SUBJECT,
+  SERVICE_ISSUER,
+  SERVICE_AUDIENCE,
+  SERVICE_SUBJECT,
   PERMISSION,
   MAX_TTL_SEC,
   FRESH_MS,
@@ -210,7 +293,10 @@ module.exports = {
   classifyFreshness,
   projectFields,
   summarizeOperational,
-  signIdentity,
-  verifyIdentity,
+  sameSecret,
+  signUserConsent,
+  verifyUserConsent,
+  verifyServiceIdentity,
+  resetReplay,
   assertReadOnly,
 };
