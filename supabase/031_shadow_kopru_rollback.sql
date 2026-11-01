@@ -1,8 +1,13 @@
 -- BTD Faz 9 köprü geri alma.
 -- Canlıda ÇALIŞTIRILMADI. Jti tablosu, servis kaydı ve btd_shadow_okuyucu silinmez.
 -- anon, authenticated ve service_role silinmez.
+-- Okuyucunun şema ayrıcalığı burada durur; fonksiyon çağrısı sürer.
+-- 030 geri alması rolü silmeden önce o ayrıcalığı kaldırır.
+-- Dosya tek transaction’dır. Hata olursa köprü rolü durur.
 -- Aynı oturumda, dosyadan önce:
 --   SELECT set_config('btd.allow_shadow_kimlik', 'on', false);
+
+BEGIN;
 
 DO $guard$
 BEGIN
@@ -27,3 +32,5 @@ BEGIN
   END IF;
 END
 $drop_bridge$;
+
+COMMIT;

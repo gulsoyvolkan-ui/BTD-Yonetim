@@ -1,7 +1,11 @@
 -- BTD Faz 8 geri alma.
 -- Canlıda ÇALIŞTIRILMADI. anon, authenticated ve service_role rolleri silinmez.
+-- İş tablolarına dokunulmaz. Dosya tek transaction’dır.
+-- Okuyucunun public şema ayrıcalığı, rol silinmeden önce geri alınır.
 -- Aynı oturumda, dosyadan önce:
 --   SELECT set_config('btd.allow_shadow_kimlik', 'on', false);
+
+BEGIN;
 
 DO $guard$
 BEGIN
@@ -42,7 +46,10 @@ $drop_bridge$;
 DO $drop_reader$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'btd_shadow_okuyucu') THEN
+    REVOKE ALL ON SCHEMA public FROM btd_shadow_okuyucu;
     DROP ROLE btd_shadow_okuyucu;
   END IF;
 END
 $drop_reader$;
+
+COMMIT;
