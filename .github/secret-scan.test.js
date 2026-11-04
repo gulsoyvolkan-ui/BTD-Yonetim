@@ -27,7 +27,8 @@ function main() {
   ok(rules('CREATE ROLE service_role NOLOGIN;').length === 0, 'role name is not a credential');
   ok(rules("SET ROLE service_role; SELECT 1;").length === 0, 'set role is not a credential');
   ok(rules('REVOKE ALL FROM service_role;').length === 0, 'revoke names the role');
-  ok(rules('# SUPABASE_SERVICE_ROLE=').length === 0, 'empty assignment is not a credential');
+  const serviceEnv = 'SUPABASE_SERVICE' + '_ROLE';
+  ok(rules('# ' + serviceEnv + '=').length === 0, 'empty assignment is not a credential');
   ok(rules('# Okuyucu adresi service_role değildir.').length === 0, 'comment names the role');
   ok(
     rules(`service_role # ${'vcp_'}${'a'.repeat(20)}`).includes('vercel_token'),
@@ -40,7 +41,7 @@ function main() {
 
   const serviceJwt = jwt({ iss: 'supabase', role: 'service_role', ref: 'example' });
   ok(rules(serviceJwt).includes('service_role_jwt'), 'service_role JWT payload is a credential');
-  ok(rules(`SUPABASE_SERVICE_ROLE_KEY=${serviceJwt}`).includes('service_role_assignment'), 'assignment with a value is a credential');
+  ok(rules(serviceEnv + '_KEY=' + serviceJwt).includes('service_role_assignment'), 'assignment with a value is a credential');
   ok(rules(jwt({ iss: 'supabase', role: 'anon', ref: 'example' })).length === 0, 'anon JWT is not a service credential');
   ok(rules(jwt({ role: 'authenticated' })).length === 0, 'authenticated JWT is not a service credential');
 
@@ -48,7 +49,7 @@ function main() {
   ok(rules('ghp_' + 'c'.repeat(20)).includes('github_pat'), 'github pat shape');
   ok(rules('github_pat_' + 'd'.repeat(20)).includes('github_fine_grained'), 'fine grained pat shape');
   ok(rules('-----BEGIN ' + 'PRIVATE KEY-----').includes('private_key'), 'private key block');
-  ok(rules('VERCEL_TOKEN=' + 'e'.repeat(8)).includes('vercel_assignment'), 'vercel assignment');
+  ok(rules('VERCEL_' + 'TOKEN=' + 'e'.repeat(8)).includes('vercel_assignment'), 'vercel assignment');
 
   const root = path.join(__dirname, '..');
   const config = fs.readFileSync(path.join(root, 'js', 'supabase-config.js'), 'utf8');
