@@ -70,7 +70,7 @@ Onay: HMAC-SHA256, `base64url(json).base64url(imza)`. Yayıncı `btd`, izleyici 
 
 Servis kimliği ayrıdır. SHADOW `iss=shadow` imzalar. Başlık `x-shadow-service-identity`. İzleyici `btd-shadow-service-v1`, konu `shadow-service`. BTD bunu imza anahtarından başka bir doğrulama anahtarıyla kontrol eder. Gövde `kv` anahtar sürümünü taşır. `use` yoksa jeton kısa tekrarlıdır; süre içinde aynı `jti` ikinci okumayı düşürmez. `use: "once"` tek kullanımlıktır. Bu çağrıda `Authorization` ve `x-btd-user-consent` yoktur.
 
-Firma listesi imzadan okunmaz. BTD `btd_servis_kayit` satırına bakar. Kayıt firmayı içermiyorsa 403. Dar okuma fonksiyonu `btd_shadow_okuyucu` rolüne bağlıdır. Rol yoksa yanıt `data: null`, `freshness: UNAVAILABLE`, `read: BLOCKED` olur. Bu sıfır toplam değildir ve iş hatası değildir. `service_role` bu okumayı çalıştıramaz.
+Firma listesi imzadan okunmaz. BTD `btd_servis_kayit` satırına bakar. Kayıt firmayı içermiyorsa 403. İptal, kapalı kayıt, süre ve anahtar sürümü 401 döner; bunlar `UNAVAILABLE` değildir. Dar okuma `btd_shadow_okuyucu` rolündedir ve bu rol `NOLOGIN`dir. SHADOW Postgres bağlantısı almaz. BTD kendi `btd_shadow_kopru` girişi yoksa, uzaksa veya kanıtlanmazsa yanıt `data: null`, `freshness: UNAVAILABLE`, `read: BLOCKED` olur. Bağlantı koparsa `data: null` ve `UNAVAILABLE` döner; sayı 0 uydurulmaz. Bu sıfır toplam değildir ve iş hatası değildir. `service_role` bu okumayı çalıştıramaz.
 
 İmza anahtarının adı `BTD_SHADOW_SIGNING_KEY`. Doğrulama anahtarının adı `BTD_SHADOW_SERVICE_VERIFY_KEY`. Sürüm adı `BTD_SHADOW_SERVICE_KEY_VERSION`. Değerler bu nota yazılmaz. İkisi aynı olamaz. Supabase service role bu anahtarların yerine geçmez.
 
@@ -87,7 +87,7 @@ Firma listesi imzadan okunmaz. BTD `btd_servis_kayit` satırına bakar. Kayıt f
 | Jti deposu veya servis kaydı doğrulanamıyor | 503 | `writes: false`, tablo okunmaz |
 | Firma üyeliği yok, onay başka firma veya servis kaydı firmayı içermiyor | 403 | `freshness: PERMISSION_DENIED` |
 | `firma_id` UUID değil | 400 | |
-| Kaynak kesik, bilinmeyen durum, sayım 1000 satırda kesildi veya servis okuması `BLOCKED` | 200 | `freshness: UNAVAILABLE`, `data: null` |
+| Kaynak kesik, bağlantı koptu, bilinmeyen durum, sayım 1000 satırda kesildi veya servis okuması `BLOCKED` | 200 | `freshness: UNAVAILABLE`, `data: null`. Bağlantı kopmasında sayı 0 yoktur. 401 ve 403 bu satıra girmez |
 
 Kısmi sayım dönmez. Hata gövdesine jeton, anahtar veya satır yazılmaz.
 
@@ -111,9 +111,10 @@ SHADOW tarafının yapması gerekenler:
 4. Servis çağrısında yalnız `iss=shadow` ve `x-shadow-service-identity` kullanmak. Kullanıcı jetonu ve onayı bu çağrıya koymamak.
 5. Yalnız `GET /api/shadow-read` çağırmak. Yazma yöntemi göndermemek.
 6. Kullanıcı akışında `firma_id` değerini üyelik listesinden seçmek. Servis akışında firma iznini imzaya yazmak yetki doğurmaz; BTD kaydı karar verir.
-7. Boş 200 yanıtını, `data: null` ile `UNAVAILABLE` değerini ve `read: BLOCKED` değerini iş hatası veya sıfır toplam saymamak. `PERMISSION_DENIED` ile karıştırmamak.
-8. Ham HMAC, Bearer ve API anahtarını loglamamak.
+7. Boş 200 yanıtını, `data: null` ile `UNAVAILABLE` değerini ve `read: BLOCKED` değerini iş hatası veya sıfır toplam saymamak. `PERMISSION_DENIED`, 401 ve 403 ile karıştırmamak. Bağlantı kopmasında gelen `data: null` değeri sıfır iş değildir.
+8. Ham HMAC, Bearer ve API anahtarını loglamamak. Postgres bağlantı dizesi, `btd_shadow_kopru` parolası ve BTD imza anahtarı istenmez.
 9. Servis jetonuna `kv` koymak. Kısa tekrarlı jetonu süre içinde yeniden göndermek serbesttir. Tek kullanımlık onayın aynı `jti` değeri ikinci kez gönderilmez.
+10. BTD tablosuna, `service_role` anahtarına ve Supabase’e SHADOW tarafından bağlanmamak. `SHADOW_BTD_LIVE` açmamak.
 
 ## 8. BTD bağımsızlığı
 

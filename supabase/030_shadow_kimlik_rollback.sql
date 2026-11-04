@@ -23,6 +23,22 @@ DROP TABLE IF EXISTS public.btd_shadow_jti;
 DROP TABLE IF EXISTS public.btd_servis_denetim;
 DROP TABLE IF EXISTS public.btd_servis_kayit;
 
+DO $drop_bridge$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'btd_shadow_kopru') THEN
+    IF EXISTS (
+      SELECT 1
+      FROM pg_auth_members m
+      JOIN pg_roles granted ON granted.oid = m.roleid AND granted.rolname = 'btd_shadow_okuyucu'
+      JOIN pg_roles member ON member.oid = m.member AND member.rolname = 'btd_shadow_kopru'
+    ) THEN
+      REVOKE btd_shadow_okuyucu FROM btd_shadow_kopru;
+    END IF;
+    DROP ROLE btd_shadow_kopru;
+  END IF;
+END
+$drop_bridge$;
+
 DO $drop_reader$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'btd_shadow_okuyucu') THEN

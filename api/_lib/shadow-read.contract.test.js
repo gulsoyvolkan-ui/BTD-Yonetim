@@ -549,6 +549,56 @@ async function main() {
   ok(!JSON.stringify(res.body).includes('parola-degil') && !JSON.stringify(res.body).includes('supabase.co'), 'remote url is not echoed');
   replayLib.setDatabaseConnector(null);
 
+  let readerHits = 0;
+  replayLib.setDatabaseConnector(async () => {
+    readerHits += 1;
+    const error = new Error('connect ECONNREFUSED');
+    throw error;
+  });
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    'x-shadow-service-identity': serviceToken(FIRMA, { jti: 'svc-down' }),
+  }, { readerUrl: 'postgres://btd_shadow_kopru@127.0.0.1:5432/btd_local' });
+  ok(readerHits === 1 && res.statusCode === 200 && res.body.freshness === 'UNAVAILABLE' && res.body.data === null && res.body.read !== 'BLOCKED', 'reader connection failure is unavailable');
+  ok(!JSON.stringify(res.body).includes('geciken_is_emri_adet') && !JSON.stringify(res.body).includes('"adet":0'), 'connection failure does not invent a zero');
+
+  replayLib.setDatabaseConnector(async () => {
+    const error = new Error('bridge_unproven');
+    error.reason = 'bridge';
+    throw error;
+  });
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    'x-shadow-service-identity': serviceToken(FIRMA, { jti: 'svc-bridge' }),
+  }, { readerUrl: 'postgres://btd_shadow_kopru@127.0.0.1:5432/btd_local' });
+  ok(res.statusCode === 200 && res.body.read === 'BLOCKED' && res.body.data === null && res.body.freshness === 'UNAVAILABLE', 'unproven database role stays blocked');
+
+  replayLib.setDatabaseConnector(async () => [{ payload: { ok: false, reason: 'firma' } }]);
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    'x-shadow-service-identity': serviceToken(FIRMA, { jti: 'svc-firma-fn' }),
+  }, { readerUrl: 'postgres://btd_shadow_kopru@127.0.0.1:5432/btd_local' });
+  ok(res.statusCode === 403 && res.body.freshness === 'PERMISSION_DENIED' && res.body.data == null, 'function firm denial stays 403');
+
+  replayLib.setDatabaseConnector(async () => [{ payload: { ok: false, reason: 'revoked' } }]);
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    'x-shadow-service-identity': serviceToken(FIRMA, { jti: 'svc-revoked-fn' }),
+  }, { readerUrl: 'postgres://btd_shadow_kopru@127.0.0.1:5432/btd_local' });
+  ok(res.statusCode === 401 && res.body.freshness !== 'UNAVAILABLE' && res.body.data == null && res.body.read !== 'BLOCKED', 'function revocation stays 401');
+
+  readerHits = 0;
+  replayLib.setDatabaseConnector(async () => {
+    readerHits += 1;
+    return [{ payload: { ok: true, data: { geciken_is_emri_adet: 0, acik_gorev_adet: 0, siparis_ozet: [], guncellendi: null } } }];
+  });
+  res = await call('GET', { firma_id: FIRMA }, {
+    'x-api-key': 'gate',
+    'x-shadow-service-identity': serviceToken(FIRMA, { jti: 'svc-expired-token', nowSec: 1000, ttlSec: 30 }),
+  }, { readerUrl: 'postgres://btd_shadow_kopru@127.0.0.1:5432/btd_local' });
+  ok(readerHits === 0 && res.statusCode === 401 && res.body.freshness !== 'UNAVAILABLE', 'expired service token does not read and is not unavailable');
+  replayLib.setDatabaseConnector(null);
+
   const sql = fs.readFileSync(path.join(root, 'supabase/030_shadow_kimlik.sql'), 'utf8');
   const rollback = fs.readFileSync(path.join(root, 'supabase/030_shadow_kimlik_rollback.sql'), 'utf8');
   ok(sql.includes('tek_kullanim') && sql.includes('kisa_tekrar'), 'sql defines both jti classes');
@@ -557,6 +607,15 @@ async function main() {
   ok(!sql.includes('SUPABASE_SECRET') && !sql.includes('SHADOW_BTD_LIVE'), 'sql has no secret or live flag');
   ok(rollback.includes('DROP TABLE IF EXISTS public.btd_shadow_jti'), 'rollback drops the jti table');
   ok(!/DROP ROLE (anon|authenticated|service_role)/.test(rollback), 'rollback keeps platform roles');
+  ok(sql.includes('search_path = pg_catalog, public, pg_temp'), 'definer search_path pins pg_catalog ahead of temp');
+  const bridgeSql = fs.readFileSync(path.join(root, 'supabase/031_shadow_kopru.sql'), 'utf8');
+  const bridgeRollback = fs.readFileSync(path.join(root, 'supabase/031_shadow_kopru_rollback.sql'), 'utf8');
+  ok(bridgeSql.includes('btd_shadow_kopru') && bridgeSql.includes('NOLOGIN'), 'bridge migration keeps the reader nologin');
+  ok(bridgeSql.includes('INHERIT FALSE') && bridgeSql.includes('SET TRUE'), 'bridge membership is set role only');
+  ok(!/PASSWORD/i.test(bridgeSql) && !bridgeSql.includes('SHADOW_BTD_LIVE'), 'bridge migration has no password or live flag');
+  ok(!/GRANT[\s\S]*TO\s+service_role/i.test(bridgeSql) && !/CREATE\s+ROLE\s+service_role/i.test(bridgeSql), 'bridge migration does not grant service role');
+  ok(!/\bBYPASSRLS\b/.test(bridgeSql.replace(/NOBYPASSRLS/g, '')), 'bridge migration does not grant bypassrls');
+  ok(bridgeRollback.includes('DROP ROLE btd_shadow_kopru') && !bridgeRollback.includes('DROP TABLE'), 'bridge rollback drops only the login role');
   const shadowSrc = fs.readFileSync(path.join(root, 'api/_lib/shadow.js'), 'utf8');
   ok(!shadowSrc.includes('REPLAY_LIMIT') && !shadowSrc.includes('rememberJti'), 'authoritative replay is not a process map');
 

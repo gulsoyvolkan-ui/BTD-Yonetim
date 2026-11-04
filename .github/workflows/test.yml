@@ -22,3 +22,21 @@ jobs:
         run: node api/_lib/shadow-read.contract.test.js
       - name: SHADOW read live RLS
         run: node api/_lib/shadow-read.rls.test.js
+
+  postgres:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: PostgreSQL
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql postgresql-contrib
+          sudo service postgresql start
+      - name: pg driver
+        run: npm install --prefix /tmp/btd-pg pg
+      - name: Faz 8 jti store
+        run: node api/_lib/shadow-kimlik.pg.test.js
+      - name: Faz 9 bridge
+        run: NODE_PATH=/tmp/btd-pg/node_modules node api/_lib/shadow-kopru.pg.test.js
