@@ -1,0 +1,134 @@
+-- AE-BTD-25C test harness. Yalnizca atilan yerel veritabaninda calisir.
+-- supabase/drafts/is_talebi_taslak_v1.sql dosyasinin yazma engeli burada yoktur
+-- ve o dosyadan kaldirilmaz. Bu dosya uretim migration'i degildir.
+-- approve() ve canli yazma yolu bu dosyayla acilmaz.
+-- Sentetik kimlikler. Gercek posta, musteri ve uretim verisi yok.
+
+CREATE TABLE public.talep_uyelik (
+  rolname   TEXT PRIMARY KEY,
+  firma_id  UUID NOT NULL
+);
+
+CREATE TABLE public.gorevler (
+  id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  firma_id  UUID NOT NULL,
+  durum     TEXT NOT NULL CHECK (durum IN ('Açık', 'Devam', 'Bitti', 'İptal'))
+);
+
+CREATE TABLE public.is_talepleri (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  firma_id            UUID NOT NULL,
+  tenant_id           TEXT NOT NULL,
+  provider            TEXT NOT NULL,
+  mailbox             TEXT NOT NULL,
+  actor_rol           TEXT NOT NULL,
+  source_message_ref  TEXT NOT NULL,
+  correlation_id      TEXT NOT NULL,
+  idempotency_key     TEXT NOT NULL,
+  content_hash        TEXT NOT NULL,
+  review_status       TEXT NOT NULL CHECK (review_status IN ('taslak', 'incelemede', 'reddedildi', 'onaylandi')),
+  UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)
+);
+
+CREATE ROLE btd_talep_a NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEROLE NOCREATEDB;
+CREATE ROLE btd_talep_b NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEROLE NOCREATEDB;
+
+ALTER TABLE public.talep_uyelik ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.talep_uyelik FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.is_talepleri ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.is_talepleri FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.gorevler ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gorevler FORCE ROW LEVEL SECURITY;
+
+REVOKE ALL ON public.talep_uyelik FROM PUBLIC;
+REVOKE ALL ON public.is_talepleri FROM PUBLIC;
+REVOKE ALL ON public.gorevler FROM PUBLIC;
+GRANT SELECT ON public.talep_uyelik TO btd_talep_a, btd_talep_b;
+GRANT SELECT, INSERT ON public.is_talepleri TO btd_talep_a, btd_talep_b;
+
+CREATE POLICY btd_uyelik_oku ON public.talep_uyelik
+  FOR SELECT TO btd_talep_a, btd_talep_b
+  USING (rolname = current_user);
+
+CREATE POLICY btd_talep_uye ON public.is_talepleri
+  FOR ALL TO btd_talep_a, btd_talep_b
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.talep_uyelik u
+      WHERE u.rolname = current_user
+        AND u.firma_id = is_talepleri.firma_id
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.talep_uyelik u
+      WHERE u.rolname = current_user
+        AND u.firma_id = is_talepleri.firma_id
+    )
+  );
+
+CREATE OR REPLACE FUNCTION public.btd_talep_kaydet_test(
+  p_idempotency_key text,
+  p_content_hash text,
+  p_source_message_ref text,
+  p_correlation_id text,
+  p_tenant text,
+  p_provider text,
+  p_mailbox text
+) RETURNS uuid
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $$
+DECLARE
+  fid uuid;
+  yeni uuid;
+  mevcut_id uuid;
+  mevcut_hash text;
+BEGIN
+  IF (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user) THEN
+    RAISE EXCEPTION 'rol siniri yok';
+  END IF;
+
+  SELECT u.firma_id INTO fid
+  FROM public.talep_uyelik u
+  WHERE u.rolname = current_user
+  LIMIT 1;
+  IF fid IS NULL THEN
+    RAISE EXCEPTION 'uye degil' USING ERRCODE = '42501';
+  END IF;
+
+  INSERT INTO public.is_talepleri (
+    firma_id, tenant_id, provider, mailbox, actor_rol,
+    source_message_ref, correlation_id, idempotency_key,
+    content_hash, review_status
+  ) VALUES (
+    fid, p_tenant, p_provider, p_mailbox, current_user,
+    p_source_message_ref, p_correlation_id, p_idempotency_key,
+    p_content_hash, 'incelemede'
+  )
+  ON CONFLICT (tenant_id, provider, mailbox, firma_id, idempotency_key)
+  DO NOTHING
+  RETURNING id INTO yeni;
+
+  IF yeni IS NOT NULL THEN
+    RETURN yeni;
+  END IF;
+
+  SELECT id, content_hash INTO mevcut_id, mevcut_hash
+  FROM public.is_talepleri
+  WHERE tenant_id = p_tenant
+    AND provider = p_provider
+    AND mailbox = p_mailbox
+    AND firma_id = fid
+    AND idempotency_key = p_idempotency_key;
+
+  IF mevcut_hash IS DISTINCT FROM p_content_hash THEN
+    RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE = '23505';
+  END IF;
+  RETURN mevcut_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.btd_talep_kaydet_test(text, text, text, text, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.btd_talep_kaydet_test(text, text, text, text, text, text, text) TO btd_talep_a, btd_talep_b;
