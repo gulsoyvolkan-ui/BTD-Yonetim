@@ -58,6 +58,8 @@ function counts(ledger) {
 
 async function main() {
   ok(draft.LIVE_WRITES_ENABLED === false, 'canli yazma kapali');
+  ok(draft.MEMORY_IS_DATABASE_PROOF === false, 'bellek simulasyonu veritabani kaniti degildir');
+  ok(draft.PERSISTENT_IDEMPOTENCY === 'design-only', 'kalici idempotency sql tasariminda');
   ok(draft.REVIEW_STATUSES.every((item) => !draft.GOREV_DURUMLARI.includes(item)), 'inceleme durumlari gorev durumundan ayri');
   ok(draft.GOREV_DURUMLARI.join('|') === 'Açık|Devam|Bitti|İptal', 'gorev durum kumesi ayni');
 
@@ -156,6 +158,7 @@ async function main() {
 
   const done = await draft.commitDesignedTransaction(reviewLedger, ready.draft.id, member());
   ok(done.ok === true && done.kod === 'GV-TM-0001' && done.actor_auth_id === ACTOR, 'tasarim transaction gorev kodunu sunucuda uretir');
+  ok(done.database_proof === false && done.persistence === 'memory-simulation', 'onay simulasyonu veritabani kaniti degildir');
   ok(reviewLedger.gorevler.length === before.gorevler + 1 && reviewLedger.denetim.length === before.denetim + 1, 'gorev ve audit birlikte basarili');
   const gorev = reviewLedger.gorevler[reviewLedger.gorevler.length - 1];
   const onay = reviewLedger.denetim[reviewLedger.denetim.length - 1];
@@ -186,7 +189,8 @@ async function main() {
   const raiseAt = sql.indexOf('RAISE EXCEPTION');
   const createAt = sql.indexOf('CREATE TABLE');
   ok(raiseAt !== -1 && createAt !== -1 && raiseAt < createAt, 'taslak sql ilk ifadede durur');
-  ok(sql.includes('UYGULANMADI') && sql.includes('UNIQUE (firma_id, idempotency_key)'), 'taslak tekillik tasarimi durur');
+  ok(sql.includes('UYGULANMADI') && sql.includes('UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)'), 'taslak tekillik tasarimi durur');
+  ok(sql.includes('veritabani kaniti degildir'), 'sql bellek testini kanit saymaz');
   ok(!sql.includes('ALTER TABLE public.gorevler') && !sql.includes('ALTER TABLE public.denetim_olaylari'), 'mevcut tablolar degistirilmez');
   let cursor = 0;
   for (const step of draft.TRANSACTION_STEPS) {

@@ -26,3 +26,5 @@ jobs:
         run: node api/_lib/shadow-read.rls.test.js
       - name: Business request draft
         run: node api/_lib/business-request-draft.test.js
+      - name: Mail intake mapping
+        run: node api/_lib/mail-intake-map.test.js

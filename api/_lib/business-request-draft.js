@@ -9,10 +9,14 @@ const GOREV_DURUMLARI = Object.freeze(['Açık', 'Devam', 'Bitti', 'İptal']);
 const REQUEST_CATEGORIES = Object.freeze(['teklif', 'teknik', 'genel']);
 const TRANSACTION_STEPS = Object.freeze(['yetki', 'idempotency', 'gorev', 'denetim']);
 const LIVE_WRITES_ENABLED = false;
+const MEMORY_IS_DATABASE_PROOF = false;
+const PERSISTENT_IDEMPOTENCY = 'design-only';
 const AUDIT_SOURCE = 'is_talepleri';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY = /^[a-z0-9][a-z0-9_-]{7,127}$/;
+const SOURCE_REF = /^[\u0020-\u007e]{1,200}$/;
+const FINGERPRINT = /^[a-f0-9]{64}$/;
 const TOKEN = /^[a-z0-9][a-z0-9_-]{0,39}$/;
 const FIRMA_KOD = /^(TM|BM|DV)$/;
 const PII_KEYS = new Set([
@@ -66,6 +70,7 @@ function canonical(record) {
     request_category: record.request_category,
     missing_information: record.missing_information,
     evidence_refs: record.evidence_refs,
+    detail_fingerprint: record.detail_fingerprint || '',
   });
 }
 
@@ -95,7 +100,17 @@ function serverContext(input) {
   if (!firmaIds.includes(firmaId)) {
     return { ok: false, status: 403, code: 'uye_degil' };
   }
-  return { ok: true, actorAuthId, firmaId, firmaKod, firmaIds, actorKind: 'human' };
+  let intakeScope = null;
+  if (input.tenantId != null || input.provider != null || input.mailbox != null) {
+    const tenantId = String(input.tenantId || '');
+    const provider = String(input.provider || '');
+    const mailbox = String(input.mailbox || '');
+    if (!TOKEN.test(tenantId) || !TOKEN.test(provider) || !TOKEN.test(mailbox)) {
+      return { ok: false, status: 403, code: 'posta_baglami' };
+    }
+    intakeScope = { tenantId, provider, mailbox };
+  }
+  return { ok: true, actorAuthId, firmaId, firmaKod, firmaIds, actorKind: 'human', intakeScope };
 }
 
 function parseBody(body) {
@@ -108,8 +123,14 @@ function parseBody(body) {
   const idempotencyKey = String(body.idempotency_key || '');
   const sourceRef = String(body.source_message_ref || '');
   const correlationId = String(body.correlation_id || '');
-  if (!KEY.test(idempotencyKey) || !KEY.test(sourceRef) || !KEY.test(correlationId)) {
+  if (!KEY.test(idempotencyKey) || !KEY.test(correlationId)) {
     return { ok: false, status: 400, code: 'anahtar' };
+  }
+  if (!SOURCE_REF.test(sourceRef)) return { ok: false, status: 400, code: 'kaynak' };
+  let detailFingerprint = '';
+  if (body.detail_fingerprint != null && body.detail_fingerprint !== '') {
+    detailFingerprint = String(body.detail_fingerprint);
+    if (!FINGERPRINT.test(detailFingerprint)) return { ok: false, status: 400, code: 'fingerprint' };
   }
   if (!REQUEST_CATEGORIES.includes(body.request_category)) {
     return { ok: false, status: 400, code: 'request_category' };
@@ -136,6 +157,7 @@ function parseBody(body) {
       request_category: body.request_category,
       missing_information: missing.value,
       evidence_refs: evidence.value,
+      detail_fingerprint: detailFingerprint,
     },
   };
 }
@@ -189,8 +211,17 @@ function restoreState(ledger, snap) {
   ledger.counters = snap.counters;
 }
 
-function findDraft(ledger, firmaId, idempotencyKey) {
-  return ledger.drafts.find((row) => row.firma_id === firmaId && row.idempotency_key === idempotencyKey) || null;
+function scopeKeyOf(context) {
+  if (!context.intakeScope) return '';
+  const scope = context.intakeScope;
+  return `${scope.tenantId}:${scope.provider}:${scope.mailbox}`;
+}
+
+function findDraft(ledger, context, idempotencyKey) {
+  const scopeKey = scopeKeyOf(context);
+  return ledger.drafts.find((row) => row.firma_id === context.firmaId
+    && row.idempotency_key === idempotencyKey
+    && (row.scope_key || '') === scopeKey) || null;
 }
 
 function acceptDraft(ledger, body, contextInput) {
@@ -225,8 +256,8 @@ function acceptDraft(ledger, body, contextInput) {
   }
   const record = parsed.record;
   const hash = contentHash(record);
-  return withLock(ledger, `idem:${context.firmaId}:${record.idempotency_key}`, () => {
-    const existing = findDraft(ledger, context.firmaId, record.idempotency_key);
+  return withLock(ledger, `idem:${scopeKeyOf(context)}:${context.firmaId}:${record.idempotency_key}`, () => {
+    const existing = findDraft(ledger, context, record.idempotency_key);
     if (existing) {
       if (existing.content_hash !== hash) {
         return {
@@ -257,6 +288,8 @@ function acceptDraft(ledger, body, contextInput) {
       content_hash: hash,
       review_status: reviewFor(record),
       gorev_kod: '',
+      scope_key: scopeKeyOf(context),
+      persistence: 'memory-simulation',
     };
     try {
       ledger.drafts.push(draft);
@@ -413,6 +446,8 @@ function commitDesignedTransaction(ledger, draftId, contextInput, options) {
         steps,
         rolledBack: false,
         committed: false,
+        persistence: 'memory-simulation',
+        database_proof: false,
         actor_auth_id: context.actorAuthId,
       };
     } catch (err) {
@@ -436,6 +471,8 @@ module.exports = {
   REQUEST_CATEGORIES,
   TRANSACTION_STEPS,
   LIVE_WRITES_ENABLED,
+  MEMORY_IS_DATABASE_PROOF,
+  PERSISTENT_IDEMPOTENCY,
   AUDIT_SOURCE,
   contentHash,
   createLedger,

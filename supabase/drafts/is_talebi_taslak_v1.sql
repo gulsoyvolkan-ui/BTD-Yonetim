@@ -1,5 +1,7 @@
 -- AE-BTD-25B. Business Request Draft v1 TASLAK.
 -- UYGULANMADI. Calistirma yok. Canli, uretim ve Supabase SQL Editor hedef degildir.
+-- Kalici idempotency ve transaction yalniz bu tasarimdadir.
+-- Node bellek simulasyonu bu dosyayi calistirmaz ve veritabani kaniti degildir.
 -- Bayrak yoktur. Ilk ifade her zaman durur; alttaki DDL bu PR'da erisilmez.
 -- saveTask, nextCode, public.gorevler, public.denetim_olaylari, public.firmalar,
 -- public.kullanicilar ve mevcut RLS politikalari bu dosyada degistirilmez.
@@ -18,6 +20,8 @@
 -- Guvenilir baglam auth.uid() ve public.btd_firma_erisir ile kurulur.
 -- Idempotency: ayni anahtar ve ayni content_hash mevcut satiri dondurur.
 -- Ayni anahtar ve farkli content_hash sessiz kabul degildir; cakisma firlatilir.
+-- source_message_ref, correlation_id ve idempotency_key ayri kolonlardir.
+-- tenant_id, provider ve mailbox JSON govdesinden degil sunucu baglamindan yazilir.
 -- Gorev kodu is_talebi_sayaclari satir kilidi ile uretilir. Tarayici nextCode kullanilmaz.
 -- Onay tek transaction tasarimidir: yetki, idempotency, gorev, denetim.
 -- Biri basarisizsa hepsi rollback. Bu PR'da fonksiyon o yazmayi yapmaz.
@@ -34,6 +38,9 @@ $closed$;
 CREATE TABLE public.is_talepleri (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   firma_id             UUID NOT NULL REFERENCES public.firmalar(id) ON DELETE RESTRICT,
+  tenant_id            TEXT NOT NULL,
+  provider             TEXT NOT NULL,
+  mailbox              TEXT NOT NULL,
   actor_auth_id        UUID NOT NULL,
   schema_version       TEXT NOT NULL CHECK (schema_version = 'business-request-draft.v1'),
   source_message_ref   TEXT NOT NULL,
@@ -47,7 +54,7 @@ CREATE TABLE public.is_talepleri (
   gorev_id             UUID NULL REFERENCES public.gorevler(id) ON DELETE RESTRICT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (firma_id, idempotency_key)
+  UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)
 );
 
 CREATE TABLE public.is_talebi_sayaclari (
