@@ -1,6 +1,8 @@
 # BTD Yonetim - GitHub push sonrasi Vercel Production deploy
 # Secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
 # Uses Deployments API (token cannot authenticate Vercel CLI /v2/user)
+# Production adımı, aynı SHA için Test ve Secret Scan başarıyla bitmeden başlamaz.
+# failure, cancelled ve eksik sonuç kapıyı kapalı tutar.
 
 name: Deploy Vercel
 
@@ -11,13 +13,29 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: vercel-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  gate:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require Test and Secret Scan for this SHA
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/release-gate.js
+
   deploy:
+    needs: gate
+    if: needs.gate.result == 'success' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
     runs-on: ubuntu-latest
     steps:
       - name: Require secrets
