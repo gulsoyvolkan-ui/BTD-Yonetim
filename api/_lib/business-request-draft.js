@@ -217,6 +217,15 @@ function scopeKeyOf(context) {
   return `${scope.tenantId}:${scope.provider}:${scope.mailbox}`;
 }
 
+function sameMessageOtherKey(ledger, context, record) {
+  if (!context.intakeScope) return null;
+  const scopeKey = scopeKeyOf(context);
+  return ledger.drafts.find((row) => row.firma_id === context.firmaId
+    && (row.scope_key || '') === scopeKey
+    && row.source_message_ref === record.source_message_ref
+    && row.idempotency_key !== record.idempotency_key) || null;
+}
+
 function findDraft(ledger, context, idempotencyKey) {
   const scopeKey = scopeKeyOf(context);
   return ledger.drafts.find((row) => row.firma_id === context.firmaId
@@ -256,7 +265,7 @@ function acceptDraft(ledger, body, contextInput) {
   }
   const record = parsed.record;
   const hash = contentHash(record);
-  return withLock(ledger, `idem:${scopeKeyOf(context)}:${context.firmaId}:${record.idempotency_key}`, () => {
+  const write = () => withLock(ledger, `idem:${scopeKeyOf(context)}:${context.firmaId}:${record.idempotency_key}`, () => {
     const existing = findDraft(ledger, context, record.idempotency_key);
     if (existing) {
       if (existing.content_hash !== hash) {
@@ -275,6 +284,18 @@ function acceptDraft(ledger, body, contextInput) {
         created: false,
         draft: publicDraft(existing),
         committed: false,
+        gorevler: ledger.gorevler.length,
+      };
+    }
+    const otherKey = sameMessageOtherKey(ledger, context, record);
+    if (otherKey) {
+      return {
+        ok: false,
+        status: 409,
+        code: 'kaynak_mesaj_ayri_anahtar',
+        draftId: otherKey.id,
+        committed: false,
+        approval_event: false,
         gorevler: ledger.gorevler.length,
       };
     }
@@ -312,6 +333,12 @@ function acceptDraft(ledger, body, contextInput) {
       gorevUnchanged: ledger.gorevler.length === before,
     };
   });
+  if (!context.intakeScope) return write();
+  return withLock(
+    ledger,
+    `msg:${scopeKeyOf(context)}:${context.firmaId}:${record.source_message_ref}`,
+    write,
+  );
 }
 
 function draftById(ledger, id) {

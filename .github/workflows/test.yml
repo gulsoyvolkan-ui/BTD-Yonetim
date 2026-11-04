@@ -28,3 +28,5 @@ jobs:
         run: node api/_lib/business-request-draft.test.js
       - name: Mail intake mapping
         run: node api/_lib/mail-intake-map.test.js
+      - name: Business request v1 mapping
+        run: node api/_lib/business-request-v1-map.test.js

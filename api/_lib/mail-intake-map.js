@@ -5,6 +5,7 @@ const { firmaAllowed } = require('./membership');
 const { audit } = require('./guard');
 const { validateDraft2020 } = require('./json-schema-draft-2020');
 const schema = require('./mail-intake.candidate.schema.json');
+const businessRequestSchema = require('./shadow-business-request.v1.schema.json');
 const {
   SCHEMA_VERSION,
   LIVE_WRITES_ENABLED,
@@ -26,6 +27,53 @@ const GOVERNANCE = Object.freeze({
   review_required: true,
   outbound_allowed: false,
   btd_write_allowed: false,
+});
+const EVIDENCE = Object.freeze({
+  SOURCE_DERIVED: 'SOURCE_DERIVED',
+  REPOSITORY_TEST_ASSERTED: 'REPOSITORY_TEST_ASSERTED',
+  SOURCE_EXPECTED_ONLY_NOT_EXECUTED: 'SOURCE_EXPECTED_ONLY_NOT_EXECUTED',
+});
+const FIXTURE_IDS = Object.freeze([
+  'customer_rfq',
+  'repeat_delivery',
+  'same_source_id_different_idempotency_key',
+  'same_idempotency_key_different_message_id',
+  'payload_conflict',
+  'mail_intake_same_store_replay_and_conflict',
+  'wrong_company',
+  'invalid_human_actor',
+  'missing_sales_adapter',
+  'different_mailbox',
+  'different_company_scope',
+  'concurrent_workers',
+  'lease_lost_held_recovered',
+  'postgres_claim_finish_fail_rows',
+  'postgres_rollback',
+  'btd_business_request_draft_v1',
+]);
+const NOT_EXECUTED_IDS = Object.freeze([
+  'lease_lost_held_recovered',
+  'postgres_claim_finish_fail_rows',
+  'postgres_rollback',
+  'btd_business_request_draft_v1',
+]);
+const BUSINESS_REQUEST_V1_SCHEMA = 'business-request.v1';
+const CANDIDATE_SCHEMA_STATUS = 'UNVERIFIED_CANDIDATE';
+const DATABASE_GO = false;
+const MEMORY_IDEMPOTENCY_SCOPE = 'firma_id+tenant+provider+mailbox+idempotency_key+source_message_ref';
+const POSTGRES_UNIQUE_PROPOSAL = 'tenant_id+provider+mailbox+firma_id+idempotency_key';
+const BUSINESS_REQUEST_CATEGORY = Object.freeze({
+  customer_quotation: 'teklif',
+  supplier_quotation: 'teklif',
+  incoming_invoice: 'genel',
+  account_reconciliation: 'genel',
+  personnel_request: 'genel',
+  general_inquiry: 'genel',
+});
+const BUSINESS_REQUEST_REVIEW = Object.freeze({
+  pending_human_review: 'incelemede',
+  accepted: 'incelemede',
+  rejected: 'reddedildi',
 });
 
 function limits(value) {
@@ -163,6 +211,8 @@ function ack(envelope, result) {
     type_export: SHADOW_TYPE_EXPORT,
     enum_export: SHADOW_ENUM_EXPORT,
     authorization: false,
+    pilot_decision: 'synthetic',
+    approval_event: false,
   };
 }
 
@@ -188,6 +238,8 @@ function deny(status, code, gorevler) {
     persistence: 'memory-simulation',
     database_proof: false,
     authorization: false,
+    pilot_decision: 'synthetic',
+    approval_event: false,
   };
 }
 
@@ -200,6 +252,9 @@ function acceptCandidate(ledger, envelope, serverInput) {
     return Promise.resolve(deny(400, 'sema', ledger.gorevler.length));
   }
   if (!governanceHolds(envelope)) return Promise.resolve(deny(400, 'yonetisim', ledger.gorevler.length));
+  if (serverInput && typeof serverInput.mailbox === 'string' && serverInput.mailbox.includes('@')) {
+    return Promise.resolve(deny(403, 'posta_baglami', ledger.gorevler.length));
+  }
   const context = serverContext(serverInput);
   if (!context.ok) return Promise.resolve(deny(context.status, context.code, ledger.gorevler.length));
   if (!context.intakeScope) return Promise.resolve(deny(403, 'posta_baglami', ledger.gorevler.length));
@@ -227,13 +282,121 @@ function acceptCandidate(ledger, envelope, serverInput) {
   });
 }
 
+function convertBusinessRequestV1(sourceDraft) {
+  if (!sourceDraft || sourceDraft.schema_version !== BUSINESS_REQUEST_V1_SCHEMA) {
+    return { ok: false, status: 400, code: 'schema_ayri', authorization: false, approval_event: false };
+  }
+  const checked = validateDraft2020(businessRequestSchema, sourceDraft);
+  if (!checked.ok) {
+    return { ok: false, status: 400, code: 'business_request_sema', authorization: false, approval_event: false };
+  }
+  const review = BUSINESS_REQUEST_REVIEW[sourceDraft.review_status];
+  if (review !== 'incelemede') {
+    return { ok: false, status: 409, code: 'onay_yok', authorization: false, approval_event: false };
+  }
+  const category = BUSINESS_REQUEST_CATEGORY[sourceDraft.request_category];
+  if (!category) {
+    return { ok: false, status: 400, code: 'request_category', authorization: false, approval_event: false };
+  }
+  const missing = [];
+  for (const item of sourceDraft.missing_information) {
+    const token = normalizeToken(item);
+    if (!token) return { ok: false, status: 400, code: 'olcu', authorization: false, approval_event: false };
+    if (!missing.includes(token)) missing.push(token);
+  }
+  if (!missing.includes('insan-inceleme')) missing.push('insan-inceleme');
+  if (missing.length > MAX_ARRAY) {
+    return { ok: false, status: 400, code: 'olcu', authorization: false, approval_event: false };
+  }
+  const evidence = [];
+  for (const item of sourceDraft.evidence_refs) {
+    const token = normalizeToken(item);
+    if (!token) return { ok: false, status: 400, code: 'olcu', authorization: false, approval_event: false };
+    evidence.push(token);
+  }
+  if (sourceDraft.source_message_ref === sourceDraft.idempotency_key) {
+    return { ok: false, status: 400, code: 'kimlik_ayri', authorization: false, approval_event: false };
+  }
+  return {
+    ok: true,
+    pilot_decision: sourceDraft.review_status === 'accepted' ? 'synthetic' : '',
+    approval_event: false,
+    untrusted_firma_id: sourceDraft.firma_id,
+    body: {
+      schema_version: SCHEMA_VERSION,
+      source_message_ref: sourceDraft.source_message_ref,
+      correlation_id: sourceDraft.correlation_id,
+      idempotency_key: sourceDraft.idempotency_key,
+      request_category: category,
+      missing_information: missing,
+      evidence_refs: evidence,
+    },
+  };
+}
+
+function businessAck(mapped, result) {
+  return {
+    ok: result.ok,
+    status: result.status,
+    code: result.code || '',
+    created: Boolean(result.created),
+    draft_ref: result.draft ? result.draft.id : '',
+    review_status: result.draft ? result.draft.review_status : '',
+    source_schema: BUSINESS_REQUEST_V1_SCHEMA,
+    draft_schema: SCHEMA_VERSION,
+    pilot_decision: mapped.pilot_decision || 'synthetic',
+    approval_event: false,
+    authorization: false,
+    database_proof: false,
+    persistence: 'memory-simulation',
+  };
+}
+
+function acceptBusinessRequest(ledger, sourceDraft, serverInput) {
+  if (serverInput && typeof serverInput.mailbox === 'string' && serverInput.mailbox.includes('@')) {
+    return Promise.resolve(deny(403, 'posta_baglami', ledger.gorevler.length));
+  }
+  const mapped = convertBusinessRequestV1(sourceDraft);
+  if (!mapped.ok) return Promise.resolve(deny(mapped.status, mapped.code, ledger.gorevler.length));
+  const context = serverContext(serverInput);
+  if (!context.ok) return Promise.resolve(deny(context.status, context.code, ledger.gorevler.length));
+  if (!context.intakeScope) return Promise.resolve(deny(403, 'posta_baglami', ledger.gorevler.length));
+  const membership = { status: 200, firmaIds: context.firmaIds };
+  if (!firmaAllowed(membership, context.firmaId)) {
+    return Promise.resolve(deny(403, 'uye_degil', ledger.gorevler.length));
+  }
+  return acceptDraft(ledger, mapped.body, serverInput).then((result) => {
+    audit({
+      event: result.ok ? 'intake_taslak' : 'intake_red',
+      table: 'is_talepleri',
+      method: 'POST',
+      firmaId: context.firmaId,
+      actor: context.actorAuthId,
+      status: result.status,
+    });
+    return businessAck(mapped, result);
+  });
+}
+
 module.exports = {
   MAX_BYTES,
   MAX_TEXT,
   MAX_ARRAY,
   GOVERNANCE,
+  EVIDENCE,
+  FIXTURE_IDS,
+  NOT_EXECUTED_IDS,
+  BUSINESS_REQUEST_V1_SCHEMA,
+  CANDIDATE_SCHEMA_STATUS,
+  DATABASE_GO,
+  MEMORY_IDEMPOTENCY_SCOPE,
+  POSTGRES_UNIQUE_PROPOSAL,
   schema,
+  businessRequestSchema,
   limits,
+  convertCandidateToDraft: mapToDraft,
+  convertBusinessRequestV1,
   acceptCandidate,
+  acceptBusinessRequest,
   approve,
 };
