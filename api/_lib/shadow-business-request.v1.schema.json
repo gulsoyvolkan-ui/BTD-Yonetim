@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "business-request.v1",
+  "title": "BusinessRequestDraft",
+  "description": "Exported type BusinessRequestDraft. schema_version constant business-request.v1. Runtime UUID and regex checks are not part of this type and are not encoded here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "firma_id",
+    "source_type",
+    "source_message_ref",
+    "correlation_id",
+    "idempotency_key",
+    "request_category",
+    "suggested_department",
+    "requested_action",
+    "missing_information",
+    "evidence_refs",
+    "review_status"
+  ],
+  "properties": {
+    "schema_version": { "const": "business-request.v1" },
+    "firma_id": { "type": "string" },
+    "source_type": { "const": "email" },
+    "source_message_ref": { "type": "string" },
+    "correlation_id": { "type": "string" },
+    "idempotency_key": { "type": "string" },
+    "request_category": {
+      "enum": [
+        "customer_quotation",
+        "supplier_quotation",
+        "incoming_invoice",
+        "account_reconciliation",
+        "personnel_request",
+        "general_inquiry"
+      ]
+    },
+    "suggested_department": {
+      "enum": [
+        "itArchitect",
+        "financeDirector",
+        "hrManager",
+        "legalAdvisor",
+        "operationsChief",
+        "qaEngineer",
+        "salesDirector",
+        "marketingCreative"
+      ]
+    },
+    "requested_action": { "type": "string" },
+    "missing_information": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "review_status": {
+      "enum": ["pending_human_review", "accepted", "rejected"]
+    }
+  }
+}

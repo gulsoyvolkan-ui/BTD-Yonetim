@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:autonomous-enterprise:shadow:mail-intake:v1:handoff:draft-1",
+  "title": "SHADOW mail-intake.v1 — cross-team candidate DTO, NOT source-verified",
+  "description": "Proposed integration-review format based on SHADOW AE-SHADOW-03A reports; not a confirmed TypeScript export, not a live BTD API.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_revision",
+    "data_origin",
+    "source",
+    "identity",
+    "classification",
+    "extraction",
+    "routing",
+    "governance",
+    "trace",
+    "evidence_refs"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "mail-intake.v1"
+    },
+    "contract_revision": {
+      "const": "1.0.0-draft.1"
+    },
+    "data_origin": {
+      "const": "MOCK",
+      "description": "For this isolated handoff only. REAL is not authorized."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channel",
+        "source_message_id",
+        "sender",
+        "recipient",
+        "subject"
+      ],
+      "properties": {
+        "channel": {
+          "const": "email"
+        },
+        "source_message_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sender": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recipient": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "company_candidate",
+        "authorized_firma_id",
+        "sender_authenticity"
+      ],
+      "properties": {
+        "company_candidate": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "authorized_firma_id": {
+          "type": "null",
+          "description": "Must remain null in untrusted synthetic mail intake."
+        },
+        "sender_authenticity": {
+          "const": "unverified"
+        }
+      }
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category"
+      ],
+      "properties": {
+        "category": {
+          "enum": [
+            "customer_rfq",
+            "supplier_quote",
+            "incoming_invoice",
+            "account_reconciliation",
+            "personnel_request",
+            "general_inquiry",
+            null
+          ]
+        }
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items",
+        "attachments",
+        "missing_information"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "quantity",
+              "unit"
+            ],
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "quantity": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "unit": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "attachments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "filename",
+              "mime_type",
+              "size_bytes"
+            ],
+            "properties": {
+              "filename": {
+                "type": "string"
+              },
+              "mime_type": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "size_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "missing_information": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "suggested_department",
+        "capability_status",
+        "execution_id"
+      ],
+      "properties": {
+        "suggested_department": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capability_status": {
+          "enum": [
+            "deterministic",
+            "model-dependent",
+            "missing",
+            "mock",
+            "unknown"
+          ]
+        },
+        "execution_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "review_required",
+        "outbound_allowed",
+        "btd_write_allowed"
+      ],
+      "properties": {
+        "review_required": {
+          "const": true
+        },
+        "outbound_allowed": {
+          "const": false
+        },
+        "btd_write_allowed": {
+          "const": false
+        }
+      }
+    },
+    "trace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correlation_id",
+        "idempotency_key"
+      ],
+      "properties": {
+        "correlation_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "idempotency_key": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
