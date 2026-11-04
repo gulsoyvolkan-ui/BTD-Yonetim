@@ -30,3 +30,42 @@ jobs:
         run: node api/_lib/mail-intake-map.test.js
       - name: Business request v1 mapping
         run: node api/_lib/business-request-v1-map.test.js
+
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Temporary local Postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${BTD_RLS_TEST_DATABASE_URL:-}" ]; then
+            echo "remote database url is refused"
+            exit 1
+          fi
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+          mapfile -t clusters < <(pg_lsclusters --no-header)
+          if [ "${#clusters[@]}" -ne 1 ]; then
+            pg_lsclusters
+            echo "expected one local cluster"
+            exit 1
+          fi
+          ver=$(awk '{print $1}' <<< "${clusters[0]}")
+          name=$(awk '{print $2}' <<< "${clusters[0]}")
+          if ! pg_isready -h /var/run/postgresql; then
+            sudo pg_ctlcluster "$ver" "$name" start
+            pg_isready -h /var/run/postgresql
+          fi
+      - name: Draft uniqueness
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${BTD_RLS_TEST_DATABASE_URL:-}" ]; then
+            echo "remote database url is refused"
+            exit 1
+          fi
+          node api/_lib/is-talebi-pg.test.js
