@@ -189,7 +189,9 @@ async function main() {
   const raiseAt = sql.indexOf('RAISE EXCEPTION');
   const createAt = sql.indexOf('CREATE TABLE');
   ok(raiseAt !== -1 && createAt !== -1 && raiseAt < createAt, 'taslak sql ilk ifadede durur');
-  ok(sql.includes('UYGULANMADI') && sql.includes('UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)'), 'taslak tekillik tasarimi durur');
+  ok(sql.includes('UYGULANMADI') && sql.includes('UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)'), 'taslak anahtar tekilligi durur');
+  ok(sql.includes('UNIQUE (tenant_id, provider, mailbox, firma_id, source_message_ref)'), 'taslak kaynak mesaj tekilligi durur');
+  ok(!sql.includes('UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key, source_message_ref)'), 'iki kolon tek UNIQUE degil');
   ok(sql.includes('veritabani kaniti degildir'), 'sql bellek testini kanit saymaz');
   ok(!sql.includes('ALTER TABLE public.gorevler') && !sql.includes('ALTER TABLE public.denetim_olaylari'), 'mevcut tablolar degistirilmez');
   let cursor = 0;

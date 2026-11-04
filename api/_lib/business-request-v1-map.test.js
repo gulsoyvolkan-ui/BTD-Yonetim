@@ -89,13 +89,19 @@ async function main() {
   ok(map.CANDIDATE_SCHEMA_STATUS === 'UNVERIFIED_CANDIDATE', 'aday dogrulanmis degil');
   ok(draft.SCHEMA_VERSION === 'business-request-draft.v1', 'aday ad ayri');
   ok(map.DATABASE_GO === false, 'database go kapali');
-  ok(map.MEMORY_IDEMPOTENCY_SCOPE.includes('source_message_ref'), 'bellek kaynak mesaji kapsar');
-  ok(!map.POSTGRES_UNIQUE_PROPOSAL.includes('source_message_ref'), 'onerilen tekillik kaynak mesaji kapsamaz');
+  ok(map.MEMORY_IDEMPOTENCY_SCOPE.includes('source_message_ref') && map.MEMORY_IDEMPOTENCY_SCOPE.includes('idempotency_key'), 'bellek anahtar ve kaynak mesaji kapsar');
+  ok(map.POSTGRES_UNIQUE_PROPOSAL.includes('source_message_ref') && map.POSTGRES_UNIQUE_PROPOSAL.includes('idempotency_key'), 'onerilen tekillik anahtar ve kaynak mesaji kapsar');
+  ok(map.POSTGRES_UNIQUE_PROPOSAL.split('UNIQUE').length === 3, 'iki ayri UNIQUE onerisi');
+  ok(!map.POSTGRES_UNIQUE_PROPOSAL.includes('idempotency_key,source_message_ref'), 'tek UNIQUE icine iki kolon konmaz');
 
-  const unique = 'UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)';
+  const uniqueKey = 'UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)';
+  const uniqueMsg = 'UNIQUE (tenant_id, provider, mailbox, firma_id, source_message_ref)';
   const draftSql = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'drafts', 'is_talebi_taslak_v1.sql'), 'utf8');
   const harness = fs.readFileSync(path.join(__dirname, 'is-talebi-pg.harness.sql'), 'utf8');
-  ok(draftSql.includes(unique) && harness.includes(unique), 'onerilen tekillik metni');
+  ok(draftSql.includes(uniqueKey) && harness.includes(uniqueKey), 'anahtar tekilligi');
+  ok(draftSql.includes(uniqueMsg) && harness.includes(uniqueMsg), 'kaynak mesaj tekilligi');
+  ok(draftSql.indexOf('RAISE EXCEPTION') < draftSql.indexOf('CREATE TABLE'), 'taslak sql ilk ifadede durur');
+  ok(harness.includes('ON CONFLICT DO NOTHING') && !harness.includes('DO UPDATE'), 'on conflict satiri guncellemez');
   ok(draftSql.includes("RAISE EXCEPTION 'AE-BTD-25B taslak uygulanmaz"), 'taslak sql kapali');
   for (const id of map.NOT_EXECUTED_IDS) {
     ok(map.FIXTURE_IDS.includes(id), id);

@@ -9,7 +9,10 @@
 -- Uyumluluk (mevcut sema ve RLS):
 -- 001 public.firmalar(id, kod) ve public.set_updated_at durur. belge_sayaclari'na tip eklenmez.
 -- 010 public.gorevler.durum yalniz Acik, Devam, Bitti, Iptal. Bu dosya o kumeye deger eklemez.
--- 010 UNIQUE (firma_id, kod) durur. Yeni tekillik ayri tabloda (firma_id, idempotency_key).
+-- 010 UNIQUE (firma_id, kod) durur. Yeni tekillik is_talepleri uzerinde iki ayri UNIQUE:
+-- (tenant_id, provider, mailbox, firma_id, idempotency_key) ve
+-- (tenant_id, provider, mailbox, firma_id, source_message_ref).
+-- Ikisi tek UNIQUE icinde birlestirilmez. Ayni mesaj baska anahtarla ikinci satir acmaz.
 -- 013 public.denetim_olaylari kolonlari ayni kalir: firma_id, actor_auth_id, olay, kaynak, durum.
 -- 013 btd_denetim_yaz: actor_auth_id = auth.uid() ve btd_firma_erisir(firma_id).
 --     Aktör gövdeden, e-postadan veya fonksiyon parametresinden secilmez.
@@ -18,10 +21,15 @@
 -- ve her iki fonksiyon da ilk satirda 'yazma kapali' firlatir.
 -- Firma, JSON govdesindeki firma_id alanindan alinmaz. Govde alani yok sayilir.
 -- Guvenilir baglam auth.uid() ve public.btd_firma_erisir ile kurulur.
--- Idempotency: ayni anahtar ve ayni content_hash mevcut satiri dondurur.
--- Ayni anahtar ve farkli content_hash sessiz kabul degildir; cakisma firlatilir.
+-- Idempotency: ayni firma, tenant, provider ve mailbox icinde ayni anahtar,
+-- ayni source_message_ref ve ayni content_hash mevcut satiri dondurur.
+-- Ayni anahtar ve farkli content_hash veya farkli source_message_ref cakismadir.
+-- Ayni source_message_ref ve farkli idempotency_key cakismadir.
+-- Iki ayri UNIQUE. ON CONFLICT DO NOTHING ikisini de karsilar.
+-- is_talepleri satirinda ON CONFLICT DO UPDATE yoktur. UNIQUE ihlali satiri guncellemez.
 -- source_message_ref, correlation_id ve idempotency_key ayri kolonlardir.
--- tenant_id, provider ve mailbox JSON govdesinden degil sunucu baglamindan yazilir.
+-- tenant_id, provider, mailbox ve firma_id JSON govdesinden alinmaz.
+-- Firma, tenant, provider ve ic posta kutusu kimligi sunucu baglamindandir.
 -- Gorev kodu is_talebi_sayaclari satir kilidi ile uretilir. Tarayici nextCode kullanilmaz.
 -- Onay tek transaction tasarimidir: yetki, idempotency, gorev, denetim.
 -- Biri basarisizsa hepsi rollback. Bu PR'da fonksiyon o yazmayi yapmaz.
@@ -54,7 +62,10 @@ CREATE TABLE public.is_talepleri (
   gorev_id             UUID NULL REFERENCES public.gorevler(id) ON DELETE RESTRICT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)
+  CONSTRAINT is_talepleri_idempotency_uq
+    UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key),
+  CONSTRAINT is_talepleri_source_message_uq
+    UNIQUE (tenant_id, provider, mailbox, firma_id, source_message_ref)
 );
 
 CREATE TABLE public.is_talebi_sayaclari (
@@ -87,6 +98,7 @@ CREATE POLICY btd_is_talebi_oku ON public.is_talepleri
 -- adim:idempotency
 -- Talep satiri FOR UPDATE. content_hash farkliysa RAISE 'idempotency_conflict'.
 -- Ayni hash ikinci gorev acmaz.
+-- Kayit tekilligi iki ayri UNIQUE kisittir. Ihlal is_talepleri satirini guncellemez.
 -- adim:gorev
 -- INSERT INTO is_talebi_sayaclari (firma_id, son_no) VALUES (fid, 1)
 -- ON CONFLICT (firma_id) DO UPDATE SET son_no = is_talebi_sayaclari.son_no + 1

@@ -1,8 +1,12 @@
--- AE-BTD-25C test harness. Yalnizca atilan yerel veritabaninda calisir.
+-- AE-BTD-25E test harness. Yalnizca atilan yerel veritabaninda calisir.
 -- supabase/drafts/is_talebi_taslak_v1.sql dosyasinin yazma engeli burada yoktur
 -- ve o dosyadan kaldirilmaz. Bu dosya uretim migration'i degildir.
 -- approve() ve canli yazma yolu bu dosyayla acilmaz.
 -- Sentetik kimlikler. Gercek posta, musteri ve uretim verisi yok.
+-- Firma talep_uyelik satirindan gelir. tenant, provider ve mailbox
+-- yalniz testin guvenilir baglamindan parametre olarak gelir.
+-- Iki ayri UNIQUE. ON CONFLICT DO NOTHING ikisini de karsilar.
+-- Cakisma mevcut satiri guncellemez.
 
 CREATE TABLE public.talep_uyelik (
   rolname   TEXT PRIMARY KEY,
@@ -27,7 +31,10 @@ CREATE TABLE public.is_talepleri (
   idempotency_key     TEXT NOT NULL,
   content_hash        TEXT NOT NULL,
   review_status       TEXT NOT NULL CHECK (review_status IN ('taslak', 'incelemede', 'reddedildi', 'onaylandi')),
-  UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key)
+  CONSTRAINT is_talepleri_idempotency_uq
+    UNIQUE (tenant_id, provider, mailbox, firma_id, idempotency_key),
+  CONSTRAINT is_talepleri_source_message_uq
+    UNIQUE (tenant_id, provider, mailbox, firma_id, source_message_ref)
 );
 
 CREATE ROLE btd_talep_a NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT NOCREATEROLE NOCREATEDB;
@@ -83,11 +90,20 @@ AS $$
 DECLARE
   fid uuid;
   yeni uuid;
-  mevcut_id uuid;
-  mevcut_hash text;
+  ayni_anahtar uuid;
+  ayni_hash text;
+  ayni_ref text;
+  ayni_kaynak uuid;
+  kaynak_anahtar text;
 BEGIN
   IF (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user) THEN
     RAISE EXCEPTION 'rol siniri yok';
+  END IF;
+
+  IF p_tenant !~ '^[a-z0-9][a-z0-9_-]{0,39}$'
+     OR p_provider !~ '^[a-z0-9][a-z0-9_-]{0,39}$'
+     OR p_mailbox !~ '^[a-z0-9][a-z0-9_-]{0,39}$' THEN
+    RAISE EXCEPTION 'posta_baglami' USING ERRCODE = '42501';
   END IF;
 
   SELECT u.firma_id INTO fid
@@ -107,15 +123,15 @@ BEGIN
     p_source_message_ref, p_correlation_id, p_idempotency_key,
     p_content_hash, 'incelemede'
   )
-  ON CONFLICT (tenant_id, provider, mailbox, firma_id, idempotency_key)
-  DO NOTHING
+  ON CONFLICT DO NOTHING
   RETURNING id INTO yeni;
 
   IF yeni IS NOT NULL THEN
     RETURN yeni;
   END IF;
 
-  SELECT id, content_hash INTO mevcut_id, mevcut_hash
+  SELECT id, content_hash, source_message_ref
+    INTO ayni_anahtar, ayni_hash, ayni_ref
   FROM public.is_talepleri
   WHERE tenant_id = p_tenant
     AND provider = p_provider
@@ -123,10 +139,28 @@ BEGIN
     AND firma_id = fid
     AND idempotency_key = p_idempotency_key;
 
-  IF mevcut_hash IS DISTINCT FROM p_content_hash THEN
-    RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE = '23505';
+  SELECT id, idempotency_key
+    INTO ayni_kaynak, kaynak_anahtar
+  FROM public.is_talepleri
+  WHERE tenant_id = p_tenant
+    AND provider = p_provider
+    AND mailbox = p_mailbox
+    AND firma_id = fid
+    AND source_message_ref = p_source_message_ref;
+
+  IF ayni_anahtar IS NOT NULL
+     AND ayni_kaynak IS NOT DISTINCT FROM ayni_anahtar
+     AND ayni_hash IS NOT DISTINCT FROM p_content_hash
+     AND ayni_ref IS NOT DISTINCT FROM p_source_message_ref
+     AND kaynak_anahtar IS NOT DISTINCT FROM p_idempotency_key THEN
+    RETURN ayni_anahtar;
   END IF;
-  RETURN mevcut_id;
+
+  IF ayni_kaynak IS NOT NULL AND kaynak_anahtar IS DISTINCT FROM p_idempotency_key THEN
+    RAISE EXCEPTION 'kaynak_mesaj_ayri_anahtar' USING ERRCODE = '23505';
+  END IF;
+
+  RAISE EXCEPTION 'idempotency_conflict' USING ERRCODE = '23505';
 END;
 $$;
 

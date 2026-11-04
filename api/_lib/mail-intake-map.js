@@ -61,7 +61,7 @@ const BUSINESS_REQUEST_V1_SCHEMA = 'business-request.v1';
 const CANDIDATE_SCHEMA_STATUS = 'UNVERIFIED_CANDIDATE';
 const DATABASE_GO = false;
 const MEMORY_IDEMPOTENCY_SCOPE = 'firma_id+tenant+provider+mailbox+idempotency_key+source_message_ref';
-const POSTGRES_UNIQUE_PROPOSAL = 'tenant_id+provider+mailbox+firma_id+idempotency_key';
+const POSTGRES_UNIQUE_PROPOSAL = 'UNIQUE(tenant_id,provider,mailbox,firma_id,idempotency_key)|UNIQUE(tenant_id,provider,mailbox,firma_id,source_message_ref)';
 const BUSINESS_REQUEST_CATEGORY = Object.freeze({
   customer_quotation: 'teklif',
   supplier_quotation: 'teklif',
